@@ -336,3 +336,32 @@ export async function dbUpdateChatPermission(permission: ChatPermission) {
 export async function dbDeleteChatPermission(permissionId: string) {
   await deleteDoc(doc(db, 'chat_permissions', permissionId));
 }
+
+// Group Live Video Actions
+export function subscribeGroupLives(callback: (participants: any[]) => void) {
+  const livesCol = collection(db, 'group_lives');
+  return onSnapshot(livesCol, (snapshot) => {
+    const list: any[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push({
+        id: docSnap.id,
+        ...docSnap.data()
+      });
+    });
+    callback(list);
+  }, (err) => console.error('Group lives sub error:', err));
+}
+
+export async function dbJoinGroupLive(userId: string, data: { nickname: string; avatar: string }) {
+  await setDoc(doc(db, 'group_lives', userId), {
+    userId,
+    nickname: data.nickname,
+    avatar: data.avatar,
+    joinedAt: Date.now()
+  });
+}
+
+export async function dbLeaveGroupLive(userId: string) {
+  await deleteDoc(doc(db, 'group_lives', userId));
+}
+

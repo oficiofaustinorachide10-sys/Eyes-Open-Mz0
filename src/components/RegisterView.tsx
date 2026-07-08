@@ -4,10 +4,11 @@
  */
 
 import React, { useState } from 'react';
-import { User, Shield, Lock, Smartphone, Mail, MapPin, Globe, CheckCircle2 } from 'lucide-react';
+import { User, Shield, Lock, Smartphone, Mail, MapPin, Globe, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PROVINCES, simpleHash, validatePhone, validateEmail, validateNames, validateNickname } from '../utils';
+import { PROVINCES, DISTRICTS_BY_PROVINCE, simpleHash, validatePhone, validateEmail, validateNames, validateNickname } from '../utils';
 import { User as UserType } from '../types';
+import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
 
@@ -19,6 +20,9 @@ interface RegisterViewProps {
 
 export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: RegisterViewProps) {
   const [province, setProvince] = useState('');
+  const [district, setDistrict] = useState('');
+  const [showProvinceList, setShowProvinceList] = useState(false);
+  const [showDistrictList, setShowDistrictList] = useState(false);
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [fullname, setFullname] = useState('');
@@ -53,7 +57,13 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
     setStatusType('info');
 
     if (!province) {
-      setStatusMsg('Por favor, selecione a sua província clicando em uma das opções abaixo.');
+      setStatusMsg('Por favor, selecione a sua província.');
+      setStatusType('error');
+      return;
+    }
+
+    if (!district) {
+      setStatusMsg('Por favor, selecione o seu distrito.');
       setStatusType('error');
       return;
     }
@@ -117,6 +127,7 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
       nickname: nickname.trim(),
       password: hashedPass,
       province,
+      district,
       created: new Date().toISOString(),
       avatar: `https://images.unsplash.com/photo-${Math.floor(Math.random() * 50) + 1500000000000}?auto=format&fit=crop&q=80&w=150`, // Random nice avatar
       stats: { likes: 0, posts: 0, friends: 0 },
@@ -159,7 +170,8 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
         className="relative z-10 w-full max-w-[500px]"
       >
         {/* Logo and Greeting */}
-        <div className="text-center mb-6">
+        <div className="flex flex-col items-center text-center mb-6">
+          <LeafLogo className="w-20 h-20 mb-2" />
           <h1 className="font-orbitron font-extrabold text-3xl bg-gradient-to-r from-neon-cyan to-neon-magenta bg-clip-text text-transparent glow-text-cyan tracking-wider">
             EYES OPEN MZ
           </h1>
@@ -178,30 +190,104 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
           </h2>
 
           <form onSubmit={handleRegister} className="space-y-6">
-            {/* Província Selection Cards */}
-            <div>
-              <label className="block text-neon-cyan font-rajdhani font-bold text-sm uppercase mb-3 tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-4 h-4" /> 0. Selecione a sua Província
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1 border border-neon-cyan/15 rounded-xl p-2 bg-[#121235]/40 scrollbar-thin scrollbar-thumb-neon-cyan">
-                {PROVINCES.map((p) => {
-                  const isActive = province === p;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setProvince(p)}
-                      className={`text-xs font-rajdhani font-bold py-2 px-1 rounded-lg border transition-all text-center cursor-pointer ${
-                        isActive
-                          ? 'bg-neon-cyan/20 border-neon-cyan text-white shadow-md shadow-neon-cyan/10'
-                          : 'bg-[#151540]/40 border-neon-cyan/15 hover:border-neon-cyan/50 text-neon-cyan'
-                      }`}
+            {/* Província & Distrito Collapsible Dropdown Selector */}
+            <div className="space-y-4">
+              <div className="relative">
+                <label className="block text-neon-cyan font-rajdhani font-bold text-sm uppercase mb-2 tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4" /> 0. Província
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProvinceList(!showProvinceList);
+                    setShowDistrictList(false);
+                  }}
+                  className="w-full bg-[#121235]/60 border border-neon-cyan/30 hover:border-neon-cyan rounded-xl py-3 px-4 text-left font-rajdhani font-semibold text-base text-white flex items-center justify-between transition-all"
+                >
+                  <span>{province || 'Selecione a sua Província...'}</span>
+                  {showProvinceList ? <ChevronUp className="w-5 h-5 text-neon-cyan" /> : <ChevronDown className="w-5 h-5 text-neon-cyan" />}
+                </button>
+
+                <AnimatePresence>
+                  {showProvinceList && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute z-30 left-0 right-0 mt-1 bg-[#0c0c24] border border-neon-cyan/40 rounded-xl max-h-48 overflow-y-auto shadow-2xl p-1.5 space-y-1 scrollbar-thin scrollbar-thumb-neon-cyan"
                     >
-                      {p}
-                    </button>
-                  );
-                })}
+                      {PROVINCES.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => {
+                            setProvince(p);
+                            setDistrict(''); // Reset district when province changes
+                            setShowProvinceList(false);
+                            setShowDistrictList(true); // Automatically open district dropdown
+                          }}
+                          className={`w-full text-left px-3.5 py-2 rounded-lg text-sm font-rajdhani font-bold transition-all ${
+                            province === p 
+                              ? 'bg-neon-cyan/20 text-white' 
+                              : 'text-gray-300 hover:bg-[#151540] hover:text-white'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
+              {/* Distrito Selector - Only visible when province is selected */}
+              {province && (
+                <div className="relative">
+                  <label className="block text-neon-cyan font-rajdhani font-bold text-sm uppercase mb-2 tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4" /> Distrito de {province}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDistrictList(!showDistrictList);
+                      setShowProvinceList(false);
+                    }}
+                    className="w-full bg-[#121235]/60 border border-neon-cyan/30 hover:border-neon-cyan rounded-xl py-3 px-4 text-left font-rajdhani font-semibold text-base text-white flex items-center justify-between transition-all"
+                  >
+                    <span>{district || 'Selecione o seu Distrito...'}</span>
+                    {showDistrictList ? <ChevronUp className="w-5 h-5 text-neon-cyan" /> : <ChevronDown className="w-5 h-5 text-neon-cyan" />}
+                  </button>
+
+                  <AnimatePresence>
+                    {showDistrictList && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-30 left-0 right-0 mt-1 bg-[#0c0c24] border border-neon-cyan/40 rounded-xl max-h-48 overflow-y-auto shadow-2xl p-1.5 space-y-1 scrollbar-thin scrollbar-thumb-neon-cyan"
+                      >
+                        {(DISTRICTS_BY_PROVINCE[province] || []).map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              setDistrict(d);
+                              setShowDistrictList(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 rounded-lg text-sm font-rajdhani font-bold transition-all ${
+                              district === d 
+                                ? 'bg-neon-cyan/20 text-white' 
+                                : 'text-gray-300 hover:bg-[#151540] hover:text-white'
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
 
             {/* Phone input */}

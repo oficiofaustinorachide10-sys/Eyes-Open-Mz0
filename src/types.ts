@@ -19,6 +19,7 @@ export interface User {
   nickname: string;
   password?: string; // Hashed password
   province: string;
+  district?: string;
   created: string;
   avatar: string;
   stats: UserStats;
@@ -42,7 +43,7 @@ export interface Notification {
   };
   read: boolean;
   targetId?: string; // e.g. post ID or request ID
-  targetView?: 'feed' | 'conversas' | 'abra-olhos' | 'notificacoes';
+  targetView?: 'feed' | 'conversas' | 'abra-olhos' | 'notificacoes' | 'comunidade';
   timestamp: number;
 }
 

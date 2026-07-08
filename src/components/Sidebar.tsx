@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType } from '../types';
+import LeafLogo from './LeafLogo';
 
 export type ViewType = 
   | 'feed' | 'profile' | 'account' | 'publish-post' | 'publish-story' 
@@ -24,6 +25,8 @@ interface SidebarProps {
   onClose: () => void;
   unreadChatsCount?: number;
   unreadNotificationsCount?: number;
+  theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo';
+  setTheme: (theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo') => void;
 }
 
 export default function Sidebar({ 
@@ -34,7 +37,9 @@ export default function Sidebar({
   isOpen, 
   onClose,
   unreadChatsCount = 0,
-  unreadNotificationsCount = 0
+  unreadNotificationsCount = 0,
+  theme,
+  setTheme
 }: SidebarProps) {
 
   const menuItems = [
@@ -63,7 +68,8 @@ export default function Sidebar({
   const content = (
     <div className="flex flex-col h-full bg-[#08081a]/95 border-r border-neon-cyan/20 p-6 font-rajdhani text-white select-none">
       {/* Brand logo */}
-      <div className="flex flex-col items-center mb-8 border-b border-neon-cyan/10 pb-6 text-center">
+      <div className="flex flex-col items-center mb-8 border-b border-neon-cyan/10 pb-6 text-center animate-pulse-slow">
+        <LeafLogo className="w-14 h-14 mb-2" />
         <h2 className="font-orbitron font-extrabold text-2xl tracking-wider bg-gradient-to-r from-neon-cyan to-neon-magenta bg-clip-text text-transparent glow-text-cyan">
           OPEN MZ
         </h2>
@@ -139,6 +145,40 @@ export default function Sidebar({
 
       {/* Quick Actions at bottom */}
       <div className="mt-auto pt-6 border-t border-neon-cyan/10 space-y-3">
+        {/* Theme selector inside sidebar */}
+        <div className="bg-[#111130]/40 border border-neon-cyan/15 rounded-2xl p-2.5 space-y-1.5">
+          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider text-center">
+            Modos de Cor ({theme.toUpperCase()})
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 px-1 py-1">
+            {[
+              { id: 'noite', color: '#3b82f6', title: 'Noite' },
+              { id: 'luz', color: '#2563eb', title: 'Luz' },
+              { id: 'lite', color: '#4f46e5', title: 'Lite' },
+              { id: 'esmeralda', color: '#10b981', title: 'Esmeralda' },
+              { id: 'vinho', color: '#db2777', title: 'Vinho' },
+              { id: 'ciano', color: '#06b6d4', title: 'Ciano' },
+              { id: 'crepusculo', color: '#8b5cf6', title: 'Crepúsculo' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id as any)}
+                title={t.title}
+                className={`w-5.5 h-5.5 rounded-full cursor-pointer flex items-center justify-center transition-all ${
+                  theme === t.id 
+                    ? 'scale-125 ring-2 ring-white border-2 border-transparent' 
+                    : 'hover:scale-110 border border-white/10 opacity-70 hover:opacity-100'
+                }`}
+                style={{ backgroundColor: t.color }}
+              >
+                {theme === t.id && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button
           onClick={() => handleItemClick('publish-post')}
           className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-neon-cyan to-neon-magenta hover:brightness-110 text-black font-orbitron font-extrabold text-[11px] tracking-widest rounded-xl transition-all cursor-pointer shadow-md shadow-neon-cyan/10"

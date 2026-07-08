@@ -6,10 +6,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Menu, Eye, Newspaper, Video, Calendar, Store, Users, Settings, 
-  Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera 
+  Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Post, Story, Comment, Notification } from './types';
+import { User, Post, Story, Comment, Notification, Friendship } from './types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES } from './utils';
 
 // Import our modular subcomponents
@@ -44,15 +44,39 @@ import {
   dbUpdateStory,
   subscribeChats,
   subscribeNotifications,
-  dbCreateNotification
+  dbCreateNotification,
+  subscribeFriendships,
+  dbCreateFriendship,
+  dbDeleteFriendship
 } from './lib/db';
 
 export default function App() {
+  // Theme state: support lite, noite, luz, esmeralda, vinho, ciano, and crepusculo
+  const [theme, setTheme] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (
+      saved === 'lite' || 
+      saved === 'noite' || 
+      saved === 'luz' || 
+      saved === 'esmeralda' || 
+      saved === 'vinho' || 
+      saved === 'ciano' || 
+      saved === 'crepusculo'
+    ) ? saved : 'noite';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   // App core persistent states
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
+  const [friendships, setFriendships] = useState<Friendship[]>([]);
+  const [selectedCommunityUser, setSelectedCommunityUser] = useState<User | null>(null);
+  const [initialSelectedChatId, setInitialSelectedChatId] = useState<string | undefined>(undefined);
   
   // Real-time message thread and notification states
   const [messages, setMessages] = useState<any[]>([]);
@@ -123,11 +147,17 @@ export default function App() {
       setMessages(loadedMsgs);
     });
 
+    // 7. Subscribe to real-time friendships
+    const unsubFriendships = subscribeFriendships((loadedFriendships) => {
+      setFriendships(loadedFriendships);
+    });
+
     return () => {
       unsubUsers();
       unsubPosts();
       unsubStories();
       unsubChats();
+      unsubFriendships();
     };
   }, []);
 
@@ -159,6 +189,26 @@ export default function App() {
   const handleRegisterSuccess = async (newUser: User) => {
     // Automatically write newly created user to Firestore!
     await dbUpdateUser(newUser);
+
+    // Create a public notification for the entire community
+    const registrationNotif: Notification = {
+      id: 'notif_reg_' + Math.random().toString(36).substring(2, 9),
+      recipientId: 'all',
+      title: 'Novo Membro! 👁️🇲🇿',
+      text: `${newUser.fullname} (@${newUser.nickname}) já tem uma conta no Open MZ... Quer interagir? Solicite-o!`,
+      type: 'system',
+      sender: {
+        id: newUser.id,
+        name: newUser.nickname,
+        avatar: newUser.avatar
+      },
+      read: false,
+      targetId: newUser.id,
+      targetView: 'comunidade',
+      timestamp: Date.now()
+    };
+    await dbCreateNotification(registrationNotif).catch(console.error);
+
     setCurrentUser(newUser);
     localStorage.setItem('currentUser', JSON.stringify(newUser));
     setActiveView('feed');
@@ -200,6 +250,11 @@ export default function App() {
 
   // 3. Post interactions (Like, View, Post, Delete, Comment)
   const handleLikePost = async (postId: string) => {
+    if (currentUser?.id === 'guest') {
+      alert('Como convidado, precisa de uma conta para interagir com publicações. Vamos direcioná-lo para criar uma conta!');
+      handleRedirectToRegister();
+      return;
+    }
     const p = posts.find(x => x.id === postId);
     if (!p) return;
 
@@ -403,11 +458,27 @@ export default function App() {
     triggerToast('História publicada com sucesso no Eyes 42h!');
   };
 
+  const handleRedirectToRegister = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('currentUser');
+    setActiveView('register');
+    triggerToast('Inicie registo para aceder a esta funcionalidade!');
+  };
+
+  const navigateToView = (view: ViewType) => {
+    if (currentUser?.id === 'guest' && view !== 'feed' && view !== 'register') {
+      alert('Como convidado, precisa de uma conta para aceder a esta funcionalidade. Vamos direcioná-lo para criar uma conta!');
+      handleRedirectToRegister();
+      return;
+    }
+    setActiveView(view);
+  };
+
   const handleNavigateToTarget = (view: ViewType, targetId?: string) => {
     if (targetId) {
       setAutoOpenPostId(targetId);
     }
-    setActiveView(view);
+    navigateToView(view);
   };
 
   // 5. Views Switcher Router Routing logic (Ensures absolutely NO empty states or broken buttons)
@@ -421,7 +492,7 @@ export default function App() {
             currentUser={currentUser}
             posts={posts}
             stories={stories}
-            onNavigate={setActiveView}
+            onNavigate={navigateToView}
             onLikePost={handleLikePost}
             onDeletePost={handleDeletePost}
             onLikeStory={handleLikeStory}
@@ -433,7 +504,7 @@ export default function App() {
           />
         );
       case 'profile':
-        return <ProfileView currentUser={currentUser} onNavigate={setActiveView} />;
+        return <ProfileView currentUser={currentUser} onNavigate={navigateToView} />;
       case 'account':
         return (
           <AccountView
@@ -447,18 +518,18 @@ export default function App() {
         return (
           <PublishPostView
             onPublish={handlePublishPost}
-            onCancel={() => setActiveView('feed')}
+            onCancel={() => navigateToView('feed')}
           />
         );
       case 'publish-story':
         return (
           <StoryEditor
             onPublish={handlePublishStory}
-            onCancel={() => setActiveView('feed')}
+            onCancel={() => navigateToView('feed')}
           />
         );
       case 'conversas':
-        return <ChatView currentUser={currentUser} />;
+        return <ChatView currentUser={currentUser} initialSelectedChatId={initialSelectedChatId} />;
       case 'notificacoes':
         return (
           <NotificationsView
@@ -600,38 +671,121 @@ export default function App() {
       // CURATED MEMBERS LIST COMMUNITY VIEW
       case 'comunidade':
         return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-white">
-            <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase border-b border-neon-cyan/20 pb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-neon-cyan" /> MEMBROS DA COMUNIDADE
+          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)]">
+            <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-[var(--theme-accent)]" /> MEMBROS DA COMUNIDADE
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {users.map((mem) => {
-                const isMe = mem.id === currentUser.id;
-                return (
-                  <div key={mem.id} className="p-4 rounded-2xl bg-[#090924] border border-white/5 flex items-center justify-between gap-3 shadow-lg select-none">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img 
-                        src={mem.avatar || "https://i.pravatar.cc/80?img=1"} 
-                        alt={mem.nickname}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full border border-neon-cyan object-cover shrink-0"
-                      />
-                      <div className="min-w-0 text-left">
-                        <p className="text-xs font-bold text-white truncate leading-tight">{mem.nickname}</p>
-                        <p className="text-[9px] text-gray-500 truncate mt-0.5 flex items-center gap-0.5"><MapPin className="w-2.5 h-2.5" /> {mem.province}</p>
+              {(() => {
+                const sortedUsers = [...users].sort((a, b) => {
+                  const aIsMe = a.id === currentUser?.id;
+                  const bIsMe = b.id === currentUser?.id;
+                  if (aIsMe && !bIsMe) return -1;
+                  if (!aIsMe && bIsMe) return 1;
+
+                  const aSameProvince = a.province === currentUser?.province;
+                  const bSameProvince = b.province === currentUser?.province;
+
+                  if (aSameProvince && !bSameProvince) return -1;
+                  if (!aSameProvince && bSameProvince) return 1;
+
+                  return 0;
+                });
+
+                return sortedUsers.map((mem) => {
+                  const isMe = mem.id === currentUser?.id;
+                  const isSameProvince = mem.province === currentUser?.province;
+                  const isAccepted = friendships.some(f => 
+                    f.status === 'accepted' && 
+                    ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
+                     (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
+                  );
+                  const isPending = friendships.some(f => 
+                    f.status === 'pending' && 
+                    ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
+                     (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
+                  );
+
+                  return (
+                    <div 
+                      key={mem.id} 
+                      onClick={() => setSelectedCommunityUser(mem)}
+                      className={`p-4 rounded-2xl bg-[var(--theme-bg-card)] border flex items-center justify-between gap-3 shadow-lg select-none cursor-pointer hover:border-[var(--theme-accent)] transition-all ${
+                        isSameProvince && !isMe 
+                          ? 'border-[var(--theme-accent)]/40 shadow-[var(--theme-accent)]/5' 
+                          : 'border-[var(--theme-border)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img 
+                          src={mem.avatar || "https://i.pravatar.cc/80?img=1"} 
+                          alt={mem.nickname}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
+                        />
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-bold text-[var(--theme-text-main)] truncate leading-tight">{mem.nickname}</p>
+                            {isSameProvince && !isMe && (
+                              <span className="px-1.5 py-0.5 rounded bg-[var(--theme-accent)]/20 border border-[var(--theme-accent)]/40 text-[var(--theme-accent)] text-[8px] font-bold uppercase tracking-wider">
+                                Recomendado
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9px] text-[var(--theme-text-secondary)] truncate mt-0.5 flex items-center gap-0.5">
+                            <MapPin className="w-2.5 h-2.5" /> 
+                            <span>{mem.province}{mem.district ? ` • ${mem.district}` : ''}</span>
+                          </p>
+                        </div>
                       </div>
+                      {!isMe && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isAccepted) {
+                              triggerToast(`Você já está vinculado com @${mem.nickname}`);
+                            } else if (isPending) {
+                              triggerToast(`Vínculo pendente com @${mem.nickname}`);
+                            } else {
+                              const newFriendship = {
+                                id: 'friend_' + Math.random().toString(36).substring(2, 9),
+                                senderId: currentUser?.id || '',
+                                receiverId: mem.id,
+                                status: 'pending' as const,
+                                timestamp: Date.now()
+                              };
+                              dbCreateFriendship(newFriendship);
+
+                              // Send notification
+                              const newNotif = {
+                                id: 'notif_' + Math.random().toString(36).substring(2, 9),
+                                recipientId: mem.id,
+                                title: 'Novo pedido de vínculo',
+                                text: `@${currentUser?.nickname} quer vincular-se contigo!`,
+                                type: 'friend_request' as const,
+                                sender: {
+                                  id: currentUser?.id || '',
+                                  name: currentUser?.nickname || '',
+                                  avatar: currentUser?.avatar || ''
+                                },
+                                read: false,
+                                targetId: newFriendship.id,
+                                targetView: 'notificacoes' as const,
+                                timestamp: Date.now()
+                              };
+                              dbCreateNotification(newNotif);
+                              triggerToast(`Pedido de vínculo enviado para: ${mem.nickname}`);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-[var(--theme-accent)]/10 hover:bg-[var(--theme-accent)] border border-[var(--theme-accent)]/25 hover:text-white text-[var(--theme-accent)] text-[9px] font-bold font-orbitron tracking-widest rounded-lg transition-all cursor-pointer uppercase shrink-0"
+                        >
+                          {isAccepted ? 'Vinculado' : isPending ? 'Pendente' : 'Vincular'}
+                        </button>
+                      )}
                     </div>
-                    {!isMe && (
-                      <button
-                        onClick={() => triggerToast(`Pedido de amizade enviado para: ${mem.nickname}`)}
-                        className="px-3 py-1.5 bg-neon-cyan/10 hover:bg-neon-cyan border border-neon-cyan/25 hover:text-black text-neon-cyan text-[9px] font-bold font-orbitron tracking-widest rounded-lg transition-all cursor-pointer uppercase"
-                      >
-                        Vincular
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
         );
@@ -645,6 +799,36 @@ export default function App() {
             </h2>
             <div className="bg-[#090924] border border-neon-cyan/20 rounded-3xl p-6 shadow-2xl space-y-6 text-left">
               
+              <div className="border-b border-white/5 pb-6">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-white mb-3">TEMA VISUAL DO APLICATIVO (7 MODOS)</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                  {[
+                    { id: 'noite', name: 'Noite', color: '#3b82f6', bg: 'bg-[#050508]' },
+                    { id: 'luz', name: 'Luz', color: '#2563eb', bg: 'bg-white border-zinc-200' },
+                    { id: 'lite', name: 'Lite', color: '#4f46e5', bg: 'bg-slate-100 border-slate-200' },
+                    { id: 'esmeralda', name: 'Esmeralda', color: '#10b981', bg: 'bg-[#041611]' },
+                    { id: 'vinho', name: 'Vinho', color: '#db2777', bg: 'bg-[#14050d]' },
+                    { id: 'ciano', name: 'Ciano', color: '#06b6d4', bg: 'bg-[#020813]' },
+                    { id: 'crepusculo', name: 'Crepúsculo', color: '#8b5cf6', bg: 'bg-[#0f0c1b]' },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTheme(t.id as any)}
+                      className={`relative p-3 rounded-2xl font-bold text-xs transition-all uppercase cursor-pointer border flex flex-col items-center gap-1.5 ${
+                        theme === t.id
+                          ? 'border-neon-cyan bg-neon-cyan/10 shadow-lg'
+                          : 'border-white/5 bg-black/40 text-gray-400 hover:text-white hover:bg-black/60'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded-full ${t.bg} flex items-center justify-center border border-white/10`} style={{ borderColor: theme === t.id ? t.color : undefined }}>
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.color }} />
+                      </div>
+                      <span className="text-[10px] tracking-wider">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between border-b border-white/5 pb-4">
                 <div>
                   <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">Ecrã de Alto Contraste</h4>
@@ -691,7 +875,7 @@ export default function App() {
 
   // 6. Root Frame Renders
   return (
-    <div className="min-h-screen bg-[#060613] text-white flex">
+    <div className={`min-h-screen bg-[#060613] text-white flex theme-${theme}`}>
       {!currentUser ? (
         /* If session is not authenticated, render Login/Register views */
         <div className="flex-1">
@@ -717,7 +901,7 @@ export default function App() {
             currentUser={currentUser}
             activeView={activeView}
             onNavigate={(v) => {
-              setActiveView(v);
+              navigateToView(v);
               setIsMobileSidebarOpen(false);
             }}
             onLogout={handleLogout}
@@ -725,6 +909,8 @@ export default function App() {
             onClose={() => setIsMobileSidebarOpen(false)}
             unreadChatsCount={unreadChatsCount}
             unreadNotificationsCount={unreadNotificationsCount}
+            theme={theme}
+            setTheme={setTheme}
           />
 
           {/* Core Content Container */}
@@ -747,7 +933,7 @@ export default function App() {
                 src={currentUser.avatar || "https://i.pravatar.cc/80?img=1"} 
                 alt={currentUser.nickname} 
                 referrerPolicy="no-referrer"
-                onClick={() => setActiveView('profile')}
+                onClick={() => navigateToView('profile')}
                 className="w-8 h-8 rounded-full border border-neon-cyan/70 object-cover cursor-pointer hover:scale-105 active:scale-95 transition-transform"
               />
             </header>
@@ -772,6 +958,215 @@ export default function App() {
             <CheckCircle2 className="w-5 h-5 text-black animate-bounce" />
             <span>{successToast}</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* USER PROFILE MODAL IN COMMUNITY VIEW */}
+      <AnimatePresence>
+        {selectedCommunityUser && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] text-[var(--theme-text-main)] w-full max-w-md rounded-3xl p-6 relative shadow-2xl text-left space-y-6 max-h-[90vh] overflow-y-auto no-scrollbar"
+            >
+              {/* Close button */}
+              <button 
+                onClick={() => setSelectedCommunityUser(null)}
+                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Profile Header */}
+              <div className="flex items-center gap-4">
+                <img 
+                  src={selectedCommunityUser.avatar || "https://i.pravatar.cc/80?img=1"} 
+                  alt={selectedCommunityUser.nickname}
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 rounded-full border-2 border-[var(--theme-accent)] object-cover shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-base font-bold text-[var(--theme-text-main)] truncate">{selectedCommunityUser.fullname || `${selectedCommunityUser.firstname} ${selectedCommunityUser.surname}`}</h3>
+                    {selectedCommunityUser.isVIP && (
+                      <span className="px-1.5 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/25 text-[8px] font-bold rounded uppercase tracking-wider shrink-0">
+                        VIP
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--theme-accent)] font-bold truncate">@{selectedCommunityUser.nickname}</p>
+                  <p className="text-[10px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider mt-1 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-[var(--theme-accent)]" /> {selectedCommunityUser.province}
+                  </p>
+                </div>
+              </div>
+
+              {/* User Stats Grid */}
+              <div className="grid grid-cols-3 gap-2 bg-[var(--theme-bg-hover)] rounded-2xl p-3 border border-[var(--theme-border)] text-center">
+                <div>
+                  <p className="text-base font-bold text-[var(--theme-text-main)] font-mono">{selectedCommunityUser.stats?.posts || 0}</p>
+                  <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Posts</p>
+                </div>
+                <div>
+                  <p className="text-base font-bold text-[var(--theme-text-main)] font-mono">{selectedCommunityUser.stats?.likes || 0}</p>
+                  <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Likes</p>
+                </div>
+                <div>
+                  <p className="text-base font-bold text-[var(--theme-text-main)] font-mono">{selectedCommunityUser.stats?.friends || 0}</p>
+                  <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Vínculos</p>
+                </div>
+              </div>
+
+              {/* About Section */}
+              <div className="space-y-1 bg-[var(--theme-bg-hover)] p-3.5 rounded-xl border border-[var(--theme-border)]">
+                <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Sobre / Atividade</p>
+                <p className="text-xs text-[var(--theme-text-main)] leading-relaxed">
+                  Membro ativo de {selectedCommunityUser.province} registado no Open MZ. Tem {selectedCommunityUser.stats?.posts || 0} publicações e {selectedCommunityUser.stats?.friends || 0} conexões artísticas estabelecidas.
+                </p>
+              </div>
+
+              {/* Action Options */}
+              <div className="space-y-2 pt-2">
+                {selectedCommunityUser.id !== currentUser.id ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setInitialSelectedChatId(selectedCommunityUser.id);
+                        setActiveView('conversas');
+                        setSelectedCommunityUser(null);
+                      }}
+                      className="w-full py-2.5 bg-[var(--theme-accent)] text-white hover:opacity-90 font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-2"
+                    >
+                      <MessageSquare className="w-4 h-4 text-white" /> Enviar Mensagem
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          const hasConnection = friendships.some(f => 
+                            f.status === 'accepted' && 
+                            ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
+                             (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
+                          );
+                          
+                          if (hasConnection) {
+                            const f = friendships.find(f => 
+                              ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
+                               (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
+                            );
+                            if (f) dbDeleteFriendship(f.id);
+                            triggerToast(`Vínculo removido com ${selectedCommunityUser.nickname}`);
+                          } else {
+                            const pending = friendships.some(f => 
+                              f.status === 'pending' && 
+                              ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
+                               (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
+                            );
+                            
+                            if (pending) {
+                              triggerToast(`Já existe um pedido de vínculo pendente com ${selectedCommunityUser.nickname}`);
+                            } else {
+                              const newFriendship = {
+                                id: 'friend_' + Math.random().toString(36).substring(2, 9),
+                                senderId: currentUser.id,
+                                receiverId: selectedCommunityUser.id,
+                                status: 'pending' as const,
+                                timestamp: Date.now()
+                              };
+                              dbCreateFriendship(newFriendship);
+                              
+                              // Send a real-time notification
+                              const newNotif = {
+                                id: 'notif_' + Math.random().toString(36).substring(2, 9),
+                                recipientId: selectedCommunityUser.id,
+                                title: 'Novo pedido de vínculo',
+                                text: `@${currentUser.nickname} quer vincular-se contigo!`,
+                                type: 'friend_request' as const,
+                                sender: {
+                                  id: currentUser.id,
+                                  name: currentUser.nickname,
+                                  avatar: currentUser.avatar
+                                },
+                                read: false,
+                                targetId: newFriendship.id,
+                                targetView: 'notificacoes' as const,
+                                timestamp: Date.now()
+                              };
+                              dbCreateNotification(newNotif);
+                              triggerToast(`Pedido de vínculo enviado para ${selectedCommunityUser.nickname}`);
+                            }
+                          }
+                        }}
+                        className="py-2.5 bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] hover:border-[var(--theme-accent)] text-[var(--theme-text-main)] font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-1"
+                      >
+                        {friendships.some(f => 
+                          f.status === 'accepted' && 
+                          ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
+                           (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
+                        ) ? 'Desvincular' : friendships.some(f => 
+                          f.status === 'pending' && 
+                          ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
+                           (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
+                        ) ? 'Pendente' : 'Vincular'}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          triggerToast(`Utilizador @${selectedCommunityUser.nickname} denunciado.`);
+                          setSelectedCommunityUser(null);
+                        }}
+                        className="py-2.5 bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] hover:border-red-500/30 text-[var(--theme-text-secondary)] hover:text-red-500 font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-1"
+                      >
+                        Denunciar
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setActiveView('profile');
+                      setSelectedCommunityUser(null);
+                    }}
+                    className="w-full py-2.5 bg-neon-cyan text-black hover:bg-white font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-2"
+                  >
+                    Editar Meu Perfil
+                  </button>
+                )}
+              </div>
+
+              {/* User's recent posts list within modal */}
+              <div className="space-y-3 pt-4 border-t border-white/5 text-left">
+                <h4 className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Publicações Recentes</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1 no-scrollbar">
+                  {posts.filter(p => p.author.id === selectedCommunityUser.id).length > 0 ? (
+                    posts.filter(p => p.author.id === selectedCommunityUser.id).map(p => (
+                      <div 
+                        key={p.id} 
+                        onClick={() => {
+                          setAutoOpenPostId(p.id);
+                          setActiveView('feed');
+                          setSelectedCommunityUser(null);
+                        }}
+                        className="p-3 bg-black/30 hover:bg-black/50 border border-white/5 rounded-xl text-left cursor-pointer transition-all space-y-1"
+                      >
+                        <div className="flex justify-between items-center text-[8px] text-neon-cyan font-bold uppercase">
+                          <span>{p.category}</span>
+                          <span className="text-gray-500 font-normal">{new Date(p.timestamp).toLocaleDateString('pt-MZ')}</span>
+                        </div>
+                        <p className="text-xs font-bold text-white leading-snug line-clamp-1">{p.title}</p>
+                        <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">{p.content}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[10px] text-gray-500 italic">Sem publicações até ao momento.</p>
+                  )}
+                </div>
+              </div>
+
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

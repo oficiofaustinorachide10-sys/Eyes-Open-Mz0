@@ -4,10 +4,11 @@
  */
 
 import React, { useState } from 'react';
-import { User, Shield, Lock, Smartphone } from 'lucide-react';
+import { User, Lock, Smartphone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { simpleHash, validatePhone } from '../utils';
 import { User as UserType } from '../types';
+import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
 
@@ -91,13 +92,7 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister }: Log
       >
         {/* LOGO AREA */}
         <div className="flex flex-col items-center mb-8 text-center">
-          <motion.div
-            animate={{ y: [0, -10, 0] }}
-            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-            className="w-24 h-24 rounded-full border-2 border-neon-cyan glow-box-cyan flex items-center justify-center bg-[#0d0d26] mb-4"
-          >
-            <Shield className="w-12 h-12 text-neon-cyan" />
-          </motion.div>
+          <LeafLogo className="w-24 h-24 mb-3" />
           <h1 className="font-orbitron font-extrabold text-3xl md:text-4xl bg-gradient-to-r from-neon-cyan via-neon-magenta to-neon-cyan bg-clip-text text-transparent tracking-wider glow-text-cyan">
             EYES OPEN MZ
           </h1>

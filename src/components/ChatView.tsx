@@ -15,11 +15,12 @@ import {
   subscribeChats, dbSendMessage, dbUpdateUser, subscribeUsers,
   subscribeFriendships, dbCreateFriendship, dbUpdateFriendship, dbDeleteFriendship,
   subscribeChatPermissions, dbCreateChatPermission, dbUpdateChatPermission, dbDeleteChatPermission,
-  dbCreateNotification
+  dbCreateNotification, subscribeGroupLives, dbJoinGroupLive, dbLeaveGroupLive
 } from '../lib/db';
 
 interface ChatViewProps {
   currentUser: User;
+  initialSelectedChatId?: string;
 }
 
 interface Message {
@@ -35,18 +36,29 @@ interface Message {
   messageType?: 'text' | 'call' | 'file' | 'location' | 'calendar' | 'task';
 }
 
-export default function ChatView({ currentUser }: ChatViewProps) {
+export default function ChatView({ currentUser, initialSelectedChatId }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [permissions, setPermissions] = useState<ChatPermission[]>([]);
   
+  // Group Live Video state
+  const [groupLives, setGroupLives] = useState<any[]>([]);
+  const [isInGroupLive, setIsInGroupLive] = useState<boolean>(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  
   // Real-time ticking timestamp to handle countdowns
   const [now, setNow] = useState<number>(Date.now());
 
   // UI Navigation states
-  const [selectedChatId, setSelectedChatId] = useState<string>('group'); // 'group' or userId
+  const [selectedChatId, setSelectedChatId] = useState<string>(initialSelectedChatId || 'group'); // 'group' or userId
+
+  useEffect(() => {
+    if (initialSelectedChatId) {
+      setSelectedChatId(initialSelectedChatId);
+    }
+  }, [initialSelectedChatId]);
   const [activeTab, setActiveTab] = useState<'conversas' | 'pedidos'>('conversas');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -82,6 +94,9 @@ export default function ChatView({ currentUser }: ChatViewProps) {
     const unsubPermissions = subscribeChatPermissions((loadedPermissions) => {
       setPermissions(loadedPermissions);
     });
+    const unsubGroupLives = subscribeGroupLives((loadedLives) => {
+      setGroupLives(loadedLives);
+    });
 
     // Clock ticker for countdowns
     const clock = setInterval(() => {
@@ -93,9 +108,27 @@ export default function ChatView({ currentUser }: ChatViewProps) {
       unsubUsers();
       unsubFriendships();
       unsubPermissions();
+      unsubGroupLives();
       clearInterval(clock);
     };
   }, []);
+
+  // Cleanup camera stream and group live participation
+  useEffect(() => {
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [localStream]);
+
+  useEffect(() => {
+    return () => {
+      if (currentUser) {
+        dbLeaveGroupLive(currentUser.id).catch(console.error);
+      }
+    };
+  }, [currentUser]);
 
   // Update lastReadChatTimestamp on mount and on new messages
   useEffect(() => {
@@ -117,6 +150,55 @@ export default function ChatView({ currentUser }: ChatViewProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedChatId]);
+
+  const handleJoinLive = async () => {
+    if (!currentUser) return;
+    if (currentUser.id === 'guest') {
+      alert('Como convidado, necessita de uma conta para aceder à Live Vídeo. Vamos direcioná-lo para criar uma conta!');
+      localStorage.removeItem('currentUser');
+      window.location.reload();
+      return;
+    }
+
+    if (groupLives.length >= 4) {
+      alert('A live de vídeo já atingiu o limite de 4 participantes. Aguarde um momento por favor!');
+      return;
+    }
+
+    try {
+      // Request camera and microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }).catch((err) => {
+        console.warn('Camera access denied or unavailable, using high fidelity avatar animation:', err);
+        return null;
+      });
+
+      if (stream) {
+        setLocalStream(stream);
+      }
+      
+      await dbJoinGroupLive(currentUser.id, {
+        nickname: currentUser.nickname,
+        avatar: currentUser.avatar || "https://i.pravatar.cc/80?img=1"
+      });
+      setIsInGroupLive(true);
+    } catch (err) {
+      console.error('Error joining group live video call:', err);
+    }
+  };
+
+  const handleLeaveLive = async () => {
+    if (!currentUser) return;
+    try {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        setLocalStream(null);
+      }
+      await dbLeaveGroupLive(currentUser.id);
+      setIsInGroupLive(false);
+    } catch (err) {
+      console.error('Error leaving group live video call:', err);
+    }
+  };
 
   // Helpers to fetch relationship status
   const getFriendshipWith = (userId: string): Friendship | undefined => {
@@ -421,16 +503,15 @@ export default function ChatView({ currentUser }: ChatViewProps) {
     <div className="flex-grow p-2 md:p-4 lg:p-6 max-w-6xl mx-auto flex flex-col md:flex-row gap-4 h-[86vh] font-rajdhani text-white select-none">
       
       {/* COLUMN 1: SIDEBAR USER LIST & REQUESTS */}
-      <div className="w-full md:w-80 shrink-0 bg-[#090924]/85 border border-neon-cyan/25 rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
-        <div className="absolute top-0 right-0 w-16 h-16 bg-neon-cyan/5 rounded-bl-full pointer-events-none" />
+      <div className="w-full md:w-80 shrink-0 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
         
         {/* Sidebar tabs */}
-        <div className="grid grid-cols-2 border-b border-neon-cyan/15 font-orbitron font-extrabold text-[11px] tracking-wider text-center select-none shrink-0">
+        <div className="grid grid-cols-2 border-b border-[var(--theme-border)] font-orbitron font-extrabold text-[11px] tracking-wider text-center select-none shrink-0">
           <button
             onClick={() => setActiveTab('conversas')}
             className={`py-3.5 flex items-center justify-center gap-1.5 transition-colors uppercase cursor-pointer ${
               activeTab === 'conversas' 
-                ? 'bg-neon-cyan/10 border-b-2 border-neon-cyan text-neon-cyan font-black' 
+                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)] font-black' 
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
@@ -440,13 +521,13 @@ export default function ChatView({ currentUser }: ChatViewProps) {
             onClick={() => setActiveTab('pedidos')}
             className={`py-3.5 flex items-center justify-center gap-1.5 transition-colors uppercase relative cursor-pointer ${
               activeTab === 'pedidos' 
-                ? 'bg-neon-magenta/10 border-b-2 border-neon-magenta text-neon-magenta font-black' 
+                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-[var(--theme-accent-secondary)] text-[var(--theme-accent-secondary)] font-black' 
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             <Users className="w-4 h-4" /> Pedidos
             {totalRequestsCount > 0 && (
-              <span className="absolute top-2 right-4 flex h-4 min-w-4 px-1 items-center justify-center text-[8px] font-black bg-neon-magenta text-black rounded-full animate-bounce">
+              <span className="absolute top-2 right-4 flex h-4 min-w-4 px-1 items-center justify-center text-[8px] font-black bg-[var(--theme-accent-secondary)] text-white rounded-full animate-bounce">
                 {totalRequestsCount}
               </span>
             )}
@@ -457,13 +538,13 @@ export default function ChatView({ currentUser }: ChatViewProps) {
         {activeTab === 'conversas' && (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Search filter input */}
-            <div className="p-3 border-b border-neon-cyan/10 shrink-0">
+            <div className="p-3 border-b border-[var(--theme-border)] shrink-0">
               <input
                 type="text"
                 placeholder="Pesquisar utilizador..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-black/40 border border-neon-cyan/20 rounded-xl px-3 py-2 text-xs outline-none focus:border-neon-cyan text-white placeholder:text-gray-600 font-semibold font-rajdhani"
+                className="w-full bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold font-rajdhani"
               />
             </div>
 
@@ -474,26 +555,26 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                 onClick={() => setSelectedChatId('group')}
                 className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left group cursor-pointer ${
                   selectedChatId === 'group'
-                    ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
-                    : 'bg-black/20 border-white/5 hover:border-neon-cyan/35 text-gray-300'
+                    ? 'bg-[var(--theme-bg-hover)] border-[var(--theme-accent)] text-[var(--theme-accent)] shadow-sm'
+                    : 'bg-black/10 border-white/5 hover:border-[var(--theme-accent)]/30 text-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-neon-cyan to-neon-magenta p-[1.5px] shadow-md">
-                    <div className="w-full h-full rounded-full bg-[#0d0d26] flex items-center justify-center">
-                      <Users className="w-5 h-5 text-neon-cyan group-hover:scale-105 transition-transform" />
+                  <div className="w-10 h-10 rounded-full bg-[var(--theme-accent)] p-[1.5px] shadow-sm">
+                    <div className="w-full h-full rounded-full bg-[var(--theme-bg-card)] flex items-center justify-center">
+                      <Users className="w-5 h-5 text-[var(--theme-accent)] group-hover:scale-105 transition-transform" />
                     </div>
                   </div>
                   <div className="min-w-0">
-                    <p className="font-orbitron font-extrabold text-[11px] tracking-wider uppercase leading-none text-white">CONVERSA DO GRUPO</p>
-                    <p className="text-[10px] text-gray-500 font-bold tracking-tight mt-1 truncate max-w-[120px]">Interação de comunidade</p>
+                    <p className="font-orbitron font-extrabold text-[11px] tracking-wider uppercase leading-none text-[var(--theme-text-main)]">CONVERSA DO GRUPO</p>
+                    <p className="text-[10px] text-gray-400 font-bold tracking-tight mt-1 truncate max-w-[120px]">Interação de comunidade</p>
                   </div>
                 </div>
-                <span className="text-[9px] px-2 py-0.5 bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan rounded-full uppercase font-bold tracking-wider shrink-0">Público</span>
+                <span className="text-[9px] px-2 py-0.5 bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/20 text-[var(--theme-accent)] rounded-full uppercase font-bold tracking-wider shrink-0">Público</span>
               </button>
 
-              <div className="border-t border-white/5 my-2" />
-              <p className="text-[10px] text-neon-cyan/55 font-bold tracking-widest font-orbitron uppercase px-2 mb-1.5">Direct Messages</p>
+              <div className="border-t border-[var(--theme-border)] my-2" />
+              <p className="text-[10px] text-[var(--theme-accent)]/70 font-bold tracking-widest font-orbitron uppercase px-2 mb-1.5">Direct Messages</p>
 
               {/* Direct message items */}
               {filteredUsers.length === 0 ? (
@@ -510,8 +591,8 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                       onClick={() => setSelectedChatId(u.id)}
                       className={`w-full flex items-center justify-between p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
                         isSelected
-                          ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
-                          : 'bg-black/10 border-white/5 hover:border-neon-cyan/25 text-gray-300'
+                          ? 'bg-[var(--theme-bg-hover)] border-[var(--theme-accent)] text-[var(--theme-accent)] shadow-sm'
+                          : 'bg-black/10 border-white/5 hover:border-[var(--theme-accent)]/20 text-gray-300'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -519,15 +600,15 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                           src={u.avatar || "https://i.pravatar.cc/80?img=1"}
                           alt={u.nickname}
                           referrerPolicy="no-referrer"
-                          className="w-9 h-9 rounded-full object-cover border border-neon-cyan/30"
+                          className="w-9 h-9 rounded-full object-cover border border-[var(--theme-border)]"
                         />
                         <div className="min-w-0">
-                          <p className="text-xs font-bold leading-tight text-white">{u.nickname}</p>
+                          <p className="text-xs font-bold leading-tight text-[var(--theme-text-main)]">{u.nickname}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {/* Friendship Badge */}
                             {isFriend ? (
-                              <span className="text-[8px] text-neon-cyan font-bold flex items-center gap-0.5 uppercase tracking-tight">
-                                <Check className="w-2 h-2 text-neon-cyan" /> Amigo Social
+                              <span className="text-[8px] text-[var(--theme-accent)] font-bold flex items-center gap-0.5 uppercase tracking-tight">
+                                <Check className="w-2 h-2 text-[var(--theme-accent)]" /> Amigo Social
                               </span>
                             ) : (
                               <span className="text-[8px] text-gray-500 font-bold uppercase tracking-tight">Não amigo</span>
@@ -737,28 +818,55 @@ export default function ChatView({ currentUser }: ChatViewProps) {
       </div>
 
       {/* COLUMN 2: ACTIVE CHAT PANEL */}
-      <div className="flex-1 bg-[#090924]/85 border border-neon-cyan/25 rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
+      <div className="flex-1 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
         
         {/* State A: No chat selected */}
         {selectedChatId === 'group' && currentChatMessages.length === 0 && (
           <div className="flex-1 flex flex-col justify-center items-center text-center p-8 select-none">
-            <MessageSquare className="w-16 h-16 text-neon-cyan/40 animate-pulse mb-4" />
+            <MessageSquare className="w-16 h-16 text-[var(--theme-accent)]/40 animate-pulse mb-4" />
             <p className="text-gray-400 text-sm uppercase tracking-widest font-bold">Nenhuma mensagem no grupo</p>
           </div>
         )}
 
         {/* Header bar */}
-        <div className="px-4 py-3 md:px-5 md:py-4 bg-[#0d0d2a] border-b border-neon-cyan/15 flex items-center justify-between shrink-0 select-none">
+        <div className="px-4 py-3 md:px-5 md:py-4 bg-[var(--theme-bg-card)] border-b border-[var(--theme-border)] flex items-center justify-between shrink-0 select-none">
           {selectedChatId === 'group' ? (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-neon-cyan/15 border border-neon-cyan/35 flex items-center justify-center">
-                <Users className="w-4 h-4 text-neon-cyan" />
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[var(--theme-accent)]/15 border border-[var(--theme-accent)]/35 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-[var(--theme-accent)]" />
+                </div>
+                <div>
+                  <h3 className="font-orbitron font-extrabold text-xs text-[var(--theme-text-main)] tracking-widest uppercase flex items-center gap-2">
+                    CONVERSAS DO GRUPO <ShieldCheck className="w-3.5 h-3.5 text-[var(--theme-accent)]" />
+                  </h3>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">
+                    {groupLives.length > 0 ? (
+                      <span className="text-red-400 font-black flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" /> ● {groupLives.length}/4 EM VÍDEO LIVE</span>
+                    ) : (
+                      "Canal de Interação Pública"
+                    )}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-orbitron font-extrabold text-xs text-white tracking-widest uppercase flex items-center gap-2">
-                  CONVERSAS DO GRUPO <ShieldCheck className="w-3.5 h-3.5 text-neon-cyan" />
-                </h3>
-                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">Canal de Interação Pública</p>
+
+              {/* Live Video Button */}
+              <div className="flex items-center gap-2">
+                {isInGroupLive ? (
+                  <button
+                    onClick={handleLeaveLive}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-orbitron font-extrabold text-[10px] tracking-wider rounded-xl uppercase transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Video className="w-3.5 h-3.5 animate-pulse" /> Sair da Live
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleJoinLive}
+                    className="px-3 py-1.5 bg-gradient-to-r from-neon-cyan to-neon-magenta hover:brightness-110 text-black font-orbitron font-extrabold text-[10px] tracking-wider rounded-xl uppercase transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Video className="w-3.5 h-3.5" /> Entrar na Live
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -768,10 +876,10 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                   <img
                     src={activeChatUser.avatar}
                     alt={activeChatUser.nickname}
-                    className="w-8 h-8 rounded-full border border-neon-cyan/50 object-cover shrink-0"
+                    className="w-8 h-8 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
                   />
                   <div className="min-w-0">
-                    <h3 className="font-orbitron font-extrabold text-xs text-white tracking-wider truncate uppercase">
+                    <h3 className="font-orbitron font-extrabold text-xs text-[var(--theme-text-main)] tracking-wider truncate uppercase">
                       {activeChatUser.nickname}
                     </h3>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -788,8 +896,8 @@ export default function ChatView({ currentUser }: ChatViewProps) {
 
                 {/* Expiration Timer Countdown Indicator */}
                 {activePermission?.active && activePermission.perm && (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-neon-cyan/10 border border-neon-cyan/20 text-[9px] font-semibold font-mono text-neon-cyan rounded-full uppercase shrink-0">
-                    <Clock className="w-3.5 h-3.5 text-neon-cyan animate-spin-slow" />
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/20 text-[9px] font-semibold font-mono text-[var(--theme-accent)] rounded-full uppercase shrink-0">
+                    <Clock className="w-3.5 h-3.5 text-[var(--theme-accent)] animate-spin-slow" />
                     {activePermission.perm.duration === 'permanent' ? (
                       <span>Permanente</span>
                     ) : (
@@ -814,6 +922,43 @@ export default function ChatView({ currentUser }: ChatViewProps) {
           )}
         </div>
 
+        {/* GROUP VIDEO LIVE GRID (Up to 4 participants, random real-time online live) */}
+        {selectedChatId === 'group' && groupLives.length > 0 && (
+          <div className="p-3 bg-[#0d0d26]/90 border-b border-neon-cyan/25 shrink-0 select-none">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="text-[10px] font-orbitron font-black text-neon-cyan tracking-widest uppercase">
+                  VÍDEO LIVE TRANSMISSÃO EM DIRETO ({groupLives.length}/4)
+                </span>
+              </div>
+              <span className="text-[8px] text-gray-400 font-mono font-black uppercase">Grupo Aleatório Live</span>
+            </div>
+
+            {/* Grid Layout of video streams */}
+            <div className={`grid gap-2 ${
+              groupLives.length === 1 ? 'grid-cols-1' :
+              groupLives.length === 2 ? 'grid-cols-2' :
+              'grid-cols-2'
+            }`}>
+              {groupLives.map((participant) => {
+                const isMe = participant.userId === currentUser.id;
+                return (
+                  <GroupLiveVideoBox
+                    key={participant.userId}
+                    participant={participant}
+                    isMe={isMe}
+                    localStream={localStream}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* MIDDLE CONTENT PANEL */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 bg-black/25">
           
@@ -826,11 +971,11 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                   <img
                     src={msg.sender.avatar || "https://i.pravatar.cc/80?img=1"}
                     alt={msg.sender.name}
-                    className="w-8 h-8 rounded-full border border-neon-cyan/40 object-cover shrink-0"
+                    className="w-8 h-8 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
                   />
                   <div className="space-y-1">
                     <div className={`flex items-center gap-1.5 text-[10px] text-gray-500 ${isMe ? 'justify-end' : ''}`}>
-                      <span className="font-bold text-neon-cyan">{msg.sender.name}</span>
+                      <span className="font-bold text-[var(--theme-accent)]">{msg.sender.name}</span>
                       <span className="flex items-center gap-0.5">
                         <Clock className="w-2.5 h-2.5" />{' '}
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -838,8 +983,8 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                     </div>
                     <div className={`px-4 py-2 rounded-2xl text-xs leading-relaxed font-semibold ${
                       isMe 
-                        ? 'bg-gradient-to-r from-neon-cyan to-[#7a00ff] text-black rounded-tr-none font-extrabold shadow-md shadow-neon-cyan/5' 
-                        : 'bg-[#121235]/70 border border-neon-cyan/10 text-gray-200 rounded-tl-none font-medium'
+                        ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
+                        : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
                     }`}>
                       {msg.text}
                     </div>
@@ -1094,11 +1239,11 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                         <img
                           src={msg.sender.avatar || "https://i.pravatar.cc/80?img=1"}
                           alt={msg.sender.name}
-                          className="w-8 h-8 rounded-full border border-neon-cyan/40 object-cover shrink-0"
+                          className="w-8 h-8 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
                         />
                         <div className="space-y-1">
                           <div className={`flex items-center gap-1.5 text-[10px] text-gray-500 ${isMe ? 'justify-end' : ''}`}>
-                            <span className="font-bold text-neon-cyan">{msg.sender.name}</span>
+                            <span className="font-bold text-[var(--theme-accent)]">{msg.sender.name}</span>
                             <span className="flex items-center gap-0.5">
                               <Clock className="w-2.5 h-2.5" />{' '}
                               {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1109,8 +1254,8 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                           {msg.messageType === 'text' ? (
                             <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed font-semibold ${
                               isMe 
-                                ? 'bg-gradient-to-r from-neon-cyan to-[#7a00ff] text-black rounded-tr-none font-bold' 
-                                : 'bg-[#121235]/70 border border-neon-cyan/10 text-gray-200 rounded-tl-none font-medium'
+                                ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
+                                : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
                             }`}>
                               {msg.text}
                             </div>
@@ -1151,7 +1296,7 @@ export default function ChatView({ currentUser }: ChatViewProps) {
         </div>
 
         {/* BOTTOM INPUT CONTROLS / SIMULATOR PANELS */}
-        <div className="p-3 border-t border-neon-cyan/15 bg-[#0d0d2a] shrink-0 select-none">
+        <div className="p-3 border-t border-[var(--theme-border)] bg-[var(--theme-bg-card)] shrink-0 select-none">
           {currentUser.id === 'guest' ? (
             <div className="p-3 bg-yellow-500/10 border border-yellow-500/25 rounded-xl text-center text-xs font-bold text-yellow-500 uppercase tracking-wider shrink-0">
               ⚠️ Convidados não podem enviar mensagens no chat. Crie uma conta para participar!
@@ -1164,13 +1309,13 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Escreva a sua mensagem pública..."
-                className="flex-grow bg-[#111130] border border-neon-cyan/35 rounded-xl px-4 py-3 text-xs outline-none focus:border-neon-cyan text-white placeholder:text-gray-600 font-semibold"
+                className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold"
               />
               <button
                 type="submit"
-                className="w-12 h-12 rounded-xl bg-neon-cyan hover:bg-white text-black flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-md shadow-neon-cyan/15 shrink-0"
+                className="w-12 h-12 rounded-xl bg-[var(--theme-accent)] hover:opacity-90 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-sm shrink-0"
               >
-                <Send className="w-5 h-5" />
+                <Send className="w-5 h-5 text-white" />
               </button>
             </form>
           ) : (
@@ -1308,13 +1453,13 @@ export default function ChatView({ currentUser }: ChatViewProps) {
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
                       placeholder="Escreva a sua mensagem privada..."
-                      className="flex-grow bg-[#111130] border border-neon-cyan/35 rounded-xl px-4 py-3 text-xs outline-none focus:border-neon-cyan text-white placeholder:text-gray-600 font-semibold"
+                      className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold"
                     />
                     <button
                       type="submit"
-                      className="w-12 h-12 rounded-xl bg-neon-cyan hover:bg-white text-black flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-md shadow-neon-cyan/15 shrink-0"
+                      className="w-12 h-12 rounded-xl bg-[var(--theme-accent)] hover:opacity-90 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-sm shrink-0"
                     >
-                      <Send className="w-5 h-5" />
+                      <Send className="w-5 h-5 text-white" />
                     </button>
                   </form>
                 </div>
@@ -1506,3 +1651,85 @@ export default function ChatView({ currentUser }: ChatViewProps) {
     </div>
   );
 }
+
+function GroupLiveVideoBox({ participant, isMe, localStream }: { participant: any; isMe: boolean; localStream: MediaStream | null }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (isMe && localStream && videoRef.current) {
+      videoRef.current.srcObject = localStream;
+    }
+  }, [isMe, localStream]);
+
+  // Audio wave bar animation simulator
+  const [audioBars, setAudioBars] = useState<number[]>([10, 20, 15, 30, 12]);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setAudioBars(Array.from({ length: 5 }, () => Math.floor(Math.random() * 35) + 5));
+    }, 120);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="relative aspect-video rounded-2xl bg-[#030310] border border-neon-cyan/20 overflow-hidden flex flex-col justify-center items-center group shadow-2xl">
+      {isMe && localStream ? (
+        /* Real Web Camera Video element */
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="absolute inset-0 w-full h-full object-cover rounded-2xl"
+        />
+      ) : (
+        /* Styled Camera Stream Simulation */
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0c0c2a] via-[#05051a] to-[#12002b] flex flex-col items-center justify-center relative overflow-hidden">
+          {/* Glowing Avatar */}
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-neon-cyan/25 blur-xl animate-pulse" />
+              <img
+                src={participant.avatar}
+                alt={participant.nickname}
+                className="w-14 h-14 rounded-full border-2 border-neon-cyan/60 object-cover relative z-10 shadow-[0_0_15px_rgba(0,245,255,0.2)]"
+              />
+              <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[#05051a] rounded-full z-20 animate-pulse"></span>
+            </div>
+            <p className="text-[11px] font-orbitron font-extrabold text-neon-cyan mt-2 relative z-10 tracking-widest uppercase">
+              {participant.nickname}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Overlays / Camera Stats */}
+      <div className="absolute inset-0 flex flex-col justify-between p-2.5 pointer-events-none z-20">
+        <div className="flex items-center justify-between">
+          <div className="px-1.5 py-0.5 rounded bg-black/60 text-[8px] font-mono font-bold text-red-500 uppercase flex items-center gap-1 border border-red-500/10">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE
+          </div>
+          <span className="px-1.5 py-0.5 rounded bg-black/60 text-[8px] font-mono text-gray-400 font-bold">
+            {isMe ? 'WEBCAM ATIVA' : 'CONECTOR HD'}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          {/* Audio levels dynamic indicator */}
+          <div className="flex items-end gap-0.5 h-4 px-1.5 py-0.5 rounded bg-black/50 border border-white/5">
+            {audioBars.map((val, idx) => (
+              <div
+                key={idx}
+                className="w-0.5 bg-green-400 rounded-t transition-all duration-100"
+                style={{ height: `${val}%` }}
+              />
+            ))}
+          </div>
+          <span className="text-[8px] font-bold text-neon-cyan/60 uppercase tracking-wider font-orbitron">
+            {isMe ? '@meu_feed' : `@${participant.nickname}`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+

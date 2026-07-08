@@ -19,6 +19,20 @@ export const PROVINCES = [
   'Maputo Cidade'
 ];
 
+export const DISTRICTS_BY_PROVINCE: Record<string, string[]> = {
+  'Niassa': ['Lichinga', 'Cuamba', 'Lago', 'Majune', 'Mandimba', 'Marrupa', 'Maúa', 'Mavago', 'Mecanhelas', 'Mecula', 'Metarica', 'Muembe', 'Ngauma', 'Nipepe', 'Sanga'],
+  'Cabo Delgado': ['Pemba', 'Ancuabe', 'Balama', 'Chiúre', 'Ibo', 'Macomia', 'Muidumbe', 'Montepuez', 'Mueda', 'Nangade', 'Palma', 'Quissanga'],
+  'Nampula': ['Nampula', 'Angoche', 'Eráti', 'Ilha de Moçambique', 'Lalaua', 'Larde', 'Liúpo', 'Malema', 'Meconta', 'Mecubúri', 'Memba', 'Mogincual', 'Mogovolas', 'Moma', 'Monapo', 'Mossuril', 'Muecate', 'Murrupula', 'Nacarôa', 'Nampula Rapale', 'Ribáuè'],
+  'Zambézia': ['Quelimane', 'Alto Molócue', 'Chinde', 'Gilé', 'Guruné', 'Inhassunge', 'Lugela', 'Maganja da Costa', 'Milange', 'Mocuba', 'Mocubela', 'Mopeia', 'Morrumbala', 'Namacurra', 'Namarroi', 'Nicoadala', 'Pebane'],
+  'Tete': ['Angónia', 'Cahora-Bassa', 'Changara', 'Chifunde', 'Chiúta', 'Dôa', 'Macanga', 'Magoé', 'Marávia', 'Moatize', 'Mutarara', 'Tete', 'Tsangano', 'Zumbo'],
+  'Manica': ['Chimoio', 'Bárue', 'Gondola', 'Guro', 'Macate', 'Machaze', 'Macossa', 'Manica', 'Mossurize', 'Sussundenga', 'Tambara', 'Vanduzi'],
+  'Sofala': ['Beira', 'Buzi', 'Caia', 'Chembba', 'Cheringoma', 'Chibabava', 'Dondo', 'Gorongosa', 'Marromeu', 'Machanga', 'Maringué', 'Muanza', 'Nhamatanda'],
+  'Inhambane': ['Funhalouro', 'Govuro', 'Homoíne', 'Inharrime', 'Inhassoro', 'Jangamo', 'Mabote', 'Massinga', 'Maxixe', 'Morrumbene', 'Panda', 'Vilankulo', 'Zavala'],
+  'Gaza': ['Bilene', 'Chibuto', 'Chicualacuala', 'Chigubo', 'Chókwè', 'Guijá', 'Mabalane', 'Manjacaze', 'Massangena', 'Massingir', 'Xai-Xai'],
+  'Maputo Província': ['Boane', 'Magude', 'Manhiça', 'Marracuene', 'Matola', 'Moamba', 'Namaacha', 'Matutuíne'],
+  'Maputo Cidade': ['KaMpfumo', 'KaNhaka', 'KaTembe', 'KaMaxaquene', 'KaMavota', 'KaMubukwana', 'Lhanguene']
+};
+
 export const FONTS_LIST = [
   'Poppins',
   'Roboto',
@@ -112,6 +126,7 @@ export const SEED_USERS: User[] = [
     nickname: 'Alex MZ',
     password: simpleHash('123456'), // Default pass
     province: 'Maputo Cidade',
+    district: 'KaMpfumo',
     created: new Date().toISOString(),
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
     stats: { likes: 1240, posts: 14, friends: 342 },
@@ -128,6 +143,7 @@ export const SEED_USERS: User[] = [
     nickname: 'Oficio MZ',
     password: simpleHash('123456'),
     province: 'Zambézia',
+    district: 'Quelimane',
     created: new Date().toISOString(),
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
     stats: { likes: 350, posts: 4, friends: 98 },
