@@ -12,7 +12,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { User, Post, Story, Notification } from '../types';
+import { User, Post, Story, Notification, Friendship, ChatPermission } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES } from '../utils';
 
 // Helper to check if database has collections and seed them if empty
@@ -281,4 +281,58 @@ export async function dbClearAllNotifications(recipientId: string) {
   } catch (err) {
     console.error('Error clearing notifications:', err);
   }
+}
+
+// Friendship Subscriptions and Actions
+export function subscribeFriendships(callback: (friendships: Friendship[]) => void) {
+  const friendshipsCol = collection(db, 'friendships');
+  return onSnapshot(friendshipsCol, (snapshot) => {
+    const list: Friendship[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as Friendship);
+    });
+    callback(list);
+  }, (err) => console.error('Friendships sub error:', err));
+}
+
+export async function dbCreateFriendship(friendship: Friendship) {
+  await setDoc(doc(db, 'friendships', friendship.id), friendship);
+}
+
+export async function dbUpdateFriendship(friendship: Friendship) {
+  await setDoc(doc(db, 'friendships', friendship.id), friendship, { merge: true });
+}
+
+export async function dbDeleteFriendship(friendshipId: string) {
+  await deleteDoc(doc(db, 'friendships', friendshipId));
+}
+
+// Chat Permission Subscriptions and Actions
+export function subscribeChatPermissions(callback: (permissions: ChatPermission[]) => void) {
+  const permissionsCol = collection(db, 'chat_permissions');
+  return onSnapshot(permissionsCol, (snapshot) => {
+    const list: ChatPermission[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as ChatPermission);
+    });
+    callback(list);
+  }, (err) => console.error('Chat permissions sub error:', err));
+}
+
+export async function dbCreateChatPermission(permission: ChatPermission) {
+  await setDoc(doc(db, 'chat_permissions', permission.id), permission);
+}
+
+export async function dbUpdateChatPermission(permission: ChatPermission) {
+  await setDoc(doc(db, 'chat_permissions', permission.id), permission, { merge: true });
+}
+
+export async function dbDeleteChatPermission(permissionId: string) {
+  await deleteDoc(doc(db, 'chat_permissions', permissionId));
 }

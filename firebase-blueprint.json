@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in Eyes Open MZ",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "fullname": { "type": "string" },
+        "firstname": { "type": "string" },
+        "surname": { "type": "string" },
+        "nickname": { "type": "string" },
+        "password": { "type": "string" },
+        "province": { "type": "string" },
+        "created": { "type": "string" },
+        "avatar": { "type": "string" },
+        "stats": { "type": "object" },
+        "nameEditDate": { "type": "string" },
+        "isVIP": { "type": "boolean" },
+        "lastReadChatTimestamp": { "type": "number" },
+        "lastReadNotificationsTimestamp": { "type": "number" },
+        "mutedNotifications": { "type": "boolean" }
+      },
+      "required": ["id", "phone", "email", "fullname", "firstname", "surname", "nickname", "province", "created", "avatar", "stats"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System or user notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "title": { "type": "string" },
+        "text": { "type": "string" },
+        "type": { "type": "string" },
+        "sender": { "type": "object" },
+        "read": { "type": "boolean" },
+        "targetId": { "type": "string" },
+        "targetView": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "recipientId", "title", "text", "type", "sender", "read", "timestamp"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Friendship request or state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "senderId", "receiverId", "status", "timestamp"]
+    },
+    "ChatPermission": {
+      "title": "ChatPermission",
+      "description": "Chat access control permission",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "status": { "type": "string" },
+        "duration": { "type": "string" },
+        "acceptedAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "level": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "senderId", "receiverId", "status", "duration", "level", "timestamp"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "4D media feed publication",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "image": { "type": "string" },
+        "text": { "type": "string" },
+        "style": { "type": "object" },
+        "author": { "type": "object" },
+        "stars": { "type": "number" },
+        "views": { "type": "number" },
+        "starred": { "type": "boolean" },
+        "timestamp": { "type": "number" },
+        "comments": { "type": "array" }
+      },
+      "required": ["id", "author", "stars", "views", "timestamp"]
+    },
+    "Story": {
+      "title": "Story",
+      "description": "24h temporary media story",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "src": { "type": "string" },
+        "text": { "type": "string" },
+        "style": { "type": "object" },
+        "music": { "type": "string" },
+        "musicName": { "type": "string" },
+        "author": { "type": "object" },
+        "stars": { "type": "number" },
+        "views": { "type": "number" },
+        "starred": { "type": "boolean" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "type", "src", "author", "timestamp"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Real-time conversation messages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sender": { "type": "object" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "sender", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System or user notifications"
+    },
+    "friendships/{friendshipId}": {
+      "schema": "Friendship",
+      "description": "Friendships"
+    },
+    "chat_permissions/{chatPermissionId}": {
+      "schema": "ChatPermission",
+      "description": "Chat access level and duration rules"
+    },
+    "posts/{postId}": {
+      "schema": "Post",
+      "description": "Publications"
+    },
+    "stories/{storyId}": {
+      "schema": "Story",
+      "description": "Temporary stories"
+    },
+    "chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chat room messages"
+    }
+  }
+}

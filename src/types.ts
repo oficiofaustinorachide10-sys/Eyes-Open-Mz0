@@ -34,15 +34,35 @@ export interface Notification {
   recipientId: string; // 'all' or specific userId
   title: string;
   text: string;
-  type: 'like' | 'comment' | 'star' | 'system' | 'mention';
+  type: 'like' | 'comment' | 'star' | 'system' | 'mention' | 'friend_request' | 'chat_request' | 'friend_accepted' | 'chat_accepted';
   sender: {
     id: string;
     name: string;
     avatar: string;
   };
   read: boolean;
-  targetId?: string; // e.g. post ID
-  targetView?: 'feed' | 'conversas' | 'abra-olhos';
+  targetId?: string; // e.g. post ID or request ID
+  targetView?: 'feed' | 'conversas' | 'abra-olhos' | 'notificacoes';
+  timestamp: number;
+}
+
+export interface Friendship {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: 'pending' | 'accepted' | 'declined';
+  timestamp: number;
+}
+
+export interface ChatPermission {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: 'pending' | 'accepted' | 'declined' | 'ignored';
+  duration: '24h' | '48h' | '7d' | 'permanent';
+  acceptedAt?: number;
+  expiresAt?: number | null;
+  level: 'conhecido' | 'amigo' | 'parceiro' | 'familia' | 'equipe' | 'vip';
   timestamp: number;
 }
 

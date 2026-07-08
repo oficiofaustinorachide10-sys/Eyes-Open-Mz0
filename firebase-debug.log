@@ -1,0 +1,27 @@
+[debug] [2026-07-08T13:33:37.221Z] ----------------------------------------------------------------------
+[debug] [2026-07-08T13:33:37.224Z] Command:       /usr/local/bin/node /usr/local/bin/firebase deploy --only firestore:rules --project tenacious-harbor-5j4jh --debug
+[debug] [2026-07-08T13:33:37.225Z] CLI Version:   15.22.1
+[debug] [2026-07-08T13:33:37.225Z] Platform:      linux
+[debug] [2026-07-08T13:33:37.225Z] Node Version:  v22.23.0
+[debug] [2026-07-08T13:33:37.225Z] Detected Agent: unknown
+[debug] [2026-07-08T13:33:37.225Z] Time:          Wed Jul 08 2026 13:33:37 GMT+0000 (Coordinated Universal Time)
+[debug] [2026-07-08T13:33:37.225Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-07-08T13:33:39.334Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-07-08T13:33:39.355Z] Running auto auth
+[debug] [2026-07-08T13:33:39.360Z] [iam] checking project tenacious-harbor-5j4jh for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-07-08T13:33:39.361Z] No OAuth tokens found
+[debug] [2026-07-08T13:33:39.362Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenacious-harbor-5j4jh:testIamPermissions [none]
+[debug] [2026-07-08T13:33:39.362Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenacious-harbor-5j4jh:testIamPermissions  x-goog-user-project=tenacious-harbor-5j4jh
+[debug] [2026-07-08T13:33:39.362Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenacious-harbor-5j4jh:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-07-08T13:33:40.146Z] [iam] error while checking permissions, command may fail: FetchError: Invalid response body while trying to fetch https://cloudresourcemanager.googleapis.com/v1/projects/tenacious-harbor-5j4jh:testIamPermissions: Premature close
+[info] 
+[info] === Deploying to 'tenacious-harbor-5j4jh'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-07-08T13:33:40.149Z] No OAuth tokens found
+[debug] [2026-07-08T13:33:40.149Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/tenacious-harbor-5j4jh/services/firestore.googleapis.com [none]
+[debug] [2026-07-08T13:33:40.149Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/tenacious-harbor-5j4jh/services/firestore.googleapis.com  x-goog-user-project=tenacious-harbor-5j4jh
+[error] 
+[error] Error: FetchError: Invalid response body while trying to fetch https://serviceusage.googleapis.com/v1/projects/tenacious-harbor-5j4jh/services/firestore.googleapis.com: Premature close

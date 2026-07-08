@@ -5,10 +5,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Plus, Star, Eye, Share2, Trash2, X, Play, Pause, Volume2 
+  Plus, Star, Eye, Share2, Trash2, X, Play, Pause, Volume2, UserPlus, UserCheck, ShieldCheck, Lock, Unlock, MessageSquare, Clock, Sparkles, Check, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Post, Story, User } from '../types';
+import { Post, Story, User, Friendship, ChatPermission, Notification } from '../types';
+import { 
+  subscribeUsers, subscribeFriendships, subscribeChatPermissions, 
+  dbCreateFriendship, dbCreateChatPermission, dbCreateNotification 
+} from '../lib/db';
 
 interface FeedViewProps {
   currentUser: User;
@@ -196,6 +200,25 @@ export default function FeedView({
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isPlayingStory, setIsPlayingStory] = useState(true);
   const [storyProgress, setStoryProgress] = useState(0);
+
+  // Real-time social relations states
+  const [dbUsers, setDbUsers] = useState<User[]>([]);
+  const [friendships, setFriendships] = useState<Friendship[]>([]);
+  const [permissions, setPermissions] = useState<ChatPermission[]>([]);
+  const [profileModalUser, setProfileModalUser] = useState<User | null>(null);
+  const [requestLevel, setRequestLevel] = useState<'conhecido' | 'amigo' | 'parceiro' | 'familia' | 'equipe' | 'vip'>('conhecido');
+  const [requestDuration, setRequestDuration] = useState<'24h' | '48h' | '7d' | 'permanent'>('48h');
+
+  useEffect(() => {
+    const unsubUsers = subscribeUsers(setDbUsers);
+    const unsubFriendships = subscribeFriendships(setFriendships);
+    const unsubPermissions = subscribeChatPermissions(setPermissions);
+    return () => {
+      unsubUsers();
+      unsubFriendships();
+      unsubPermissions();
+    };
+  }, []);
 
   // Auto open post from notification
   useEffect(() => {

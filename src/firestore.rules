@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get, list: if isValidId(userId);
+      allow create, update: if isValidId(userId) && 
+        incoming().id is string && 
+        incoming().phone is string && 
+        incoming().nickname is string;
+      allow delete: if isValidId(userId);
+    }
+
+    // 2. Posts Collection
+    match /posts/{postId} {
+      allow get, list: if isValidId(postId);
+      allow create, update: if isValidId(postId) && 
+        incoming().id is string && 
+        incoming().author is map;
+      allow delete: if isValidId(postId);
+    }
+
+    // 3. Stories Collection
+    match /stories/{storyId} {
+      allow get, list: if isValidId(storyId);
+      allow create, update: if isValidId(storyId) && 
+        incoming().id is string && 
+        incoming().src is string;
+      allow delete: if isValidId(storyId);
+    }
+
+    // 4. Chats (Messages) Collection
+    match /chats/{chatId} {
+      allow get, list: if isValidId(chatId);
+      allow create, update: if isValidId(chatId) && 
+        incoming().id is string && 
+        incoming().text is string;
+      allow delete: if isValidId(chatId);
+    }
+
+    // 5. Notifications Collection
+    match /notifications/{notificationId} {
+      allow get, list: if isValidId(notificationId);
+      allow create, update: if isValidId(notificationId) && 
+        incoming().id is string && 
+        incoming().recipientId is string;
+      allow delete: if isValidId(notificationId);
+    }
+
+    // 6. Friendships Collection
+    match /friendships/{friendshipId} {
+      allow get, list: if isValidId(friendshipId);
+      allow create, update: if isValidId(friendshipId) && 
+        incoming().id is string && 
+        incoming().senderId is string && 
+        incoming().receiverId is string;
+      allow delete: if isValidId(friendshipId);
+    }
+
+    // 7. Chat Permissions Collection
+    match /chat_permissions/{chatPermissionId} {
+      allow get, list: if isValidId(chatPermissionId);
+      allow create, update: if isValidId(chatPermissionId) && 
+        incoming().id is string && 
+        incoming().senderId is string && 
+        incoming().receiverId is string;
+      allow delete: if isValidId(chatPermissionId);
+    }
+  }
+}
