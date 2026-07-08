@@ -9,13 +9,14 @@ import {
   Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Post, Story } from './types';
+import { User, Post, Story, Comment, Notification } from './types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES } from './utils';
 
 // Import our modular subcomponents
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import Sidebar, { ViewType } from './components/Sidebar';
+import NotificationsView from './components/NotificationsView';
 import FeedView from './components/FeedView';
 import StoryEditor from './components/StoryEditor';
 import ProfileView from './components/ProfileView';
@@ -27,12 +28,36 @@ import FontView from './components/FontView';
 import CinemaView from './components/CinemaView';
 import AbraView from './components/AbraView';
 
+// Import our Firestore synchronization utilities
+import {
+  seedDatabaseIfEmpty,
+  subscribeUsers,
+  subscribePosts,
+  subscribeStories,
+  dbUpdateUser,
+  dbDeleteUser,
+  dbCreatePost,
+  dbDeletePost,
+  dbUpdatePost,
+  dbCreateStory,
+  dbDeleteStory,
+  dbUpdateStory,
+  subscribeChats,
+  subscribeNotifications,
+  dbCreateNotification
+} from './lib/db';
+
 export default function App() {
   // App core persistent states
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
+  
+  // Real-time message thread and notification states
+  const [messages, setMessages] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [autoOpenPostId, setAutoOpenPostId] = useState<string | undefined>(undefined);
   
   // Navigation states
   const [activeView, setActiveView] = useState<ViewType>('feed');
@@ -41,62 +66,82 @@ export default function App() {
   // Auxiliary micro-interaction toast state
   const [successToast, setSuccessToast] = useState('');
 
-  // 1. Initial State Loading and Seeding
-  useEffect(() => {
-    // Users Seeding
-    const storedUsers = localStorage.getItem('eyesopenmz_users_v2');
-    let loadedUsers: User[] = [];
-    if (storedUsers) {
-      try {
-        loadedUsers = JSON.parse(storedUsers);
-      } catch (e) {
-        loadedUsers = SEED_USERS;
-      }
-    } else {
-      loadedUsers = SEED_USERS;
-      localStorage.setItem('eyesopenmz_users_v2', JSON.stringify(SEED_USERS));
-    }
-    setUsers(loadedUsers);
+  // Unread badge counters (real-time synced with active timestamps)
+  const unreadChatsCount = currentUser && currentUser.id !== 'guest'
+    ? messages.filter(m => m.sender.id !== currentUser.id && m.timestamp > (currentUser.lastReadChatTimestamp || 0)).length
+    : 0;
 
-    // Current User Session
+  const unreadNotificationsCount = currentUser
+    ? notifications.filter(n => !n.read).length
+    : 0;
+
+  // 1. Initial State Loading and Seeding with real-time Firestore Subscriptions
+  useEffect(() => {
+    // 1. First trigger seeding of the database if collections are completely blank
+    seedDatabaseIfEmpty();
+
+    // 2. Load cached current user session (including guest or register/login cache)
     const storedSession = localStorage.getItem('currentUser');
     if (storedSession) {
       try {
         const sessionUser = JSON.parse(storedSession);
-        // Ensure session remains updated in alignment with master users array
-        const masterUser = loadedUsers.find(u => u.id === sessionUser.id);
-        setCurrentUser(masterUser || sessionUser);
+        setCurrentUser(sessionUser);
       } catch (e) {
         setCurrentUser(null);
       }
     }
 
-    // Posts Seeding
-    const storedPosts = localStorage.getItem('posts_menu_1_1_1');
-    if (storedPosts) {
-      try {
-        setPosts(JSON.parse(storedPosts));
-      } catch (e) {
-        setPosts(SEED_POSTS);
+    // 3. Subscribe to real-time Users
+    const unsubUsers = subscribeUsers((loadedUsers) => {
+      setUsers(loadedUsers);
+      
+      // Keep active user session in sync with database profile modifications
+      if (storedSession) {
+        try {
+          const sessionUser = JSON.parse(storedSession);
+          const masterUser = loadedUsers.find(u => u.id === sessionUser.id);
+          if (masterUser) {
+            setCurrentUser(masterUser);
+            localStorage.setItem('currentUser', JSON.stringify(masterUser));
+          }
+        } catch (e) {}
       }
-    } else {
-      setPosts(SEED_POSTS);
-      localStorage.setItem('posts_menu_1_1_1', JSON.stringify(SEED_POSTS));
-    }
+    });
 
-    // Stories Seeding
-    const storedStories = localStorage.getItem('eyes42h_stories');
-    if (storedStories) {
-      try {
-        setStories(JSON.parse(storedStories));
-      } catch (e) {
-        setStories(SEED_STORIES);
-      }
-    } else {
-      setStories(SEED_STORIES);
-      localStorage.setItem('eyes42h_stories', JSON.stringify(SEED_STORIES));
-    }
+    // 4. Subscribe to real-time Posts
+    const unsubPosts = subscribePosts((loadedPosts) => {
+      setPosts(loadedPosts);
+    });
+
+    // 5. Subscribe to real-time Stories
+    const unsubStories = subscribeStories((loadedStories) => {
+      setStories(loadedStories);
+    });
+
+    // 6. Subscribe to real-time chats for unread count calculations
+    const unsubChats = subscribeChats((loadedMsgs) => {
+      setMessages(loadedMsgs);
+    });
+
+    return () => {
+      unsubUsers();
+      unsubPosts();
+      unsubStories();
+      unsubChats();
+    };
   }, []);
+
+  // Listen to active notifications for current user
+  useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+    const unsubNotifs = subscribeNotifications(currentUser.id, (loadedNotifs) => {
+      setNotifications(loadedNotifs);
+    });
+    return () => unsubNotifs();
+  }, [currentUser?.id]);
 
   const triggerToast = (msg: string) => {
     setSuccessToast(msg);
@@ -111,12 +156,9 @@ export default function App() {
     triggerToast(`Sessão iniciada! Bem-vindo, ${user.nickname}`);
   };
 
-  const handleRegisterSuccess = (newUser: User) => {
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    localStorage.setItem('eyesopenmz_users_v2', JSON.stringify(updatedUsers));
-    
-    // Automatically log in newly created profile
+  const handleRegisterSuccess = async (newUser: User) => {
+    // Automatically write newly created user to Firestore!
+    await dbUpdateUser(newUser);
     setCurrentUser(newUser);
     localStorage.setItem('currentUser', JSON.stringify(newUser));
     setActiveView('feed');
@@ -130,78 +172,95 @@ export default function App() {
     triggerToast('Terminou a sessão com sucesso!');
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
+  const handleUpdateUser = async (updatedUser: User) => {
+    await dbUpdateUser(updatedUser);
     setCurrentUser(updatedUser);
     localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-    
-    const updatedUsersList = users.map(u => u.id === updatedUser.id ? updatedUser : u);
-    setUsers(updatedUsersList);
-    localStorage.setItem('eyesopenmz_users_v2', JSON.stringify(updatedUsersList));
+    triggerToast('Perfil atualizado com sucesso!');
   };
 
-  const handleDeleteAccount = (userId: string) => {
+  const handleDeleteAccount = async (userId: string) => {
     if (confirm('Atenção: Esta ação é irreversível. Deseja realmente eliminar o seu perfil do Eyes Open MZ?')) {
-      const remainingUsers = users.filter(u => u.id !== userId);
-      setUsers(remainingUsers);
-      localStorage.setItem('eyesopenmz_users_v2', JSON.stringify(remainingUsers));
+      await dbDeleteUser(userId);
       
-      // Also purge users posts and stories for security
-      const remainingPosts = posts.filter(p => p.author.id !== userId);
-      setPosts(remainingPosts);
-      localStorage.setItem('posts_menu_1_1_1', JSON.stringify(remainingPosts));
+      // Purge posts and stories from this user for security
+      const postsToDelete = posts.filter(p => p.author.id === userId);
+      for (const p of postsToDelete) {
+        await dbDeletePost(p.id);
+      }
 
-      const remainingStories = stories.filter(s => s.author.id !== userId);
-      setStories(remainingStories);
-      localStorage.setItem('eyes42h_stories', JSON.stringify(remainingStories));
+      const storiesToDelete = stories.filter(s => s.author.id === userId);
+      for (const s of storiesToDelete) {
+        await dbDeleteStory(s.id);
+      }
 
       handleLogout();
     }
   };
 
-  // 3. Post interactions (Like, View, Post, Delete)
-  const handleLikePost = (postId: string) => {
-    const updated = posts.map((p) => {
-      if (p.id === postId) {
-        const nextStarred = !p.starred;
-        return {
-          ...p,
-          starred: nextStarred,
-          stars: nextStarred ? p.stars + 1 : p.stars - 1
-        };
-      }
-      return p;
-    });
-    setPosts(updated);
-    localStorage.setItem('posts_menu_1_1_1', JSON.stringify(updated));
+  // 3. Post interactions (Like, View, Post, Delete, Comment)
+  const handleLikePost = async (postId: string) => {
+    const p = posts.find(x => x.id === postId);
+    if (!p) return;
+
+    const nextStarred = !p.starred;
+    const updated: Post = {
+      ...p,
+      starred: nextStarred,
+      stars: nextStarred ? p.stars + 1 : p.stars - 1
+    };
+    await dbUpdatePost(updated);
+
+    if (currentUser && nextStarred && p.author.id !== currentUser.id) {
+      const notif: Notification = {
+        id: 'notif_like_' + Math.random().toString(36).substring(2, 9),
+        recipientId: p.author.id,
+        title: 'Nova Estrela ⭐',
+        text: `${currentUser.nickname} deu uma estrela à sua publicação: "${p.text ? p.text.substring(0, 30) : 'foto'}..."`,
+        type: 'star',
+        sender: {
+          id: currentUser.id,
+          name: currentUser.nickname,
+          avatar: currentUser.avatar
+        },
+        read: false,
+        targetId: p.id,
+        targetView: 'feed',
+        timestamp: Date.now()
+      };
+      await dbCreateNotification(notif).catch(console.error);
+    }
   };
 
-  const handleAddPostView = (postId: string) => {
-    // Only increment view counter on session basis once
+  const handleAddPostView = async (postId: string) => {
     const sessionKey = `viewed_post_${postId}`;
     if (sessionStorage.getItem(sessionKey)) return;
     
-    const updated = posts.map((p) => {
-      if (p.id === postId) {
-        return { ...p, views: p.views + 1 };
-      }
-      return p;
-    });
-    setPosts(updated);
-    localStorage.setItem('posts_menu_1_1_1', JSON.stringify(updated));
+    const p = posts.find(x => x.id === postId);
+    if (!p) return;
+
+    const updated: Post = {
+      ...p,
+      views: p.views + 1
+    };
+    await dbUpdatePost(updated);
     sessionStorage.setItem(sessionKey, 'true');
   };
 
-  const handleDeletePost = (postId: string) => {
+  const handleDeletePost = async (postId: string) => {
     if (confirm('Tem a certeza que deseja eliminar esta publicação permanentemente?')) {
-      const remaining = posts.filter(p => p.id !== postId);
-      setPosts(remaining);
-      localStorage.setItem('posts_menu_1_1_1', JSON.stringify(remaining));
+      await dbDeletePost(postId);
       triggerToast('Publicação removida com sucesso!');
     }
   };
 
-  const handlePublishPost = (imgSrc: string | null, text: string, font: string, color: string) => {
+  const handlePublishPost = async (imgSrc: string | null, text: string, font: string, color: string) => {
     if (!currentUser) return;
+    if (currentUser.id === 'guest') {
+      alert('Convidados não possuem permissão para criar publicações.');
+      return;
+    }
+
     const newPost: Post = {
       id: 'post_' + Math.random().toString(36).substring(2, 9),
       image: imgSrc,
@@ -214,48 +273,114 @@ export default function App() {
       },
       stars: 0,
       views: 0,
+      timestamp: Date.now(),
+      comments: []
+    };
+
+    await dbCreatePost(newPost);
+    setActiveView('feed');
+    triggerToast('Publicação criada com sucesso!');
+  };
+
+  const handleAddComment = async (postId: string, text: string) => {
+    if (!currentUser || currentUser.id === 'guest') return;
+    const p = posts.find(x => x.id === postId);
+    if (!p) return;
+
+    const newComment: Comment = {
+      id: 'comment_' + Math.random().toString(36).substring(2, 9),
+      author: {
+        id: currentUser.id,
+        name: currentUser.nickname,
+        avatar: currentUser.avatar
+      },
+      text,
       timestamp: Date.now()
     };
 
-    const updated = [newPost, ...posts];
-    setPosts(updated);
-    localStorage.setItem('posts_menu_1_1_1', JSON.stringify(updated));
+    const updated: Post = {
+      ...p,
+      comments: [...(p.comments || []), newComment]
+    };
+    await dbUpdatePost(updated);
+
+    if (p.author.id !== currentUser.id) {
+      const notif: Notification = {
+        id: 'notif_comment_' + Math.random().toString(36).substring(2, 9),
+        recipientId: p.author.id,
+        title: 'Novo Comentário 💬',
+        text: `${currentUser.nickname} comentou na sua publicação: "${text.substring(0, 30)}..."`,
+        type: 'comment',
+        sender: {
+          id: currentUser.id,
+          name: currentUser.nickname,
+          avatar: currentUser.avatar
+        },
+        read: false,
+        targetId: p.id,
+        targetView: 'feed',
+        timestamp: Date.now()
+      };
+      await dbCreateNotification(notif).catch(console.error);
+    }
   };
 
   // 4. Story interactions (Like, View, Post)
-  const handleLikeStory = (storyId: string) => {
-    const updated = stories.map((s) => {
-      if (s.id === storyId) {
-        const nextStarred = !s.starred;
-        return {
-          ...s,
-          starred: nextStarred,
-          stars: (s.stars || 0) + (nextStarred ? 1 : -1)
-        };
-      }
-      return s;
-    });
-    setStories(updated);
-    localStorage.setItem('eyes42h_stories', JSON.stringify(updated));
+  const handleLikeStory = async (storyId: string) => {
+    const s = stories.find(x => x.id === storyId);
+    if (!s) return;
+
+    const nextStarred = !s.starred;
+    const updated: Story = {
+      ...s,
+      starred: nextStarred,
+      stars: (s.stars || 0) + (nextStarred ? 1 : -1)
+    };
+    await dbUpdateStory(updated);
+
+    if (currentUser && nextStarred && s.author.id !== currentUser.id) {
+      const notif: Notification = {
+        id: 'notif_story_' + Math.random().toString(36).substring(2, 9),
+        recipientId: s.author.id,
+        title: 'Reação na História 💥',
+        text: `${currentUser.nickname} gostou da sua história no Eyes 42h!`,
+        type: 'star',
+        sender: {
+          id: currentUser.id,
+          name: currentUser.nickname,
+          avatar: currentUser.avatar
+        },
+        read: false,
+        targetId: s.id,
+        targetView: 'feed',
+        timestamp: Date.now()
+      };
+      await dbCreateNotification(notif).catch(console.error);
+    }
   };
 
-  const handleAddStoryView = (storyId: string) => {
+  const handleAddStoryView = async (storyId: string) => {
     const sessionKey = `viewed_story_${storyId}`;
     if (sessionStorage.getItem(sessionKey)) return;
 
-    const updated = stories.map((s) => {
-      if (s.id === storyId) {
-        return { ...s, views: (s.views || 0) + 1 };
-      }
-      return s;
-    });
-    setStories(updated);
-    localStorage.setItem('eyes42h_stories', JSON.stringify(updated));
+    const s = stories.find(x => x.id === storyId);
+    if (!s) return;
+
+    const updated: Story = {
+      ...s,
+      views: (s.views || 0) + 1
+    };
+    await dbUpdateStory(updated);
     sessionStorage.setItem(sessionKey, 'true');
   };
 
-  const handlePublishStory = (storySrc: string, text: string | null, font: string, color: string, musicName?: string) => {
+  const handlePublishStory = async (storySrc: string, text: string | null, font: string, color: string, musicName?: string) => {
     if (!currentUser) return;
+    if (currentUser.id === 'guest') {
+      alert('Convidados não possuem permissão para criar histórias.');
+      return;
+    }
+
     const newStory: Story = {
       id: 'story_' + Math.random().toString(36).substring(2, 9),
       type: 'photo',
@@ -273,11 +398,16 @@ export default function App() {
       timestamp: Date.now()
     };
 
-    const updated = [newStory, ...stories];
-    setStories(updated);
-    localStorage.setItem('eyes42h_stories', JSON.stringify(updated));
+    await dbCreateStory(newStory);
     setActiveView('feed');
     triggerToast('História publicada com sucesso no Eyes 42h!');
+  };
+
+  const handleNavigateToTarget = (view: ViewType, targetId?: string) => {
+    if (targetId) {
+      setAutoOpenPostId(targetId);
+    }
+    setActiveView(view);
   };
 
   // 5. Views Switcher Router Routing logic (Ensures absolutely NO empty states or broken buttons)
@@ -297,6 +427,9 @@ export default function App() {
             onLikeStory={handleLikeStory}
             onAddStoryView={handleAddStoryView}
             onAddPostView={handleAddPostView}
+            onAddComment={handleAddComment}
+            autoOpenPostId={autoOpenPostId}
+            onClearAutoOpenPost={() => setAutoOpenPostId(undefined)}
           />
         );
       case 'profile':
@@ -326,6 +459,14 @@ export default function App() {
         );
       case 'conversas':
         return <ChatView currentUser={currentUser} />;
+      case 'notificacoes':
+        return (
+          <NotificationsView
+            currentUser={currentUser}
+            notifications={notifications}
+            onNavigateToTarget={handleNavigateToTarget}
+          />
+        );
       case 'musica':
         return <MusicView />;
       case 'fonte-letra':
@@ -582,6 +723,8 @@ export default function App() {
             onLogout={handleLogout}
             isOpen={isMobileSidebarOpen}
             onClose={() => setIsMobileSidebarOpen(false)}
+            unreadChatsCount={unreadChatsCount}
+            unreadNotificationsCount={unreadNotificationsCount}
           />
 
           {/* Core Content Container */}
@@ -590,9 +733,12 @@ export default function App() {
             <header className="lg:hidden flex items-center justify-between px-5 py-4 border-b border-neon-cyan/20 bg-[#08081a]/95 shrink-0 z-10 select-none">
               <button 
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="text-neon-cyan p-1 hover:bg-[#121235]/40 rounded-lg cursor-pointer"
+                className="text-neon-cyan p-1 hover:bg-[#121235]/40 rounded-lg cursor-pointer relative"
               >
                 <Menu className="w-6 h-6" />
+                {(unreadChatsCount + unreadNotificationsCount) > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 border border-black rounded-full animate-pulse shadow-[0_0_4px_#ef4444]"></span>
+                )}
               </button>
               <h2 className="font-orbitron font-black text-base text-neon-cyan tracking-wider glow-text-cyan">
                 OPEN MZ

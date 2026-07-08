@@ -14,6 +14,22 @@ interface ProfileViewProps {
 }
 
 export default function ProfileView({ currentUser, onNavigate }: ProfileViewProps) {
+  if (currentUser.id === 'guest') {
+    return (
+      <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-2xl mx-auto flex flex-col justify-center items-center font-rajdhani text-center text-white h-[80vh]">
+        <div className="p-8 bg-[#0d0d26]/80 border border-neon-cyan/40 rounded-3xl max-w-md shadow-2xl relative space-y-4">
+          <Award className="w-16 h-16 text-neon-cyan mx-auto animate-pulse" />
+          <h2 className="font-orbitron font-extrabold text-lg text-neon-cyan tracking-wider uppercase">
+            Perfil de Convidado
+          </h2>
+          <p className="text-xs text-gray-300 leading-relaxed font-semibold">
+            As estatísticas detalhadas de engajamento e histórico pessoal estão disponíveis apenas para usuários registados. Faça o registo de sua conta gratuita no Eyes Open MZ.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const [isFlipped, setIsFlipped] = useState(false);
 
   // Interaction analytics dataset for the weekly line chart

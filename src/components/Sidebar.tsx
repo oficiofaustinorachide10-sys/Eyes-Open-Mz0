@@ -5,7 +5,7 @@
 
 import { 
   Home, Eye, User, Newspaper, Video, MessageSquare, Calendar, 
-  Store, Film, Type, Music, Users, Settings, LogOut, Plus, ShieldAlert
+  Store, Film, Type, Music, Users, Settings, LogOut, Plus, ShieldAlert, Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType } from '../types';
@@ -13,7 +13,7 @@ import { User as UserType } from '../types';
 export type ViewType = 
   | 'feed' | 'profile' | 'account' | 'publish-post' | 'publish-story' 
   | 'abra-olhos' | 'artigos' | 'videos' | 'conversas' | 'eventos' 
-  | 'loja' | 'cinema' | 'fonte-letra' | 'musica' | 'comunidade' | 'config';
+  | 'loja' | 'cinema' | 'fonte-letra' | 'musica' | 'comunidade' | 'config' | 'notificacoes';
 
 interface SidebarProps {
   currentUser: UserType;
@@ -22,10 +22,19 @@ interface SidebarProps {
   onLogout: () => void;
   isOpen: boolean;
   onClose: () => void;
+  unreadChatsCount?: number;
+  unreadNotificationsCount?: number;
 }
 
 export default function Sidebar({ 
-  currentUser, activeView, onNavigate, onLogout, isOpen, onClose 
+  currentUser, 
+  activeView, 
+  onNavigate, 
+  onLogout, 
+  isOpen, 
+  onClose,
+  unreadChatsCount = 0,
+  unreadNotificationsCount = 0
 }: SidebarProps) {
 
   const menuItems = [
@@ -36,6 +45,7 @@ export default function Sidebar({
     { id: 'artigos' as ViewType, label: 'Artigos', icon: Newspaper },
     { id: 'videos' as ViewType, label: 'Vídeos', icon: Video },
     { id: 'conversas' as ViewType, label: 'Conversas', icon: MessageSquare },
+    { id: 'notificacoes' as ViewType, label: 'Notificações', icon: Bell },
     { id: 'eventos' as ViewType, label: 'Eventos', icon: Calendar },
     { id: 'loja' as ViewType, label: 'Loja', icon: Store },
     { id: 'cinema' as ViewType, label: 'Cinema', icon: Film },
@@ -88,18 +98,40 @@ export default function Sidebar({
         {menuItems.map((item) => {
           const isActive = activeView === item.id;
           const Icon = item.icon;
+          
+          const hasUnreadConversas = item.id === 'conversas' && unreadChatsCount > 0;
+          const hasUnreadNotificacoes = item.id === 'notificacoes' && unreadNotificationsCount > 0;
+          const isRedOption = hasUnreadConversas || hasUnreadNotificacoes;
+          const unreadCount = item.id === 'conversas' ? unreadChatsCount : unreadNotificationsCount;
+
           return (
             <button
               key={item.id}
               onClick={() => handleItemClick(item.id)}
-              className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-left text-sm font-bold tracking-wide transition-all duration-300 cursor-pointer ${
+              className={`w-full flex items-center justify-between gap-2 px-4 py-2 rounded-xl text-left text-sm font-bold tracking-wide transition-all duration-300 cursor-pointer ${
                 isActive 
-                  ? 'bg-gradient-to-r from-neon-cyan/20 to-[#9d00ff]/10 border-l-[3px] border-neon-cyan text-white shadow-inner shadow-neon-cyan/5' 
-                  : 'text-gray-400 hover:text-white hover:bg-[#121235]/50 hover:translate-x-1'
+                  ? isRedOption
+                    ? 'bg-gradient-to-r from-red-500/20 to-[#9d00ff]/10 border-l-[3px] border-red-500 text-red-200 shadow-inner shadow-red-500/5'
+                    : 'bg-gradient-to-r from-neon-cyan/20 to-[#9d00ff]/10 border-l-[3px] border-neon-cyan text-white shadow-inner shadow-neon-cyan/5' 
+                  : isRedOption
+                    ? 'text-red-400 bg-red-950/10 border border-red-500/20 hover:bg-red-950/25 hover:translate-x-1'
+                    : 'text-gray-400 hover:text-white hover:bg-[#121235]/50 hover:translate-x-1'
               }`}
             >
-              <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-neon-cyan' : 'text-gray-400'}`} />
-              <span>{item.label}</span>
+              <div className="flex items-center gap-3.5 min-w-0">
+                <Icon className={`w-4.5 h-4.5 ${
+                  isActive 
+                    ? isRedOption ? 'text-red-400 animate-pulse' : 'text-neon-cyan' 
+                    : isRedOption ? 'text-red-400 animate-pulse' : 'text-gray-400'
+                }`} />
+                <span className={isRedOption ? 'text-red-300' : ''}>{item.label}</span>
+              </div>
+              
+              {isRedOption && unreadCount > 0 && (
+                <span className="px-2 py-0.5 text-[9px] font-orbitron font-extrabold bg-red-600 border border-red-500/40 text-green-400 rounded-full animate-bounce shrink-0 shadow-[0_0_8px_rgba(239,68,68,0.4)]">
+                  {unreadCount}
+                </span>
+              )}
             </button>
           );
         })}

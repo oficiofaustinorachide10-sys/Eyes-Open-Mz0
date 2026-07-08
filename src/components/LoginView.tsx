@@ -189,12 +189,48 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister }: Log
           )}
 
           {/* Register Redirect */}
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-4">
             <button
               onClick={onGoToRegister}
               className="text-xs font-rajdhani font-bold text-neon-cyan hover:text-white transition-colors underline underline-offset-4 decoration-neon-cyan/50"
             >
               Criar uma nova conta de acesso
+            </button>
+
+            {/* Divider and Guest Login */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-white/5"></div>
+              <span className="flex-shrink mx-3 text-gray-600 text-[9px] font-bold tracking-widest font-orbitron uppercase">OU</span>
+              <div className="flex-grow border-t border-white/5"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const guestUser: UserType = {
+                  id: 'guest',
+                  fullname: 'Convidado Eyes Open',
+                  firstname: 'Convidado',
+                  surname: 'Eyes Open',
+                  nickname: 'Convidado 🇲🇿',
+                  email: 'guest@openmz.com',
+                  phone: '000000000',
+                  province: 'Maputo',
+                  password: 'guest',
+                  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+                  created: new Date().toISOString(),
+                  stats: {
+                    likes: 0,
+                    posts: 0,
+                    friends: 0
+                  },
+                  nameEditDate: null
+                };
+                onLoginSuccess(guestUser);
+              }}
+              className="w-full py-3 bg-black/40 hover:bg-[#121235]/60 border border-white/10 hover:border-neon-cyan/60 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-gray-300 hover:text-white cursor-pointer uppercase transition-all"
+            >
+              Entrar como Convidado 👁️
             </button>
           </div>
         </div>

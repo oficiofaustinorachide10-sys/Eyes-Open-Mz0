@@ -24,11 +24,42 @@ export interface User {
   stats: UserStats;
   nameEditDate: string | null;
   isVIP?: boolean;
+  lastReadChatTimestamp?: number;
+  lastReadNotificationsTimestamp?: number;
+  mutedNotifications?: boolean;
+}
+
+export interface Notification {
+  id: string;
+  recipientId: string; // 'all' or specific userId
+  title: string;
+  text: string;
+  type: 'like' | 'comment' | 'star' | 'system' | 'mention';
+  sender: {
+    id: string;
+    name: string;
+    avatar: string;
+  };
+  read: boolean;
+  targetId?: string; // e.g. post ID
+  targetView?: 'feed' | 'conversas' | 'abra-olhos';
+  timestamp: number;
 }
 
 export interface PostStyle {
   font: string;
   color: string;
+}
+
+export interface Comment {
+  id: string;
+  author: {
+    id: string;
+    name: string;
+    avatar: string;
+  };
+  text: string;
+  timestamp: number;
 }
 
 export interface Post {
@@ -45,6 +76,7 @@ export interface Post {
   views: number;
   starred?: boolean;
   timestamp: number;
+  comments?: Comment[];
 }
 
 export interface Story {

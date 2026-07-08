@@ -21,6 +21,25 @@ interface AccountViewProps {
 export default function AccountView({ 
   currentUser, users, onUpdateUser, onDeleteAccount 
 }: AccountViewProps) {
+  if (currentUser.id === 'guest') {
+    return (
+      <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-2xl mx-auto flex flex-col justify-center items-center font-rajdhani text-center text-white h-[80vh]">
+        <div className="p-8 bg-[#0d0d26]/80 border border-neon-cyan/40 rounded-3xl max-w-md shadow-2xl relative space-y-4">
+          <ShieldAlert className="w-16 h-16 text-neon-cyan mx-auto animate-bounce" />
+          <h2 className="font-orbitron font-extrabold text-lg text-neon-cyan tracking-wider uppercase">
+            Acesso Limitado (Convidado)
+          </h2>
+          <p className="text-xs text-gray-300 leading-relaxed font-semibold">
+            Você entrou como convidado. Nesta sessão, você pode ver publicações, pesquisar e interagir de forma geral, mas não possui um perfil pessoal ou configurações de conta para gerenciar.
+          </p>
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+            Crie uma conta para obter uma identidade VIP!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const cardRef = useRef<HTMLDivElement>(null);
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);

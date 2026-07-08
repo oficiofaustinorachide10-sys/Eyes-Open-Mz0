@@ -14,12 +14,15 @@ interface FeedViewProps {
   currentUser: User;
   posts: Post[];
   stories: Story[];
-  onNavigate: (view: 'feed' | 'profile' | 'account' | 'publish-post' | 'publish-story' | 'abra-olhos' | 'artigos' | 'videos' | 'conversas' | 'eventos' | 'loja' | 'cinema' | 'fonte-letra' | 'musica' | 'comunidade' | 'config') => void;
+  onNavigate: (view: 'feed' | 'profile' | 'account' | 'publish-post' | 'publish-story' | 'abra-olhos' | 'artigos' | 'videos' | 'conversas' | 'eventos' | 'loja' | 'cinema' | 'fonte-letra' | 'musica' | 'comunidade' | 'config' | 'notificacoes') => void;
   onLikePost: (postId: string) => void;
   onDeletePost: (postId: string) => void;
   onLikeStory: (storyId: string) => void;
   onAddStoryView: (storyId: string) => void;
   onAddPostView: (postId: string) => void;
+  onAddComment: (postId: string, text: string) => void;
+  autoOpenPostId?: string;
+  onClearAutoOpenPost?: () => void;
 }
 
 // 4D ROTATIONAL CARD COMPONENT FOR FEED POSTS
@@ -42,54 +45,32 @@ function RotationalCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-  const [isSwiped, setIsSwiped] = useState(false);
 
   // Tracks views increment on load
   useEffect(() => {
     onAddView();
   }, []);
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    setIsDragging(true);
-    setIsSwiped(false);
-    setStartPos({ x: e.clientX, y: e.clientY });
-    if (cardRef.current) {
-      cardRef.current.style.transition = 'none';
-    }
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left; // x position within the element.
+    const y = e.clientY - rect.top;  // y position within the element.
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    // 3D Rotation mapping: horizontal movement rotates Y, vertical rotates X
+    const factor = 0.15; // dampening
+    setRotateY((x - centerX) * factor);
+    setRotateX(-(y - centerY) * factor);
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    const deltaX = e.clientX - startPos.x;
-    const deltaY = e.clientY - startPos.y;
-
-    if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-      setIsSwiped(true);
-    }
-
-    // 4D Rotation mapping: horizontal movement rotates Y, vertical rotates X
-    const factor = 0.25; // dampening
-    setRotateY(deltaX * factor);
-    setRotateX(-deltaY * factor);
-  };
-
-  const handlePointerUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-
-    // Smooth return to center (snapping spring back)
+  const handleMouseLeave = () => {
     if (cardRef.current) {
       cardRef.current.style.transition = 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
     }
     setRotateX(0);
     setRotateY(0);
-
-    // If there was no drag, register as an item click to open full-screen detail
-    if (!isSwiped) {
-      onClick();
-    }
   };
 
   return (
@@ -97,15 +78,14 @@ function RotationalCard({
       {/* 4D Rotating Wrapper */}
       <div 
         ref={cardRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        onClick={onClick}
         style={{
           transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
           transformStyle: 'preserve-3d',
         }}
-        className="relative aspect-square w-full cursor-grab active:cursor-grabbing overflow-hidden group select-none"
+        className="relative aspect-square w-full cursor-pointer overflow-hidden group select-none"
       >
         {post.image ? (
           <img 
@@ -208,11 +188,28 @@ export default function FeedView({
   onLikeStory,
   onAddStoryView,
   onAddPostView,
+  onAddComment,
+  autoOpenPostId,
+  onClearAutoOpenPost,
 }: FeedViewProps) {
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isPlayingStory, setIsPlayingStory] = useState(true);
   const [storyProgress, setStoryProgress] = useState(0);
+
+  // Auto open post from notification
+  useEffect(() => {
+    if (autoOpenPostId && posts.length > 0) {
+      const foundPost = posts.find(p => p.id === autoOpenPostId);
+      if (foundPost) {
+        setSelectedPost(foundPost);
+        onAddPostView(foundPost.id);
+        if (onClearAutoOpenPost) {
+          onClearAutoOpenPost();
+        }
+      }
+    }
+  }, [autoOpenPostId, posts, onClearAutoOpenPost, onAddPostView]);
 
   // Handles story slider progress bar
   useEffect(() => {
@@ -532,12 +529,12 @@ export default function FeedView({
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="relative w-full max-w-[550px] bg-[#0c0c24] border-2 border-neon-cyan rounded-3xl p-6 shadow-3xl text-center"
+              className="relative w-full max-w-[550px] max-h-[90vh] overflow-y-auto no-scrollbar bg-[#0c0c24] border-2 border-neon-cyan rounded-3xl p-6 shadow-3xl text-center"
             >
               {/* Close */}
               <button
                 onClick={() => setSelectedPost(null)}
-                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-red-950/40 border border-red-500/30 text-red-400 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-red-950/40 border border-red-500/30 text-red-400 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all z-10"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -615,6 +612,95 @@ export default function FeedView({
                     <span>{selectedPost.starred ? selectedPost.stars + 1 : selectedPost.stars}</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Comments Section */}
+              <div className="border-t border-neon-cyan/15 pt-5 mt-5 text-left">
+                <h4 className="font-orbitron font-bold text-xs text-neon-cyan tracking-wider mb-3 uppercase">
+                  Comentários ({selectedPost.comments?.length || 0})
+                </h4>
+
+                {/* Comments list */}
+                <div className="space-y-3 max-h-[180px] overflow-y-auto no-scrollbar mb-4 pr-1">
+                  {!selectedPost.comments || selectedPost.comments.length === 0 ? (
+                    <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider text-center py-4">
+                      Nenhum comentário ainda. Seja o primeiro a comentar!
+                    </p>
+                  ) : (
+                    selectedPost.comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-2.5 p-2.5 bg-black/30 rounded-xl border border-white/5">
+                        <img 
+                          src={comment.author.avatar || "https://i.pravatar.cc/80?img=1"} 
+                          alt={comment.author.name}
+                          className="w-7 h-7 rounded-full border border-neon-cyan/40 object-cover shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-bold text-neon-cyan truncate">{comment.author.name}</span>
+                            <span className="text-[9px] text-gray-500 font-mono">
+                              {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-300 mt-1 font-semibold leading-relaxed break-words">
+                            {comment.text}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Comment Input */}
+                {currentUser.id === 'guest' ? (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/25 rounded-xl text-center text-[10px] font-bold text-yellow-500 uppercase tracking-wider">
+                    ⚠️ Apenas contas registadas podem comentar.
+                  </div>
+                ) : (
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const input = form.elements.namedItem('commentText') as HTMLInputElement;
+                      const text = input.value;
+                      if (!text.trim()) return;
+                      onAddComment(selectedPost.id, text.trim());
+                      
+                      const newComment = {
+                        id: 'comment_' + Math.random().toString(36).substring(2, 9),
+                        author: {
+                          id: currentUser.id,
+                          name: currentUser.nickname,
+                          avatar: currentUser.avatar
+                        },
+                        text: text.trim(),
+                        timestamp: Date.now()
+                      };
+                      setSelectedPost((prev) => {
+                        if (!prev) return null;
+                        return {
+                          ...prev,
+                          comments: [...(prev.comments || []), newComment]
+                        };
+                      });
+                      form.reset();
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      name="commentText"
+                      required
+                      placeholder="Escreva um comentário..."
+                      className="flex-1 bg-black/50 border border-neon-cyan/30 rounded-xl px-3 py-2 text-xs outline-none focus:border-neon-cyan text-white placeholder:text-gray-600 font-rajdhani font-semibold"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-neon-cyan hover:bg-white text-black font-orbitron font-extrabold text-[10px] tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0"
+                    >
+                      Enviar
+                    </button>
+                  </form>
+                )}
               </div>
             </motion.div>
           </motion.div>

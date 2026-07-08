@@ -13,18 +13,48 @@
   --color-cyber-pink: #ff00aa;
 }
 
+:root {
+  --theme-bg-main: #060613;
+  --theme-bg-sidebar: #08081a;
+  --theme-bg-card: #090924;
+  --theme-text-main: #ffffff;
+  --theme-text-muted: #94a3b8;
+  --theme-border: rgba(0, 245, 255, 0.2);
+  --theme-border-glow: 0 0 15px rgba(0, 245, 255, 0.4);
+  --theme-text-glow: 0 0 10px rgba(0, 245, 255, 0.7), 0 0 20px rgba(0, 245, 255, 0.3);
+  --theme-text-glow-magenta: 0 0 10px rgba(255, 0, 255, 0.7), 0 0 20px rgba(255, 0, 255, 0.3);
+}
+
+.theme-sem-neon {
+  --theme-border-glow: none;
+  --theme-text-glow: none;
+  --theme-text-glow-magenta: none;
+}
+
+.theme-luz {
+  --theme-bg-main: #f5f5f7;
+  --theme-bg-sidebar: #e4e4e7;
+  --theme-bg-card: #ffffff;
+  --theme-text-main: #18181b;
+  --theme-text-muted: #52525b;
+  --theme-border: rgba(9, 9, 11, 0.12);
+  --theme-border-glow: none;
+  --theme-text-glow: none;
+  --theme-text-glow-magenta: none;
+}
+
 @layer utilities {
   .glow-text-cyan {
-    text-shadow: 0 0 10px rgba(0, 245, 255, 0.7), 0 0 20px rgba(0, 245, 255, 0.3);
+    text-shadow: var(--theme-text-glow);
   }
   .glow-text-magenta {
-    text-shadow: 0 0 10px rgba(255, 0, 255, 0.7), 0 0 20px rgba(255, 0, 255, 0.3);
+    text-shadow: var(--theme-text-glow-magenta);
   }
   .glow-box-cyan {
-    box-shadow: 0 0 15px rgba(0, 245, 255, 0.4), inset 0 0 10px rgba(0, 245, 255, 0.1);
+    box-shadow: var(--theme-border-glow);
   }
   .glow-box-magenta {
-    box-shadow: 0 0 15px rgba(255, 0, 255, 0.4), inset 0 0 10px rgba(255, 0, 255, 0.1);
+    box-shadow: var(--theme-border-glow);
   }
 }
 
@@ -41,4 +71,5 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
 
