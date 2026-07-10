@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
+import { UserAvatar } from './UserAvatar';
 
 export type ViewType = 
   | 'feed' | 'profile' | 'account' | 'publish-post' | 'publish-story' 
@@ -25,8 +26,8 @@ interface SidebarProps {
   onClose: () => void;
   unreadChatsCount?: number;
   unreadNotificationsCount?: number;
-  theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo';
-  setTheme: (theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo') => void;
+  theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist';
+  setTheme: (theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist') => void;
 }
 
 export default function Sidebar({ 
@@ -83,11 +84,11 @@ export default function Sidebar({
         onClick={() => handleItemClick('profile')} 
         className="flex items-center gap-3 bg-[#111130]/60 hover:bg-[#151540] border border-neon-cyan/15 rounded-2xl p-3 mb-6 transition-all duration-300 cursor-pointer"
       >
-        <img 
+        <UserAvatar 
           src={currentUser.avatar || "https://i.pravatar.cc/100?img=1"} 
-          alt={currentUser.nickname} 
-          referrerPolicy="no-referrer"
-          className="w-10 h-10 rounded-full border border-neon-cyan object-cover"
+          status={true} 
+          nickname={currentUser.nickname}
+          className="w-10 h-10"
         />
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm text-neon-cyan truncate leading-tight">
@@ -159,6 +160,8 @@ export default function Sidebar({
               { id: 'vinho', color: '#db2777', title: 'Vinho' },
               { id: 'ciano', color: '#06b6d4', title: 'Ciano' },
               { id: 'crepusculo', color: '#8b5cf6', title: 'Crepúsculo' },
+              { id: 'neon-cyber', color: '#00ffcc', title: 'Cyberpunk' },
+              { id: 'glass-minimalist', color: '#ffffff', title: 'Glass Minimalist' },
             ].map((t) => (
               <button
                 key={t.id}

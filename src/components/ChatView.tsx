@@ -7,10 +7,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, MessageSquare, ShieldCheck, Clock, UserPlus, UserCheck, Lock, Unlock, 
   Hourglass, Phone, Video, FileUp, MapPin, Calendar, Award, Folder, Play, Check, 
-  X, HelpCircle, Briefcase, Radio, AlertTriangle, Sparkles, Star, Users, CheckCircle2, UserX, Plus
+  X, HelpCircle, Briefcase, Radio, AlertTriangle, Sparkles, Star, Users, CheckCircle2, UserX, Plus,
+  MoreVertical, Settings, ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Friendship, ChatPermission, Notification } from '../types';
+import { UserAvatar } from './UserAvatar';
 import { 
   subscribeChats, dbSendMessage, dbUpdateUser, subscribeUsers,
   subscribeFriendships, dbCreateFriendship, dbUpdateFriendship, dbDeleteFriendship,
@@ -51,6 +53,14 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   // Real-time ticking timestamp to handle countdowns
   const [now, setNow] = useState<number>(Date.now());
 
+  const isUserOnline = (u: User): boolean => {
+    if (u.id === currentUser.id) return true;
+    const isOnlineField = (u as any).isOnline === true;
+    const lastActiveTime = (u as any).lastActive || 0;
+    const isRecent = (Date.now() - lastActiveTime) < 45000;
+    return isOnlineField && isRecent;
+  };
+
   // UI Navigation states
   const [selectedChatId, setSelectedChatId] = useState<string>(initialSelectedChatId || 'group'); // 'group' or userId
 
@@ -78,6 +88,47 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  
+  // Theme Layout configuration states
+  const [chatLayoutTheme, setChatLayoutTheme] = useState<'normal' | 'division'>(() => {
+    return (localStorage.getItem('chat_layout_theme') as 'normal' | 'division') || 'division';
+  });
+  const [isMobileChatActive, setIsMobileChatActive] = useState<boolean>(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDefinitionsOpen, setIsDefinitionsOpen] = useState(false);
+
+  // Mentions / Chamar states
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+
+  // Sync layout theme to localStorage and auto activate if needed
+  const changeChatLayoutTheme = (mode: 'normal' | 'division') => {
+    setChatLayoutTheme(mode);
+    localStorage.setItem('chat_layout_theme', mode);
+    setIsMobileChatActive(false); // Reset active state when changing mode
+  };
+
+  const handleInputChange = (val: string) => {
+    setInputText(val);
+    const lastAtIdx = val.lastIndexOf('@');
+    if (lastAtIdx !== -1 && lastAtIdx >= val.lastIndexOf(' ')) {
+      const q = val.substring(lastAtIdx + 1);
+      setMentionQuery(q);
+      setShowMentionSuggestions(true);
+    } else {
+      setShowMentionSuggestions(false);
+    }
+  };
+
+  const handleSelectMention = (userNickname: string) => {
+    const lastAtIdx = inputText.lastIndexOf('@');
+    if (lastAtIdx !== -1) {
+      const before = inputText.substring(0, lastAtIdx);
+      setInputText(before + '@' + userNickname + ' ');
+    }
+    setShowMentionSuggestions(false);
+  };
+
   const lastUpdatedRef = useRef<number>(0);
 
   // Subscribe to all real-time Firestore collections
@@ -391,7 +442,8 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    const msgText = inputText.trim();
+    if (!msgText) return;
     if (currentUser.id === 'guest') return;
 
     // Direct message check
@@ -408,13 +460,43 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
         id: currentUser.id
       },
       recipientId: selectedChatId === 'group' ? undefined : selectedChatId,
-      text: inputText.trim(),
+      text: msgText,
       timestamp: Date.now(),
       messageType: 'text' as const
     };
 
     setInputText('');
+    setShowMentionSuggestions(false);
     await dbSendMessage(userMsg);
+
+    // Parse mentions: look for @nickname
+    const mentions = msgText.match(/@(\w+)/g);
+    if (mentions) {
+      for (const rawMention of mentions) {
+        const nickname = rawMention.substring(1);
+        const mentionedUser = users.find(u => u.nickname.toLowerCase() === nickname.toLowerCase());
+        if (mentionedUser && mentionedUser.id !== currentUser.id) {
+          // Trigger the specific "CHAMADA" event
+          const callNotification: Notification = {
+            id: 'notif_mention_call_' + Math.random().toString(36).substring(2, 9),
+            recipientId: mentionedUser.id,
+            title: '🚨 CHAMADA EM CURSO',
+            text: `${currentUser.nickname} chamou-o na conversa: "${msgText}"`,
+            type: 'system',
+            sender: {
+              id: currentUser.id,
+              name: currentUser.nickname,
+              avatar: currentUser.avatar
+            },
+            read: false,
+            targetId: selectedChatId === 'group' ? 'group' : currentUser.id,
+            targetView: 'conversas',
+            timestamp: Date.now()
+          };
+          await dbCreateNotification(callNotification).catch(console.error);
+        }
+      }
+    }
   };
 
   // Level access configurations
@@ -500,10 +582,98 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   const activeFriendship = activeChatUser ? getFriendshipWith(activeChatUser.id) : null;
 
   return (
-    <div className="flex-grow p-2 md:p-4 lg:p-6 max-w-6xl mx-auto flex flex-col md:flex-row gap-4 h-[86vh] font-rajdhani text-white select-none">
+    <div className="flex-grow p-2 md:p-4 lg:p-6 max-w-6xl mx-auto flex flex-col h-[86vh] font-rajdhani text-white select-none gap-3">
       
-      {/* COLUMN 1: SIDEBAR USER LIST & REQUESTS */}
-      <div className="w-full md:w-80 shrink-0 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
+      {/* GLOBAL CHAT VIEWS TOP HEADER */}
+      <div className="flex items-center justify-between bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-2xl px-4 py-2.5 shadow-md shrink-0 relative">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-[var(--theme-accent)]" />
+          <div>
+            <h2 className="font-orbitron font-extrabold text-xs tracking-widest uppercase text-[var(--theme-text-main)]">Central de Conversas</h2>
+            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">
+              Modo Layout: {chatLayoutTheme === 'normal' ? 'Normal (Mobile/Focado)' : 'Divisão (Split-View)'}
+            </p>
+          </div>
+        </div>
+
+        {/* Action controls (Three-Dots Menu) */}
+        <div className="relative">
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="w-8 h-8 rounded-lg bg-[var(--theme-bg-hover)] hover:bg-[var(--theme-border)] border border-[var(--theme-border)] flex items-center justify-center cursor-pointer transition-all text-gray-400 hover:text-white animate-pulse"
+            title="Menu"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+
+          {/* Settings Menu Dropdown */}
+          <AnimatePresence>
+            {isMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute right-0 mt-2 w-64 bg-[#0a0a1a] border border-[var(--theme-border)] rounded-2xl p-3 shadow-2xl z-50 space-y-2.5 font-sans"
+              >
+                {/* Definições Option */}
+                <div 
+                  onClick={() => setIsDefinitionsOpen(!isDefinitionsOpen)}
+                  className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl cursor-pointer text-xs font-bold text-gray-200 uppercase tracking-wider transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Settings className="w-4 h-4 text-[var(--theme-accent)]" /> Definições
+                  </span>
+                  <span className="text-[9px] text-gray-500 font-mono">{isDefinitionsOpen ? '▾' : '▸'}</span>
+                </div>
+
+                {/* Submenu: Temas de Conversa */}
+                {isDefinitionsOpen && (
+                  <div className="border-t border-white/5 pt-2 pl-2 space-y-2">
+                    <p className="text-[9px] font-bold text-[var(--theme-accent)] uppercase tracking-wider">Temas de Conversa</p>
+                    
+                    <button
+                      onClick={() => {
+                        changeChatLayoutTheme('normal');
+                        setIsMenuOpen(false);
+                      }}
+                      className={`w-full text-left p-2 rounded-xl transition-all border text-xs ${
+                        chatLayoutTheme === 'normal'
+                          ? 'bg-[var(--theme-accent)]/10 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                          : 'bg-transparent border-white/5 text-gray-400 hover:border-white/20'
+                      }`}
+                    >
+                      <p className="font-bold">Tema 1: Normal (Focado)</p>
+                      <p className="text-[9px] text-gray-400 font-medium normal-case">Mobile/Focado: oculta a lista de utilizadores ao conversar.</p>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        changeChatLayoutTheme('division');
+                        setIsMenuOpen(false);
+                      }}
+                      className={`w-full text-left p-2 rounded-xl transition-all border text-xs ${
+                        chatLayoutTheme === 'division'
+                          ? 'bg-[var(--theme-accent)]/10 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                          : 'bg-transparent border-white/5 text-gray-400 hover:border-white/20'
+                      }`}
+                    >
+                      <p className="font-bold">Tema 2: Divisão (Split-View)</p>
+                      <p className="text-[9px] text-gray-400 font-medium normal-case">Split-View: lista e área de chat lado a lado.</p>
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Main columns wrapper */}
+      <div className="flex-grow flex flex-col md:flex-row gap-4 h-full overflow-hidden">
+        
+        {/* COLUMN 1: SIDEBAR USER LIST & REQUESTS */}
+        {(chatLayoutTheme === 'division' || !isMobileChatActive) && (
+          <div className="w-full md:w-80 shrink-0 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
         
         {/* Sidebar tabs */}
         <div className="grid grid-cols-2 border-b border-[var(--theme-border)] font-orbitron font-extrabold text-[11px] tracking-wider text-center select-none shrink-0">
@@ -552,7 +722,10 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
             <div className="flex-grow overflow-y-auto no-scrollbar p-2 space-y-1">
               {/* Group chat item */}
               <button
-                onClick={() => setSelectedChatId('group')}
+                onClick={() => {
+                  setSelectedChatId('group');
+                  setIsMobileChatActive(true);
+                }}
                 className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left group cursor-pointer ${
                   selectedChatId === 'group'
                     ? 'bg-[var(--theme-bg-hover)] border-[var(--theme-accent)] text-[var(--theme-accent)] shadow-sm'
@@ -588,7 +761,10 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                   return (
                     <button
                       key={u.id}
-                      onClick={() => setSelectedChatId(u.id)}
+                      onClick={() => {
+                        setSelectedChatId(u.id);
+                        setIsMobileChatActive(true);
+                      }}
                       className={`w-full flex items-center justify-between p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
                         isSelected
                           ? 'bg-[var(--theme-bg-hover)] border-[var(--theme-accent)] text-[var(--theme-accent)] shadow-sm'
@@ -596,11 +772,11 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <img
-                          src={u.avatar || "https://i.pravatar.cc/80?img=1"}
-                          alt={u.nickname}
-                          referrerPolicy="no-referrer"
-                          className="w-9 h-9 rounded-full object-cover border border-[var(--theme-border)]"
+                        <UserAvatar 
+                          src={u.avatar} 
+                          status={isUserOnline(u)} 
+                          nickname={u.nickname} 
+                          className="w-9 h-9" 
                         />
                         <div className="min-w-0">
                           <p className="text-xs font-bold leading-tight text-[var(--theme-text-main)]">{u.nickname}</p>
@@ -661,10 +837,11 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                   return (
                     <div key={friendReq.id} className="p-2.5 bg-black/40 border border-neon-magenta/20 rounded-2xl flex items-center justify-between gap-2.5">
                       <div className="flex items-center gap-2 min-w-0">
-                        <img
-                          src={senderUser.avatar}
-                          alt={senderUser.nickname}
-                          className="w-8 h-8 rounded-full border border-neon-magenta/40 object-cover shrink-0"
+                        <UserAvatar 
+                          src={senderUser.avatar} 
+                          status={isUserOnline(senderUser)} 
+                          nickname={senderUser.nickname} 
+                          className="w-8 h-8" 
                         />
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-white truncate">{senderUser.nickname}</p>
@@ -712,10 +889,11 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                   return (
                     <div key={chatReq.id} className="p-3 bg-black/40 border border-neon-cyan/20 rounded-2xl space-y-2.5">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <img
-                          src={senderUser.avatar}
-                          alt={senderUser.nickname}
-                          className="w-8 h-8 rounded-full border border-neon-cyan/40 object-cover shrink-0"
+                        <UserAvatar 
+                          src={senderUser.avatar} 
+                          status={isUserOnline(senderUser)} 
+                          nickname={senderUser.nickname} 
+                          className="w-8 h-8" 
                         />
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-white truncate">{senderUser.nickname}</p>
@@ -816,8 +994,10 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
           </div>
         )}
       </div>
+      )}
 
       {/* COLUMN 2: ACTIVE CHAT PANEL */}
+      {(chatLayoutTheme === 'division' || isMobileChatActive) && (
       <div className="flex-1 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
         
         {/* State A: No chat selected */}
@@ -830,6 +1010,14 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
         {/* Header bar */}
         <div className="px-4 py-3 md:px-5 md:py-4 bg-[var(--theme-bg-card)] border-b border-[var(--theme-border)] flex items-center justify-between shrink-0 select-none">
+          {chatLayoutTheme === 'normal' && (
+            <button
+              onClick={() => setIsMobileChatActive(false)}
+              className="mr-3 px-2.5 py-1.5 bg-black/30 hover:bg-[var(--theme-accent)] hover:text-black border border-[var(--theme-border)] text-white rounded-xl text-[10px] font-bold font-orbitron tracking-widest uppercase transition-all flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+            </button>
+          )}
           {selectedChatId === 'group' ? (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3">
@@ -873,10 +1061,11 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
             activeChatUser && (
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <img
-                    src={activeChatUser.avatar}
-                    alt={activeChatUser.nickname}
-                    className="w-8 h-8 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
+                  <UserAvatar 
+                    src={activeChatUser.avatar} 
+                    status={isUserOnline(activeChatUser)} 
+                    nickname={activeChatUser.nickname} 
+                    className="w-8 h-8" 
                   />
                   <div className="min-w-0">
                     <h3 className="font-orbitron font-extrabold text-xs text-[var(--theme-text-main)] tracking-wider truncate uppercase">
@@ -981,11 +1170,16 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <div className={`px-4 py-2 rounded-2xl text-xs leading-relaxed font-semibold ${
+                    <div className={`px-4 py-2 rounded-2xl text-xs leading-relaxed font-semibold relative ${
                       isMe 
                         ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
                         : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
-                    }`}>
+                    } ${msg.text?.includes('@' + currentUser.nickname) ? 'border-2 border-red-500 animate-pulse bg-red-500/10 text-red-200' : ''}`}>
+                      {msg.text?.includes('@' + currentUser.nickname) && (
+                        <div className="text-[9px] font-orbitron font-extrabold text-red-400 mb-1 tracking-widest uppercase animate-pulse">
+                          🚨 CHAMANDO VOCÊ (MENÇÃO)
+                        </div>
+                      )}
                       {msg.text}
                     </div>
                   </div>
@@ -1252,11 +1446,16 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
                           {/* Style bubbles based on message type (text vs. simulated action) */}
                           {msg.messageType === 'text' ? (
-                            <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed font-semibold ${
+                            <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed font-semibold relative ${
                               isMe 
                                 ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
                                 : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
-                            }`}>
+                            } ${msg.text?.includes('@' + currentUser.nickname) ? 'border-2 border-red-500 animate-pulse bg-red-500/10 text-red-200' : ''}`}>
+                              {msg.text?.includes('@' + currentUser.nickname) && (
+                                <div className="text-[9px] font-orbitron font-extrabold text-red-400 mb-1 tracking-widest uppercase animate-pulse">
+                                  🚨 CHAMANDO VOCÊ (MENÇÃO)
+                                </div>
+                              )}
                               {msg.text}
                             </div>
                           ) : (
@@ -1296,7 +1495,46 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
         </div>
 
         {/* BOTTOM INPUT CONTROLS / SIMULATOR PANELS */}
-        <div className="p-3 border-t border-[var(--theme-border)] bg-[var(--theme-bg-card)] shrink-0 select-none">
+        <div className="p-3 border-t border-[var(--theme-border)] bg-[var(--theme-bg-card)] shrink-0 select-none relative">
+          
+          {/* AUTOCOMPLETE MENTIONS DROPDOWN */}
+          {showMentionSuggestions && (
+            (() => {
+              const matchedUsersForMention = users.filter(u => 
+                u.id !== currentUser.id && 
+                (u.nickname.toLowerCase().includes(mentionQuery.toLowerCase()) || 
+                 u.fullname.toLowerCase().includes(mentionQuery.toLowerCase()))
+              );
+
+              if (matchedUsersForMention.length === 0) return null;
+
+              return (
+                <div className="absolute bottom-[100%] left-3 right-3 bg-[#0a0a1a] border border-[var(--theme-border)] rounded-2xl p-2 shadow-2xl z-40 max-h-40 overflow-y-auto space-y-1 mb-2">
+                  <p className="text-[9px] font-bold text-[var(--theme-accent)] uppercase tracking-wider px-2 py-1">Chamando um Membro:</p>
+                  {matchedUsersForMention.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => handleSelectMention(u.nickname)}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 hover:bg-white/5 rounded-xl text-left text-xs transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <UserAvatar src={u.avatar} status={isUserOnline(u)} nickname={u.nickname} className="w-6 h-6" />
+                        <div>
+                          <p className="font-bold text-white">@{u.nickname}</p>
+                          <p className="text-[9px] text-gray-500 font-medium">{u.fullname}</p>
+                        </div>
+                      </div>
+                      <span className="text-[8px] bg-red-500/10 border border-red-500/30 text-red-400 font-orbitron font-extrabold px-1.5 py-0.5 rounded uppercase animate-pulse">
+                        Chamando @{u.nickname}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()
+          )}
+
           {currentUser.id === 'guest' ? (
             <div className="p-3 bg-yellow-500/10 border border-yellow-500/25 rounded-xl text-center text-xs font-bold text-yellow-500 uppercase tracking-wider shrink-0">
               ⚠️ Convidados não podem enviar mensagens no chat. Crie uma conta para participar!
@@ -1307,7 +1545,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
               <input
                 type="text"
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 placeholder="Escreva a sua mensagem pública..."
                 className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold"
               />
@@ -1451,7 +1689,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                     <input
                       type="text"
                       value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
+                      onChange={(e) => handleInputChange(e.target.value)}
                       placeholder="Escreva a sua mensagem privada..."
                       className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold"
                     />
@@ -1467,6 +1705,9 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
             })()
           )}
         </div>
+      </div>
+      )}
+
       </div>
 
       {/* DETAILED SIMULATION MODAL (FOR ADVANCED FUNCTION ACTIONS) */}
@@ -1652,7 +1893,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   );
 }
 
-function GroupLiveVideoBox({ participant, isMe, localStream }: { participant: any; isMe: boolean; localStream: MediaStream | null }) {
+function GroupLiveVideoBox({ participant, isMe, localStream }: { participant: any; isMe: boolean; localStream: any; key?: any }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {

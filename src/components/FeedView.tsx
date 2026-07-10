@@ -13,6 +13,7 @@ import {
   subscribeUsers, subscribeFriendships, subscribeChatPermissions, 
   dbCreateFriendship, dbCreateChatPermission, dbCreateNotification 
 } from '../lib/db';
+import { ThemeConfig } from '../utils/themeEngine';
 
 interface FeedViewProps {
   currentUser: User;
@@ -25,8 +26,11 @@ interface FeedViewProps {
   onAddStoryView: (storyId: string) => void;
   onAddPostView: (postId: string) => void;
   onAddComment: (postId: string, text: string) => void;
+  onDeleteComment?: (postId: string, commentId: string) => void;
+  onReactComment?: (postId: string, commentId: string, reaction: 'star' | 'broken_star') => void;
   autoOpenPostId?: string;
   onClearAutoOpenPost?: () => void;
+  currentThemeConfig?: ThemeConfig;
 }
 
 // 4D ROTATIONAL CARD COMPONENT FOR FEED POSTS
@@ -182,6 +186,150 @@ function RotationalCard({
   );
 }
 
+function CommentItem({
+  postId,
+  comment,
+  currentUser,
+  onDeleteComment,
+  onReactComment,
+  onUpdateModal
+}: {
+  key?: any;
+  postId: string;
+  comment: any;
+  currentUser: User;
+  onDeleteComment?: (pId: string, cId: string) => void;
+  onReactComment?: (pId: string, cId: string, r: 'star' | 'broken_star') => void;
+  onUpdateModal: () => void;
+}) {
+  const [isPressing, setIsPressing] = useState(false);
+  const pressTimeoutRef = useRef<any>(null);
+
+  const handleStartPress = () => {
+    setIsPressing(true);
+    pressTimeoutRef.current = setTimeout(() => {
+      setIsPressing(false);
+      if (onDeleteComment) {
+        if (confirm('Deseja eliminar este comentário?')) {
+          onDeleteComment(postId, comment.id);
+          onUpdateModal();
+        }
+      }
+    }, 800);
+  };
+
+  const handleEndPress = () => {
+    setIsPressing(false);
+    if (pressTimeoutRef.current) {
+      clearTimeout(pressTimeoutRef.current);
+    }
+  };
+
+  const cStars = comment.starsCount || 0;
+  const cBroken = comment.brokenStarsCount || 0;
+  const total = cStars + cBroken;
+  const starsPct = total > 0 ? Math.round((cStars / total) * 100) : 0;
+  const brokenPct = total > 0 ? Math.round((cBroken / total) * 100) : 0;
+
+  const userReactions = comment.reactions || {};
+  const userReacted = userReactions[currentUser.id];
+
+  return (
+    <div 
+      onMouseDown={handleStartPress}
+      onMouseUp={handleEndPress}
+      onMouseLeave={handleEndPress}
+      onTouchStart={handleStartPress}
+      onTouchEnd={handleEndPress}
+      className={`relative flex flex-col gap-2 p-3 bg-black/45 rounded-2xl border transition-all select-none ${
+        isPressing ? 'border-red-500 bg-red-950/10 scale-[0.98]' : 'border-white/5 hover:border-neon-cyan/25'
+      }`}
+    >
+      <div className="flex gap-2.5">
+        <img 
+          src={comment.author.avatar || "https://i.pravatar.cc/80?img=1"} 
+          alt={comment.author.name}
+          className="w-7 h-7 rounded-full border border-neon-cyan/40 object-cover shrink-0"
+        />
+        <div className="min-w-0 flex-1 text-left">
+          <div className="flex justify-between items-center">
+            <span className="text-[11px] font-bold text-neon-cyan truncate">@{comment.author.name}</span>
+            <span className="text-[8px] text-gray-500 font-mono">
+              {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-300 mt-1 font-semibold leading-relaxed break-words">
+            {comment.text}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-white/5 pt-2 mt-1">
+        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onReactComment) {
+                onReactComment(postId, comment.id, 'star');
+                setTimeout(onUpdateModal, 150);
+              }
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all active:scale-95 cursor-pointer ${
+              userReacted === 'star'
+                ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400'
+                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+            }`}
+          >
+            ⭐️ <span className="font-orbitron font-extrabold text-[10px]">{cStars}</span> Dar Estrela
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onReactComment) {
+                onReactComment(postId, comment.id, 'broken_star');
+                setTimeout(onUpdateModal, 150);
+              }
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all active:scale-95 cursor-pointer ${
+              userReacted === 'broken_star'
+                ? 'bg-red-500/20 border-red-500 text-red-400'
+                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+            }`}
+          >
+            💔 <span className="font-orbitron font-extrabold text-[10px]">{cBroken}</span> Partir Estrela
+          </button>
+        </div>
+
+        {total > 0 ? (
+          <div className="space-y-1 mt-1 bg-black/30 p-1.5 rounded-xl border border-white/5">
+            <div className="flex justify-between text-[8px] font-mono font-black uppercase text-gray-400">
+              <span className="text-yellow-400">Inteiras: {starsPct}%</span>
+              <span className="text-red-400">Partidas: {brokenPct}%</span>
+            </div>
+            <div className="w-full h-1 bg-neutral-800 rounded-full overflow-hidden flex">
+              <div className="h-full bg-yellow-500" style={{ width: `${starsPct}%` }} />
+              <div className="h-full bg-red-600" style={{ width: `${brokenPct}%` }} />
+            </div>
+          </div>
+        ) : (
+          <p className="text-[8px] text-gray-600 font-mono text-center uppercase tracking-wider py-1 select-none">
+            Sem avaliações. Reaja acima!
+          </p>
+        )}
+
+        {comment.author.id === currentUser.id && (
+          <div className="text-[7px] text-gray-600 font-black tracking-widest uppercase text-center mt-1 select-none animate-pulse">
+            👆 Premir longamente para eliminar
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function FeedView({
   currentUser,
   posts,
@@ -193,8 +341,11 @@ export default function FeedView({
   onAddStoryView,
   onAddPostView,
   onAddComment,
+  onDeleteComment,
+  onReactComment,
   autoOpenPostId,
   onClearAutoOpenPost,
+  currentThemeConfig,
 }: FeedViewProps) {
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -293,6 +444,19 @@ export default function FeedView({
 
   const currentStory = selectedStoryIndex !== null ? stories[selectedStoryIndex] : null;
 
+  const gridClasses = (() => {
+    const colType = currentThemeConfig?.gridCols || 'grid';
+    switch (colType) {
+      case '1-col':
+        return 'grid-cols-1 max-w-xl mx-auto';
+      case 'grid':
+        return 'grid-cols-1 sm:grid-cols-2 max-w-4xl';
+      case '3-col':
+      default:
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 max-w-5xl';
+    }
+  })();
+
   return (
     <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-8 font-rajdhani select-none text-white overflow-y-auto no-scrollbar pb-16">
       {/* SECTION 1: EYES 42H STORIES */}
@@ -362,7 +526,7 @@ export default function FeedView({
             <p className="text-gray-500 font-bold text-sm tracking-widest uppercase">Nenhuma publicação encontrada no feed.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+          <div className={`grid gap-6 transition-all duration-500 ease-in-out ${gridClasses}`}>
             {posts.map((post) => (
               <RotationalCard
                 key={post.id}
@@ -644,31 +808,29 @@ export default function FeedView({
                 </h4>
 
                 {/* Comments list */}
-                <div className="space-y-3 max-h-[180px] overflow-y-auto no-scrollbar mb-4 pr-1">
+                <div className="space-y-4 max-h-[300px] overflow-y-auto no-scrollbar mb-4 pr-1">
                   {!selectedPost.comments || selectedPost.comments.length === 0 ? (
                     <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider text-center py-4">
                       Nenhum comentário ainda. Seja o primeiro a comentar!
                     </p>
                   ) : (
                     selectedPost.comments.map((comment) => (
-                      <div key={comment.id} className="flex gap-2.5 p-2.5 bg-black/30 rounded-xl border border-white/5">
-                        <img 
-                          src={comment.author.avatar || "https://i.pravatar.cc/80?img=1"} 
-                          alt={comment.author.name}
-                          className="w-7 h-7 rounded-full border border-neon-cyan/40 object-cover shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[11px] font-bold text-neon-cyan truncate">{comment.author.name}</span>
-                            <span className="text-[9px] text-gray-500 font-mono">
-                              {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-gray-300 mt-1 font-semibold leading-relaxed break-words">
-                            {comment.text}
-                          </p>
-                        </div>
-                      </div>
+                      <CommentItem
+                        key={comment.id}
+                        postId={selectedPost.id}
+                        comment={comment}
+                        currentUser={currentUser}
+                        onDeleteComment={onDeleteComment}
+                        onReactComment={onReactComment}
+                        onUpdateModal={() => {
+                          const freshPost = posts.find((x) => x.id === selectedPost.id);
+                          if (freshPost) {
+                            setSelectedPost(freshPost);
+                          } else {
+                            setSelectedPost(null);
+                          }
+                        }}
+                      />
                     ))
                   )}
                 </div>
@@ -696,7 +858,10 @@ export default function FeedView({
                           avatar: currentUser.avatar
                         },
                         text: text.trim(),
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
+                        starsCount: 0,
+                        brokenStarsCount: 0,
+                        reactions: {}
                       };
                       setSelectedPost((prev) => {
                         if (!prev) return null;

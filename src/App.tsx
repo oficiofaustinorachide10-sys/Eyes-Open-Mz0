@@ -27,6 +27,9 @@ import MusicView from './components/MusicView';
 import FontView from './components/FontView';
 import CinemaView from './components/CinemaView';
 import AbraView from './components/AbraView';
+import { FloatingSearch } from './components/FloatingSearch';
+import { UserAvatar } from './components/UserAvatar';
+import { THEME_CONFIGS, injectThemeVariables, ThemeConfig } from './utils/themeEngine';
 
 // Import our Firestore synchronization utilities
 import {
@@ -51,27 +54,174 @@ import {
 } from './lib/db';
 
 export default function App() {
-  // Theme state: support lite, noite, luz, esmeralda, vinho, ciano, and crepusculo
-  const [theme, setTheme] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo'>(() => {
-    const saved = localStorage.getItem('theme');
-    return (
-      saved === 'lite' || 
-      saved === 'noite' || 
-      saved === 'luz' || 
-      saved === 'esmeralda' || 
-      saved === 'vinho' || 
-      saved === 'ciano' || 
-      saved === 'crepusculo'
-    ) ? saved : 'noite';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
   // App core persistent states
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Extended theme state: support all themes, persisting the values properly
+  const [theme, setThemeState] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist'>(() => {
+    const saved = localStorage.getItem('theme') as any;
+    return (saved && THEME_CONFIGS[saved]) ? saved : 'noite';
+  });
+
+  const setTheme = (newTheme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist') => {
+    setThemeState(newTheme);
+    localStorage.setItem('theme', newTheme);
+    // Manual selection overrides adaptive controls
+    setAdaptiveControls(false);
+  };
+
+  // Adaptive Controls & Sensors
+  const [adaptiveControls, setAdaptiveControls] = useState<boolean>(() => {
+    const saved = localStorage.getItem('adaptiveControls');
+    return saved === null ? true : saved === 'true';
+  });
+
+  const [uiMode, setUiMode] = useState<'performance' | 'immersive'>(() => {
+    const saved = localStorage.getItem('uiMode');
+    return (saved === 'performance' || saved === 'immersive') ? saved : 'immersive';
+  });
+
+  const [simulatedBattery, setSimulatedBattery] = useState<number>(100);
+  const [actualBattery, setActualBattery] = useState<number | null>(null);
+  const [isUltraSaver, setIsUltraSaver] = useState<boolean>(false);
+  const [currentThemeConfig, setCurrentThemeConfig] = useState<ThemeConfig>(THEME_CONFIGS['noite']);
+
+  // Sync adaptiveControls & uiMode to localStorage
+  useEffect(() => {
+    localStorage.setItem('adaptiveControls', String(adaptiveControls));
+  }, [adaptiveControls]);
+
+  useEffect(() => {
+    localStorage.setItem('uiMode', uiMode);
+  }, [uiMode]);
+
+  // Sync physical battery level if supported
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('getBattery' in navigator)) return;
+
+    let batteryInstance: any = null;
+    const updateBatteryStatus = () => {
+      if (batteryInstance) {
+        setActualBattery(Math.round(batteryInstance.level * 100));
+      }
+    };
+
+    (navigator as any).getBattery().then((battery: any) => {
+      batteryInstance = battery;
+      updateBatteryStatus();
+      battery.addEventListener('levelchange', updateBatteryStatus);
+    });
+
+    return () => {
+      if (batteryInstance) {
+        batteryInstance.removeEventListener('levelchange', updateBatteryStatus);
+      }
+    };
+  }, []);
+
+  const effectiveBatteryLevel = actualBattery !== null && actualBattery < simulatedBattery ? actualBattery : simulatedBattery;
+
+  // Manage Ultra Saver Mode transition and notifications
+  useEffect(() => {
+    const isLow = effectiveBatteryLevel < 20;
+    if (isLow && !isUltraSaver && adaptiveControls) {
+      setIsUltraSaver(true);
+      triggerToast('Modo de economia ativado para poupar bateria');
+      
+      const lowBatteryNotif: Notification = {
+        id: 'notif_battery_' + Date.now(),
+        recipientId: currentUser?.id || 'guest',
+        title: 'Modo Ultra Economia 🔋',
+        text: 'A bateria está abaixo de 20%. O Eyes Open MZ ativou automaticamente o tema preto puro, reduziu as animações e simplificou as grelhas para poupar energia.',
+        type: 'system',
+        sender: {
+          id: 'system',
+          name: 'Gestor de Bateria',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
+        },
+        read: false,
+        targetId: 'config',
+        targetView: 'notificacoes',
+        timestamp: Date.now()
+      };
+      
+      if (currentUser && currentUser.id !== 'guest') {
+        dbCreateNotification(lowBatteryNotif).catch(console.error);
+      } else {
+        setNotifications(prev => [lowBatteryNotif, ...prev]);
+      }
+    } else if ((!isLow || !adaptiveControls) && isUltraSaver) {
+      setIsUltraSaver(false);
+      triggerToast('Bateria normalizada. Modo de economia desativado.');
+    }
+  }, [effectiveBatteryLevel, adaptiveControls, currentUser?.id, isUltraSaver]);
+
+  // Live swap CSS properties & compute current theme config
+  useEffect(() => {
+    let resolvedThemeId = theme;
+
+    if (adaptiveControls) {
+      if (effectiveBatteryLevel < 20) {
+        // Battery mode forces amoled black variable overrides in injectThemeVariables
+      } else {
+        // Circadian Clock switching: Day (06:00 to 18:00) vs Night (18:01 to 05:59)
+        const hour = new Date().getHours();
+        const isDay = hour >= 6 && hour < 18;
+        resolvedThemeId = isDay ? 'luz' : 'noite';
+      }
+    }
+
+    const config = THEME_CONFIGS[resolvedThemeId] || THEME_CONFIGS['noite'];
+    setCurrentThemeConfig(config);
+
+    // Inject styles instantly to documentElement
+    injectThemeVariables(config, uiMode, isUltraSaver && adaptiveControls);
+  }, [theme, adaptiveControls, effectiveBatteryLevel, uiMode, isUltraSaver]);
+
+  // Heartbeat to keep active user status "Online" in Firestore
+  useEffect(() => {
+    if (!currentUser || currentUser.id === 'guest') return;
+
+    dbUpdateUser({
+      ...currentUser,
+      isOnline: true,
+      lastActive: Date.now()
+    } as any).catch(console.error);
+
+    const interval = setInterval(() => {
+      dbUpdateUser({
+        ...currentUser,
+        isOnline: true,
+        lastActive: Date.now()
+      } as any).catch(console.error);
+    }, 20000);
+
+    const handleUnload = () => {
+      dbUpdateUser({
+        ...currentUser,
+        isOnline: false,
+        lastActive: Date.now()
+      } as any).catch(console.error);
+    };
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleUnload);
+      handleUnload();
+    };
+  }, [currentUser?.id]);
+
+  const isUserOnline = (mem: User): boolean => {
+    if (mem.id === currentUser?.id) return true;
+    const isOnlineField = (mem as any).isOnline === true;
+    const lastActiveTime = (mem as any).lastActive || 0;
+    const isRecent = (Date.now() - lastActiveTime) < 45000;
+    return isOnlineField && isRecent;
+  };
+
+  // App core persistent states
   const [posts, setPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
@@ -89,6 +239,12 @@ export default function App() {
   
   // Auxiliary micro-interaction toast state
   const [successToast, setSuccessToast] = useState('');
+  
+  // Global float-sheet search state
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+
+  // Lazy loading state for community list
+  const [visibleUsersLimit, setVisibleUsersLimit] = useState(6);
 
   // Unread badge counters (real-time synced with active timestamps)
   const unreadChatsCount = currentUser && currentUser.id !== 'guest'
@@ -96,7 +252,7 @@ export default function App() {
     : 0;
 
   const unreadNotificationsCount = currentUser
-    ? notifications.filter(n => !n.read).length
+    ? notifications.filter(n => !n.read && n.type !== 'message' && n.type !== 'chat' && n.type !== 'conversa' && n.type !== 'chat_request' && n.type !== 'chat_accepted').length
     : 0;
 
   // 1. Initial State Loading and Seeding with real-time Firestore Subscriptions
@@ -168,7 +324,9 @@ export default function App() {
       return;
     }
     const unsubNotifs = subscribeNotifications(currentUser.id, (loadedNotifs) => {
-      setNotifications(loadedNotifs);
+      // Exclude notifications triggered by the user themselves
+      const filtered = loadedNotifs.filter(n => n.sender.id !== currentUser.id);
+      setNotifications(filtered);
     });
     return () => unsubNotifs();
   }, [currentUser?.id]);
@@ -190,24 +348,46 @@ export default function App() {
     // Automatically write newly created user to Firestore!
     await dbUpdateUser(newUser);
 
-    // Create a public notification for the entire community
-    const registrationNotif: Notification = {
-      id: 'notif_reg_' + Math.random().toString(36).substring(2, 9),
-      recipientId: 'all',
-      title: 'Novo Membro! 👁️🇲🇿',
-      text: `${newUser.fullname} (@${newUser.nickname}) já tem uma conta no Open MZ... Quer interagir? Solicite-o!`,
+    // 1. Create personal Welcome Notification for the new user (the owner)
+    const welcomeNotif: Notification = {
+      id: 'notif_welcome_' + Math.random().toString(36).substring(2, 9),
+      recipientId: newUser.id,
+      title: 'Boas-vindas ao Eyes Open MZ! 🎉🇲🇿',
+      text: `Olá ${newUser.firstname}! Registou-se com sucesso. Clique aqui para ler o Guia de Introdução e saber como a nossa comunidade funciona!`,
       type: 'system',
       sender: {
-        id: newUser.id,
-        name: newUser.nickname,
-        avatar: newUser.avatar
+        id: 'system',
+        name: 'Equipa Open MZ',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
       },
       read: false,
-      targetId: newUser.id,
-      targetView: 'comunidade',
+      targetId: 'welcome_guide',
+      targetView: 'notificacoes',
       timestamp: Date.now()
     };
-    await dbCreateNotification(registrationNotif).catch(console.error);
+    await dbCreateNotification(welcomeNotif).catch(console.error);
+
+    // 2. Create friendship suggestion notification for all other community users individually
+    const otherUsers = users.filter(u => u.id !== newUser.id && u.id !== 'guest');
+    for (const u of otherUsers) {
+      const suggestionNotif: Notification = {
+        id: 'notif_reg_' + u.id + '_' + Math.random().toString(36).substring(2, 9),
+        recipientId: u.id,
+        title: 'Sugestão de Vínculo 🤝👁️',
+        text: `${newUser.fullname} (@${newUser.nickname}) acabou de criar uma conta, quer interagir com ele? Solicite-o!`,
+        type: 'system',
+        sender: {
+          id: newUser.id,
+          name: newUser.nickname,
+          avatar: newUser.avatar
+        },
+        read: false,
+        targetId: newUser.id,
+        targetView: 'comunidade',
+        timestamp: Date.now()
+      };
+      await dbCreateNotification(suggestionNotif).catch(console.error);
+    }
 
     setCurrentUser(newUser);
     localStorage.setItem('currentUser', JSON.stringify(newUser));
@@ -380,6 +560,79 @@ export default function App() {
     }
   };
 
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (!currentUser) return;
+    const p = posts.find(x => x.id === postId);
+    if (!p) return;
+    
+    // Find the comment
+    const comment = p.comments?.find(c => c.id === commentId);
+    if (!comment) return;
+
+    // Check if current user is comment author OR post author
+    if (comment.author.id !== currentUser.id && p.author.id !== currentUser.id) {
+      alert('Não tem permissão para eliminar este comentário.');
+      return;
+    }
+
+    const updated: Post = {
+      ...p,
+      comments: p.comments?.filter(c => c.id !== commentId) || []
+    };
+    await dbUpdatePost(updated);
+    triggerToast('Comentário removido com sucesso!');
+  };
+
+  const handleReactComment = async (postId: string, commentId: string, reaction: 'star' | 'broken_star') => {
+    if (!currentUser || currentUser.id === 'guest') return;
+    const p = posts.find(x => x.id === postId);
+    if (!p) return;
+
+    const updatedComments = p.comments?.map(c => {
+      if (c.id === commentId) {
+        const commentWithStars = c as any;
+        const currentStars = commentWithStars.starsCount || 0;
+        const currentBrokenStars = commentWithStars.brokenStarsCount || 0;
+
+        const reactions = commentWithStars.reactions || {};
+        const previousReaction = reactions[currentUser.id];
+
+        let nextStars = currentStars;
+        let nextBrokenStars = currentBrokenStars;
+
+        if (previousReaction === reaction) {
+          // Toggle off
+          if (reaction === 'star') nextStars = Math.max(0, currentStars - 1);
+          else nextBrokenStars = Math.max(0, currentBrokenStars - 1);
+          delete reactions[currentUser.id];
+        } else {
+          // Change reaction
+          if (previousReaction === 'star') nextStars = Math.max(0, currentStars - 1);
+          else if (previousReaction === 'broken_star') nextBrokenStars = Math.max(0, currentBrokenStars - 1);
+
+          if (reaction === 'star') nextStars += 1;
+          else if (reaction === 'broken_star') nextBrokenStars += 1;
+
+          reactions[currentUser.id] = reaction;
+        }
+
+        return {
+          ...c,
+          starsCount: nextStars,
+          brokenStarsCount: nextBrokenStars,
+          reactions: reactions
+        } as any;
+      }
+      return c;
+    }) || [];
+
+    const updated: Post = {
+      ...p,
+      comments: updatedComments
+    };
+    await dbUpdatePost(updated);
+  };
+
   // 4. Story interactions (Like, View, Post)
   const handleLikeStory = async (storyId: string) => {
     const s = stories.find(x => x.id === storyId);
@@ -466,7 +719,7 @@ export default function App() {
   };
 
   const navigateToView = (view: ViewType) => {
-    if (currentUser?.id === 'guest' && view !== 'feed' && view !== 'register') {
+    if (currentUser?.id === 'guest' && view !== 'feed' && (view as string) !== 'register') {
       alert('Como convidado, precisa de uma conta para aceder a esta funcionalidade. Vamos direcioná-lo para criar uma conta!');
       handleRedirectToRegister();
       return;
@@ -476,7 +729,14 @@ export default function App() {
 
   const handleNavigateToTarget = (view: ViewType, targetId?: string) => {
     if (targetId) {
-      setAutoOpenPostId(targetId);
+      if (view === 'comunidade' || view === 'profile') {
+        const foundUser = users.find(u => u.id === targetId);
+        if (foundUser) {
+          setSelectedCommunityUser(foundUser);
+        }
+      } else {
+        setAutoOpenPostId(targetId);
+      }
     }
     navigateToView(view);
   };
@@ -499,8 +759,11 @@ export default function App() {
             onAddStoryView={handleAddStoryView}
             onAddPostView={handleAddPostView}
             onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
+            onReactComment={handleReactComment}
             autoOpenPostId={autoOpenPostId}
             onClearAutoOpenPost={() => setAutoOpenPostId(undefined)}
+            currentThemeConfig={currentThemeConfig}
           />
         );
       case 'profile':
@@ -668,189 +931,356 @@ export default function App() {
           </div>
         );
 
-      // CURATED MEMBERS LIST COMMUNITY VIEW
       case 'comunidade':
         return (
           <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)]">
+            
+            {/* Sticky Header for Logged-In User (Proprietário) */}
+            <div className="sticky top-0 z-10 bg-[var(--theme-bg-main)]/95 backdrop-blur-md border border-[var(--theme-border)] p-5 rounded-3xl shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
+                  <span className="text-[10px] font-orbitron font-extrabold tracking-widest text-[var(--theme-accent)] uppercase">
+                    PROPRIETÁRIO DA CONTA (CONECTADO)
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/30 text-[var(--theme-accent)] text-[9px] font-bold uppercase tracking-wider">
+                  Tu
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <UserAvatar 
+                    src={currentUser?.avatar || "https://i.pravatar.cc/80?img=1"} 
+                    status={true} 
+                    nickname={currentUser?.nickname}
+                    className="w-12 h-12"
+                  />
+                  <div className="min-w-0 text-left">
+                    <h3 className="text-sm font-extrabold text-[var(--theme-text-main)] truncate leading-tight">
+                      {currentUser?.fullname}
+                    </h3>
+                    <p className="text-xs text-[var(--theme-text-muted)] font-bold truncate mt-0.5">
+                      @{currentUser?.nickname} • {currentUser?.province}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigateToView('account')}
+                  className="px-3.5 py-2 bg-[var(--theme-accent)]/15 hover:bg-[var(--theme-accent)] hover:text-black text-[var(--theme-accent)] text-[9px] font-bold font-orbitron tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0 border border-[var(--theme-accent)]/30"
+                >
+                  Editar Perfil
+                </button>
+              </div>
+            </div>
+
             <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-[var(--theme-accent)]" /> MEMBROS DA COMUNIDADE
+              <Users className="w-5 h-5 text-[var(--theme-accent)]" /> MEMBROS DA COMUNIDADE ({users.length - 1})
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            {/* Dynamic Grid Layout governed by style configuration & ultra saver */}
+            <div className={`grid gap-4 ${
+              (isUltraSaver && adaptiveControls) || currentThemeConfig.gridCols === '1-col'
+                ? 'grid-cols-1'
+                : currentThemeConfig.gridCols === '3-col'
+                ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+                : 'grid-cols-1 sm:grid-cols-2'
+            }`}>
               {(() => {
-                const sortedUsers = [...users].sort((a, b) => {
-                  const aIsMe = a.id === currentUser?.id;
-                  const bIsMe = b.id === currentUser?.id;
-                  if (aIsMe && !bIsMe) return -1;
-                  if (!aIsMe && bIsMe) return 1;
+                // Filter out the logged-in user and sort remaining members by creation date descending
+                const otherUsersSorted = [...users]
+                  .filter(u => u.id !== currentUser?.id)
+                  .sort((a, b) => {
+                    const timeA = a.created ? new Date(a.created).getTime() : 0;
+                    const timeB = b.created ? new Date(b.created).getTime() : 0;
+                    return timeB - timeA;
+                  });
 
-                  const aSameProvince = a.province === currentUser?.province;
-                  const bSameProvince = b.province === currentUser?.province;
+                // Apply lazy loading slice
+                const visibleUsers = otherUsersSorted.slice(0, visibleUsersLimit);
 
-                  if (aSameProvince && !bSameProvince) return -1;
-                  if (!aSameProvince && bSameProvince) return 1;
-
-                  return 0;
-                });
-
-                return sortedUsers.map((mem) => {
-                  const isMe = mem.id === currentUser?.id;
-                  const isSameProvince = mem.province === currentUser?.province;
-                  const isAccepted = friendships.some(f => 
-                    f.status === 'accepted' && 
-                    ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
-                     (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
-                  );
-                  const isPending = friendships.some(f => 
-                    f.status === 'pending' && 
-                    ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
-                     (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
-                  );
-
+                if (visibleUsers.length === 0) {
                   return (
-                    <div 
-                      key={mem.id} 
-                      onClick={() => setSelectedCommunityUser(mem)}
-                      className={`p-4 rounded-2xl bg-[var(--theme-bg-card)] border flex items-center justify-between gap-3 shadow-lg select-none cursor-pointer hover:border-[var(--theme-accent)] transition-all ${
-                        isSameProvince && !isMe 
-                          ? 'border-[var(--theme-accent)]/40 shadow-[var(--theme-accent)]/5' 
-                          : 'border-[var(--theme-border)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img 
-                          src={mem.avatar || "https://i.pravatar.cc/80?img=1"} 
-                          alt={mem.nickname}
-                          referrerPolicy="no-referrer"
-                          className="w-10 h-10 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
-                        />
-                        <div className="min-w-0 text-left">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-xs font-bold text-[var(--theme-text-main)] truncate leading-tight">{mem.nickname}</p>
-                            {isSameProvince && !isMe && (
-                              <span className="px-1.5 py-0.5 rounded bg-[var(--theme-accent)]/20 border border-[var(--theme-accent)]/40 text-[var(--theme-accent)] text-[8px] font-bold uppercase tracking-wider">
-                                Recomendado
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[9px] text-[var(--theme-text-secondary)] truncate mt-0.5 flex items-center gap-0.5">
-                            <MapPin className="w-2.5 h-2.5" /> 
-                            <span>{mem.province}{mem.district ? ` • ${mem.district}` : ''}</span>
-                          </p>
-                        </div>
-                      </div>
-                      {!isMe && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isAccepted) {
-                              triggerToast(`Você já está vinculado com @${mem.nickname}`);
-                            } else if (isPending) {
-                              triggerToast(`Vínculo pendente com @${mem.nickname}`);
-                            } else {
-                              const newFriendship = {
-                                id: 'friend_' + Math.random().toString(36).substring(2, 9),
-                                senderId: currentUser?.id || '',
-                                receiverId: mem.id,
-                                status: 'pending' as const,
-                                timestamp: Date.now()
-                              };
-                              dbCreateFriendship(newFriendship);
-
-                              // Send notification
-                              const newNotif = {
-                                id: 'notif_' + Math.random().toString(36).substring(2, 9),
-                                recipientId: mem.id,
-                                title: 'Novo pedido de vínculo',
-                                text: `@${currentUser?.nickname} quer vincular-se contigo!`,
-                                type: 'friend_request' as const,
-                                sender: {
-                                  id: currentUser?.id || '',
-                                  name: currentUser?.nickname || '',
-                                  avatar: currentUser?.avatar || ''
-                                },
-                                read: false,
-                                targetId: newFriendship.id,
-                                targetView: 'notificacoes' as const,
-                                timestamp: Date.now()
-                              };
-                              dbCreateNotification(newNotif);
-                              triggerToast(`Pedido de vínculo enviado para: ${mem.nickname}`);
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-[var(--theme-accent)]/10 hover:bg-[var(--theme-accent)] border border-[var(--theme-accent)]/25 hover:text-white text-[var(--theme-accent)] text-[9px] font-bold font-orbitron tracking-widest rounded-lg transition-all cursor-pointer uppercase shrink-0"
-                        >
-                          {isAccepted ? 'Vinculado' : isPending ? 'Pendente' : 'Vincular'}
-                        </button>
-                      )}
+                    <div className="col-span-full py-12 text-center text-[var(--theme-text-muted)] space-y-2">
+                      <Users className="w-10 h-10 mx-auto opacity-40" />
+                      <p className="text-xs font-bold uppercase tracking-wider">Nenhum outro membro encontrado</p>
                     </div>
                   );
-                });
+                }
+
+                return (
+                  <>
+                    {visibleUsers.map((mem) => {
+                      const isSameProvince = mem.province === currentUser?.province;
+                      const isAccepted = friendships.some(f => 
+                        f.status === 'accepted' && 
+                        ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
+                         (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
+                      );
+                      const isPending = friendships.some(f => 
+                        f.status === 'pending' && 
+                        ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
+                         (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
+                      );
+                      const onlineStatus = isUserOnline(mem);
+
+                      return (
+                        <div 
+                          key={mem.id} 
+                          onClick={() => setSelectedCommunityUser(mem)}
+                          className={`p-4 rounded-3xl bg-[var(--theme-bg-card)] border flex flex-col justify-between gap-4 shadow-lg select-none cursor-pointer hover:border-[var(--theme-accent)] transition-all ${
+                            isSameProvince 
+                              ? 'border-[var(--theme-accent)]/40 shadow-[var(--theme-accent)]/5' 
+                              : 'border-[var(--theme-border)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <UserAvatar 
+                              src={mem.avatar || "https://i.pravatar.cc/80?img=1"} 
+                              status={onlineStatus} 
+                              nickname={mem.nickname}
+                              className="w-10 h-10"
+                            />
+                            <div className="min-w-0 text-left">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-xs font-bold text-[var(--theme-text-main)] truncate leading-tight">{mem.nickname}</p>
+                                {isSameProvince && (
+                                  <span className="px-1.5 py-0.5 rounded bg-[var(--theme-accent)]/20 border border-[var(--theme-accent)]/40 text-[var(--theme-accent)] text-[8px] font-bold uppercase tracking-wider">
+                                    Recomendado
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[9px] text-[var(--theme-text-muted)] truncate mt-0.5 flex items-center gap-0.5">
+                                <MapPin className="w-2.5 h-2.5" /> 
+                                <span>{mem.province}{mem.district ? ` • ${mem.district}` : ''}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 border-t border-[var(--theme-border)] pt-3 mt-1">
+                            <span className="text-[8px] font-bold font-mono text-[var(--theme-text-muted)] uppercase tracking-wider">
+                              Registo: {mem.created ? new Date(mem.created).toLocaleDateString('pt-MZ') : 'Antigo'}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isAccepted) {
+                                  triggerToast(`Você já está vinculado com @${mem.nickname}`);
+                                } else if (isPending) {
+                                  triggerToast(`Vínculo pendente com @${mem.nickname}`);
+                                } else {
+                                  const newFriendship = {
+                                    id: 'friend_' + Math.random().toString(36).substring(2, 9),
+                                    senderId: currentUser?.id || '',
+                                    receiverId: mem.id,
+                                    status: 'pending' as const,
+                                    timestamp: Date.now()
+                                  };
+                                  dbCreateFriendship(newFriendship);
+
+                                  // Send notification
+                                  const newNotif = {
+                                    id: 'notif_friend_' + Math.random().toString(36).substring(2, 9),
+                                    recipientId: mem.id,
+                                    title: 'Novo pedido de vínculo',
+                                    text: `@${currentUser?.nickname} quer vincular-se contigo!`,
+                                    type: 'friend_request' as const,
+                                    sender: {
+                                      id: currentUser?.id || '',
+                                      name: currentUser?.nickname || '',
+                                      avatar: currentUser?.avatar || ''
+                                    },
+                                    read: false,
+                                    targetId: newFriendship.id,
+                                    targetView: 'notificacoes' as const,
+                                    timestamp: Date.now()
+                                  };
+                                  dbCreateNotification(newNotif);
+                                  triggerToast(`Pedido de vínculo enviado para: ${mem.nickname}`);
+                                }
+                              }}
+                              className="px-2.5 py-1.5 bg-[var(--theme-accent)]/10 hover:bg-[var(--theme-accent)] border border-[var(--theme-accent)]/25 hover:text-black text-[var(--theme-accent)] text-[8px] font-bold font-orbitron tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0"
+                            >
+                              {isAccepted ? 'Vinculado' : isPending ? 'Pendente' : 'Vincular'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                );
               })()}
             </div>
-          </div>
-        );
+
+                {/* Lazy loading "CARREGAR MAIS MEMBROS" Trigger */}
+                {users.filter(u => u.id !== currentUser?.id).length > visibleUsersLimit && (
+                  <div className="flex justify-center pt-4">
+                    <button
+                      onClick={() => setVisibleUsersLimit(prev => prev + 6)}
+                      className="px-6 py-2.5 bg-[var(--theme-accent)]/15 hover:bg-[var(--theme-accent)] border border-[var(--theme-accent)]/30 hover:text-black text-[var(--theme-accent)] font-orbitron font-extrabold text-[10px] tracking-widest rounded-xl transition-all cursor-pointer uppercase shadow-lg flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4 text-[var(--theme-accent)] hover:text-black shrink-0" />
+                      Carregar mais membros
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
 
       // PREFERENCES CONFIGURATION VIEW
       case 'config':
         return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-white">
-            <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase border-b border-neon-cyan/20 pb-4 flex items-center gap-2">
-              <Settings className="w-5 h-5 text-neon-cyan" /> CONFIGURAÇÕES GERAIS
+          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)]">
+            <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-[var(--theme-accent)]" /> CONFIGURAÇÕES DO MOTOR DE ESTILO (THEMING)
             </h2>
-            <div className="bg-[#090924] border border-neon-cyan/20 rounded-3xl p-6 shadow-2xl space-y-6 text-left">
+            
+            <div className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl p-6 shadow-2xl space-y-6 text-left">
               
-              <div className="border-b border-white/5 pb-6">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-white mb-3">TEMA VISUAL DO APLICATIVO (7 MODOS)</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+              {/* Theme Selector (9 MODOS) */}
+              <div>
+                <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)] mb-3">
+                  SELEÇÃO MANUAL DE TEMA (9 MODOS DISPONÍVEIS)
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {[
-                    { id: 'noite', name: 'Noite', color: '#3b82f6', bg: 'bg-[#050508]' },
-                    { id: 'luz', name: 'Luz', color: '#2563eb', bg: 'bg-white border-zinc-200' },
-                    { id: 'lite', name: 'Lite', color: '#4f46e5', bg: 'bg-slate-100 border-slate-200' },
-                    { id: 'esmeralda', name: 'Esmeralda', color: '#10b981', bg: 'bg-[#041611]' },
-                    { id: 'vinho', name: 'Vinho', color: '#db2777', bg: 'bg-[#14050d]' },
-                    { id: 'ciano', name: 'Ciano', color: '#06b6d4', bg: 'bg-[#020813]' },
-                    { id: 'crepusculo', name: 'Crepúsculo', color: '#8b5cf6', bg: 'bg-[#0f0c1b]' },
+                    { id: 'noite', name: 'Noite', color: '#3b82f6', desc: 'Escuro clássico' },
+                    { id: 'luz', name: 'Luz', color: '#2563eb', desc: 'Claro clássico' },
+                    { id: 'lite', name: 'Lite', color: '#4f46e5', desc: 'Simples indigo' },
+                    { id: 'esmeralda', name: 'Esmeralda', color: '#10b981', desc: 'Verde profundo' },
+                    { id: 'vinho', name: 'Vinho', color: '#db2777', desc: 'Rosa romântico' },
+                    { id: 'ciano', name: 'Ciano', color: '#06b6d4', desc: 'Azul refrescante' },
+                    { id: 'crepusculo', name: 'Crepúsculo', color: '#8b5cf6', desc: 'Roxo sideral' },
+                    { id: 'neon-cyber', name: 'Cyberpunk', color: '#00ffcc', desc: 'Neon de alta energia' },
+                    { id: 'glass-minimalist', name: 'Glass', color: '#ffffff', desc: 'Vidro contemporâneo' },
                   ].map((t) => (
                     <button
                       key={t.id}
                       onClick={() => setTheme(t.id as any)}
-                      className={`relative p-3 rounded-2xl font-bold text-xs transition-all uppercase cursor-pointer border flex flex-col items-center gap-1.5 ${
+                      className={`p-3.5 rounded-2xl transition-all cursor-pointer border flex flex-col items-center gap-1.5 ${
                         theme === t.id
-                          ? 'border-neon-cyan bg-neon-cyan/10 shadow-lg'
-                          : 'border-white/5 bg-black/40 text-gray-400 hover:text-white hover:bg-black/60'
+                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10 shadow-[var(--theme-accent)]/5'
+                          : 'border-[var(--theme-border)] bg-[var(--theme-bg-card)]/40 text-[var(--theme-text-muted)] hover:text-[var(--theme-text-main)] hover:bg-[var(--theme-bg-card)]/70'
                       }`}
                     >
-                      <div className={`w-5 h-5 rounded-full ${t.bg} flex items-center justify-center border border-white/10`} style={{ borderColor: theme === t.id ? t.color : undefined }}>
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.color }} />
+                      <div className="w-4 h-4 rounded-full border border-[var(--theme-border)] flex items-center justify-center" style={{ backgroundColor: theme === t.id ? t.color : '#222' }}>
+                        {theme === t.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
-                      <span className="text-[10px] tracking-wider">{t.name}</span>
+                      <span className="text-[10px] font-bold tracking-wider">{t.name}</span>
+                      <span className="text-[8px] opacity-70 text-center leading-tight">{t.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                <div>
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">Ecrã de Alto Contraste</h4>
-                  <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">Ajusta o gradiente do fundo e realça os contornos de neon.</p>
+              {/* Adaptive UI Sensors Section */}
+              <div className="border-t border-[var(--theme-border)] pt-5 space-y-4">
+                <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)]">
+                  SENSORES E CONTROLO INTELIGENTE ADAPTATIVO
+                </h4>
+                
+                {/* Adaptive Toggle */}
+                <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
+                  <div>
+                    <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Ativar Controlo Inteligente (Sensores)</h5>
+                    <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
+                      Alterna o tema automaticamente por Horário (Dia/Noite) e ativa Economia de Bateria (&lt;20%).
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={adaptiveControls} 
+                      onChange={(e) => {
+                        setAdaptiveControls(e.target.checked);
+                        triggerToast(e.target.checked ? 'Sensores inteligentes ativos!' : 'Controlo manual ativado!');
+                      }}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-9 h-5 bg-neutral-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-[var(--theme-accent)]/30 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--theme-accent)]"></div>
+                  </label>
                 </div>
-                <input type="checkbox" defaultChecked className="accent-neon-cyan cursor-pointer" />
+
+                {/* UI Performance Switch */}
+                <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
+                  <div>
+                    <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Modo de Desempenho</h5>
+                    <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
+                      <b>Imersivo</b>: Transições fluidas e efeitos de glow. <b>Desempenho</b>: Máxima velocidade e sem animações.
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 p-0.5 bg-neutral-900 border border-[var(--theme-border)] rounded-xl">
+                    <button
+                      onClick={() => {
+                        setUiMode('performance');
+                        triggerToast('Modo Desempenho ativado.');
+                      }}
+                      className={`px-3 py-1 text-[9px] font-extrabold font-orbitron tracking-widest uppercase rounded-lg transition-all ${
+                        uiMode === 'performance' ? 'bg-[var(--theme-accent)] text-black' : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      Fast
+                    </button>
+                    <button
+                      onClick={() => {
+                        setUiMode('immersive');
+                        triggerToast('Modo Imersivo ativado.');
+                      }}
+                      className={`px-3 py-1 text-[9px] font-extrabold font-orbitron tracking-widest uppercase rounded-lg transition-all ${
+                        uiMode === 'immersive' ? 'bg-[var(--theme-accent)] text-black' : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      Immersive
+                    </button>
+                  </div>
+                </div>
+
+                {/* Battery Simulator */}
+                <div className="bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Simulador de Bateria</h5>
+                      <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5">
+                        Defina abaixo de 20% para forçar instantaneamente o modo amoled ultra-económico!
+                      </p>
+                    </div>
+                    <span className="text-xs font-extrabold font-orbitron text-[var(--theme-accent)]">
+                      {effectiveBatteryLevel}% {isUltraSaver && '🔋 [ECONOMIA]'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="100"
+                    value={simulatedBattery}
+                    onChange={(e) => setSimulatedBattery(Number(e.target.value))}
+                    className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-[var(--theme-accent)]"
+                  />
+                  <div className="flex justify-between text-[8px] font-mono text-[var(--theme-text-muted)]">
+                    <span>Mínimo: 5%</span>
+                    <span>Dispositivo Físico: {actualBattery !== null ? `${actualBattery}%` : 'Não suportado'}</span>
+                    <span>Máximo: 100%</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                <div>
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">Filtro de Fumo Automático</h4>
-                  <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">Carrega histórias 42h sempre sob uma máscara escura anti-flicker.</p>
+              {/* Theme Configuration Inspector */}
+              <div className="border-t border-[var(--theme-border)] pt-5">
+                <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)] mb-3">
+                  INSPEÇÃO DE PROPRIEDADES JSON DO TEMA ATIVO
+                </h4>
+                <div className="p-4 bg-neutral-950/80 border border-[var(--theme-border)] rounded-2xl font-mono text-[9px] text-[var(--theme-text-muted)] space-y-1 overflow-x-auto select-text leading-relaxed">
+                  <p className="text-yellow-400 font-bold">// Configurações dinâmicas injetadas pelo motor:</p>
+                  <p>ID: <span className="text-white">"{currentThemeConfig.id}"</span></p>
+                  <p>Membros Grid: <span className="text-white">"{currentThemeConfig.gridCols === '1-col' ? '1 Coluna (Lista)' : currentThemeConfig.gridCols === '3-col' ? '3 Colunas (Grelha Estendida)' : '2 Colunas (Grelha)'}"</span></p>
+                  <p>Modo de Energia: <span className={isUltraSaver ? 'text-red-400 font-bold' : 'text-green-400'}>{isUltraSaver ? '"Amoled Black (Mínimo)"' : '"Padrão"'}_</span></p>
+                  <p>Variáveis de Cor: &#123;</p>
+                  <p className="pl-4">--theme-bg-main: <span className="text-cyan-400">"{isUltraSaver ? '#000000' : currentThemeConfig.bgMain}"</span></p>
+                  <p className="pl-4">--theme-bg-card: <span className="text-cyan-400">"{isUltraSaver ? '#080808' : currentThemeConfig.bgCard}"</span></p>
+                  <p className="pl-4">--theme-accent: <span className="text-cyan-400">"{currentThemeConfig.accent}"</span></p>
+                  <p className="pl-4">--theme-border: <span className="text-cyan-400">"{currentThemeConfig.border}"</span></p>
+                  <p>&#125;</p>
                 </div>
-                <input type="checkbox" defaultChecked className="accent-neon-cyan cursor-pointer" />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">Modo Poupança de Dados</h4>
-                  <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">Reduz a fidelidade das imagens Unsplash sob baixa conexão de internet.</p>
-                </div>
-                <input type="checkbox" className="accent-neon-cyan cursor-pointer" />
               </div>
 
             </div>
@@ -875,7 +1305,7 @@ export default function App() {
 
   // 6. Root Frame Renders
   return (
-    <div className={`min-h-screen bg-[#060613] text-white flex theme-${theme}`}>
+    <div className={`min-h-screen bg-[var(--theme-bg-main)] text-[var(--theme-text-main)] flex theme-${theme} transition-colors duration-500`}>
       {!currentUser ? (
         /* If session is not authenticated, render Login/Register views */
         <div className="flex-1">
@@ -929,17 +1359,18 @@ export default function App() {
               <h2 className="font-orbitron font-black text-base text-neon-cyan tracking-wider glow-text-cyan">
                 OPEN MZ
               </h2>
-              <img 
-                src={currentUser.avatar || "https://i.pravatar.cc/80?img=1"} 
-                alt={currentUser.nickname} 
-                referrerPolicy="no-referrer"
-                onClick={() => navigateToView('profile')}
-                className="w-8 h-8 rounded-full border border-neon-cyan/70 object-cover cursor-pointer hover:scale-105 active:scale-95 transition-transform"
-              />
+              <div onClick={() => navigateToView('profile')}>
+                <UserAvatar 
+                  src={currentUser.avatar || "https://i.pravatar.cc/80?img=1"} 
+                  status={true} 
+                  nickname={currentUser.nickname}
+                  className="w-8 h-8 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                />
+              </div>
             </header>
 
             {/* Active View viewport */}
-            <main className="flex-grow flex flex-col overflow-y-auto no-scrollbar bg-[#050511] relative">
+            <main className="flex-grow flex flex-col overflow-y-auto no-scrollbar bg-[var(--theme-bg-main)] relative transition-colors duration-500">
               {renderActiveView()}
             </main>
           </div>
@@ -1169,6 +1600,17 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {currentUser && (
+        <FloatingSearch
+          currentUser={currentUser}
+          users={users}
+          onSelectUser={(selectedUser) => setSelectedCommunityUser(selectedUser)}
+          isOpen={isGlobalSearchOpen}
+          onOpen={() => setIsGlobalSearchOpen(true)}
+          onClose={() => setIsGlobalSearchOpen(false)}
+        />
+      )}
     </div>
   );
 }
