@@ -4,9 +4,9 @@
  */
 
 import React, { useState } from 'react';
-import { User, Lock, Smartphone } from 'lucide-react';
+import { Mail, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
-import { simpleHash, validatePhone } from '../utils';
+import { simpleHash, validateEmail } from '../utils';
 import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
@@ -14,58 +14,55 @@ import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
 
 interface LoginViewProps {
   users: UserType[];
-  onLoginSuccess: (user: UserType) => void;
+  onLoginSuccess: (user: UserType, token: string, rememberMe?: boolean) => void;
   onGoToRegister: () => void;
 }
 
 export default function LoginView({ users, onLoginSuccess, onGoToRegister }: LoginViewProps) {
-  const [nickname, setNickname] = useState('');
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!nickname.trim() || !phone.trim() || !password) {
+    if (!email.trim() || !password) {
       setErrorMsg('Por favor, preencha todos os campos do formulário.');
       return;
     }
 
-    const phoneValidation = validatePhone(phone);
-    if (!phoneValidation.ok) {
-      setErrorMsg(phoneValidation.error || 'Número de telefone inválido.');
+    if (!validateEmail(email)) {
+      setErrorMsg('Por favor, introduza um endereço de e-mail válido.');
       return;
     }
 
-    const normalizedPhone = phoneValidation.normalized;
-    const hashedPass = simpleHash(password);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password
+        })
+      });
 
-    // Look up user
-    const foundUser = users.find(
-      (u) =>
-        u.nickname.toLowerCase() === nickname.trim().toLowerCase() &&
-        u.phone === normalizedPhone &&
-        u.password === hashedPass
-    );
-
-    if (!foundUser) {
-      const phoneExists = users.some((u) => u.phone === normalizedPhone);
-      if (!phoneExists) {
-        setErrorMsg('Este número de telefone não está registrado no sistema.');
-      } else {
-        setErrorMsg('Dados incorretos. Por favor, valide o nickname, número ou senha.');
+      const data = await response.json();
+      if (!response.ok) {
+        setErrorMsg(data.error || 'Dados de login incorretos ou erro de autenticação.');
+        return;
       }
-      return;
-    }
 
-    setSuccessMsg('Acesso autorizado! Redirecionando...');
-    setTimeout(() => {
-      onLoginSuccess(foundUser);
-    }, 1200);
+      setSuccessMsg('Acesso autorizado! Redirecionando...');
+      setTimeout(() => {
+        onLoginSuccess(data.user, data.token, rememberMe);
+      }, 1200);
+    } catch (err) {
+      setErrorMsg('Erro de ligação ao servidor de autenticação.');
+    }
   };
 
   return (
@@ -111,30 +108,16 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister }: Log
           </h2>
 
           <form onSubmit={handleLogin} className="space-y-5">
-            {/* Nickname Input */}
+            {/* Email Input */}
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
-                <User className="w-5 h-5" />
+                <Mail className="w-5 h-5" />
               </span>
               <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="Nome do usuário (nickname)"
-                className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
-              />
-            </div>
-
-            {/* Phone Input */}
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
-                <Smartphone className="w-5 h-5" />
-              </span>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Número (+258 ou 9 dígitos)"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Endereço de e-mail (Gmail)"
                 className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
               />
             </div>
@@ -151,6 +134,19 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister }: Log
                 placeholder="Senha de Acesso"
                 className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
               />
+            </div>
+
+            {/* Remember Login Checkbox */}
+            <div className="flex items-center justify-between px-1 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-[#a0a0c0] font-rajdhani font-semibold">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-neon-cyan/40 bg-black/40 text-neon-cyan focus:ring-neon-cyan cursor-pointer"
+                />
+                <span>Lembrar Login neste dispositivo</span>
+              </label>
             </div>
 
             {/* Action Button */}
@@ -221,11 +217,11 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister }: Log
                   },
                   nameEditDate: null
                 };
-                onLoginSuccess(guestUser);
+                onLoginSuccess(guestUser, 'guest_token', false);
               }}
               className="w-full py-3 bg-black/40 hover:bg-[#121235]/60 border border-white/10 hover:border-neon-cyan/60 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-gray-300 hover:text-white cursor-pointer uppercase transition-all"
             >
-              Entrar como Convidado 👁️
+              Entrar como Convidado
             </button>
           </div>
         </div>

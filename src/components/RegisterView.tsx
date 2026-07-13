@@ -14,7 +14,7 @@ import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
 
 interface RegisterViewProps {
   users: UserType[];
-  onRegisterSuccess: (newUser: UserType) => void;
+  onRegisterSuccess: (newUser: UserType, token: string) => void;
   onGoToLogin: () => void;
 }
 
@@ -35,6 +35,7 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
   const [statusType, setStatusType] = useState<'info' | 'error' | 'success'>('info');
   const [showWelcome, setShowWelcome] = useState(false);
   const [createdUser, setCreatedUser] = useState<UserType | null>(null);
+  const [createdToken, setCreatedToken] = useState('');
 
   const calculatePasswordStrength = (pw: string) => {
     if (!pw) return { text: 'Inexistente', color: 'text-gray-500' };
@@ -91,6 +92,13 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
       return;
     }
 
+    const emailExists = users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (emailExists) {
+      setStatusMsg('Este endereço de e-mail já está em uso.');
+      setStatusType('error');
+      return;
+    }
+
     // Fullname token validation
     const nameCheck = validateNames(fullname, firstname, surname);
     if (!nameCheck.ok) {
@@ -113,42 +121,52 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
       return;
     }
 
-    // All validation passed, compile new user
-    const hashedPass = simpleHash(password);
+    const avatarUrl = `https://images.unsplash.com/photo-${Math.floor(Math.random() * 50) + 1500000000000}?auto=format&fit=crop&q=80&w=150`;
     const userId = 'user_' + Math.random().toString(36).substring(2, 11);
 
-    const newUser: UserType = {
-      id: userId,
-      phone: phoneCheck.normalized,
-      email: email.trim(),
-      fullname: fullname.trim(),
-      firstname: firstname.trim(),
-      surname: surname.trim(),
-      nickname: nickname.trim(),
-      password: hashedPass,
-      province,
-      district,
-      created: new Date().toISOString(),
-      avatar: `https://images.unsplash.com/photo-${Math.floor(Math.random() * 50) + 1500000000000}?auto=format&fit=crop&q=80&w=150`, // Random nice avatar
-      stats: { likes: 0, posts: 0, friends: 0 },
-      nameEditDate: null,
-      isVIP: false,
-    };
+    setStatusMsg('Registando utilizador no servidor...');
+    setStatusType('info');
 
-    setStatusMsg('Registando utilizador...');
-    setStatusType('success');
-    setCreatedUser(newUser);
-
-    // Prompt "Bem vindo, Sua visão é a Nossa Mission" central modal
-    setTimeout(() => {
-      setShowWelcome(true);
-    }, 400);
+    fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: userId,
+        phone: phoneCheck.normalized,
+        email: email.trim(),
+        fullname: fullname.trim(),
+        firstname: firstname.trim(),
+        surname: surname.trim(),
+        nickname: nickname.trim(),
+        password: password,
+        province,
+        district,
+        avatar: avatarUrl
+      })
+    })
+    .then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao criar conta.');
+      }
+      setStatusMsg('Conta criada com sucesso!');
+      setStatusType('success');
+      setCreatedUser(data.user);
+      setCreatedToken(data.token);
+      setTimeout(() => {
+        setShowWelcome(true);
+      }, 400);
+    })
+    .catch((err) => {
+      setStatusMsg(err.message || 'Erro de ligação ao servidor.');
+      setStatusType('error');
+    });
   };
 
   const handleFinishWelcome = () => {
     setShowWelcome(false);
-    if (createdUser) {
-      onRegisterSuccess(createdUser);
+    if (createdUser && createdToken) {
+      onRegisterSuccess(createdUser, createdToken);
     }
   };
 

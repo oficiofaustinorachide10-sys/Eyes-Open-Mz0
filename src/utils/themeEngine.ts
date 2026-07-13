@@ -184,6 +184,24 @@ export const THEME_CONFIGS: Record<string, ThemeConfig> = {
     textMain: '#fafafa',
     textMuted: '#a1a1aa',
     border: 'rgba(255, 255, 255, 0.08)'
+  },
+  'eyes-max': {
+    id: 'eyes-max',
+    name: 'Eyes Max 👁️',
+    gridCols: 'grid',
+    primaryColor: '#fbbf24',
+    secondaryColor: '#f59e0b',
+    blurEffect: '14px',
+    borderRadius: '16px',
+    boxShadow: '0 12px 30px rgba(0, 0, 0, 0.65)',
+    textShadow: 'none',
+    animationType: 'bounce-in',
+    bgMain: '#060502',
+    bgSidebar: '#0c0a04',
+    bgCard: '#141108',
+    textMain: '#fffbeb',
+    textMuted: '#d97706',
+    border: 'rgba(251, 191, 36, 0.25)'
   }
 };
 

@@ -2,10 +2,10 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
 admin.initializeApp({
-  projectId: "tenacious-harbor-5j4jh"
+  projectId: "eyes-open-mz-7a933"
 });
 
-const db = getFirestore("ai-studio-eyesopenmz-1232ad45-8e58-455b-90b8-813f4e529800");
+const db = getFirestore();
 
 async function test() {
   try {

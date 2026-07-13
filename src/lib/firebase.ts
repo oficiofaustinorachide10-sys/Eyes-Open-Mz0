@@ -2,18 +2,19 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCkkZnps1JdKxyOXFUuiLdaN3vom1pvueU",
-  authDomain: "tenacious-harbor-5j4jh.firebaseapp.com",
-  projectId: "tenacious-harbor-5j4jh",
-  storageBucket: "tenacious-harbor-5j4jh.firebasestorage.app",
-  messagingSenderId: "6588037814",
-  appId: "1:6588037814:web:bb683f3d24eeaf90e40417"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCstYApQqwFjsHjxqw7DpMiOG9JWhNeYec",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "eyes-open-mz-7a933.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "eyes-open-mz-7a933",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "eyes-open-mz-7a933.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "861329511037",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:861329511037:web:f3fa1e64a37a8e18d69714",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-J69DPF3JSG"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with the specific custom database ID
-const db = getFirestore(app, "ai-studio-eyesopenmz-1232ad45-8e58-455b-90b8-813f4e529800");
+// Initialize Firestore with the default database
+const db = getFirestore(app);
 
 export { app, db };

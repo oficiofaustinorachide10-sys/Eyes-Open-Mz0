@@ -26,8 +26,8 @@ interface SidebarProps {
   onClose: () => void;
   unreadChatsCount?: number;
   unreadNotificationsCount?: number;
-  theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist';
-  setTheme: (theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist') => void;
+  theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max';
+  setTheme: (theme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max') => void;
 }
 
 export default function Sidebar({ 
@@ -111,10 +111,95 @@ export default function Sidebar({
           const isRedOption = hasUnreadConversas || hasUnreadNotificacoes;
           const unreadCount = item.id === 'conversas' ? unreadChatsCount : unreadNotificationsCount;
 
+          // Unique custom 4D physics-based animations for each button (only when eyes-max is active)
+          const getMotionProps = (id: string) => {
+            if (theme !== 'eyes-max') return {};
+            switch (id) {
+              case 'account':
+                return {
+                  whileHover: { scale: 1.05, rotateY: 15, rotateX: -5, translateZ: 10, shadow: '0 8px 16px rgba(0,0,0,0.4)' },
+                  whileTap: { scale: 0.95, rotateY: 0 },
+                  transition: { type: 'spring', stiffness: 200, damping: 10 }
+                };
+              case 'artigos':
+                return {
+                  whileHover: { scale: 1.07, rotateX: 12, rotateY: 4, translateZ: 20 },
+                  whileTap: { scale: 0.94, rotateX: 0 },
+                  transition: { type: 'spring', stiffness: 180, damping: 12 }
+                };
+              case 'videos':
+                return {
+                  whileHover: { scale: 1.04, rotate: 1.5, rotateY: -10, translateZ: 15 },
+                  whileTap: { scale: 0.96, rotate: 0 },
+                  transition: { type: 'spring', stiffness: 220, damping: 8 }
+                };
+              case 'conversas':
+                return {
+                  whileHover: { scale: 1.06, rotate: -1, rotateX: -10, rotateY: -10, translateZ: 25 },
+                  whileTap: { scale: 0.95 },
+                  transition: { type: 'spring', stiffness: 150, damping: 15 }
+                };
+              case 'notificacoes':
+                return {
+                  whileHover: { scale: 1.08, rotate: [0, -3, 3, -3, 0], translateZ: 10 },
+                  whileTap: { scale: 0.93 },
+                  transition: { duration: 0.4 }
+                };
+              case 'eventos':
+                return {
+                  whileHover: { scale: 1.05, y: -4, rotateY: 15, translateZ: 5 },
+                  whileTap: { scale: 0.95, y: 0 },
+                  transition: { type: 'spring', stiffness: 300, damping: 15 }
+                };
+              case 'loja':
+                return {
+                  whileHover: { scale: 1.09, rotateX: -15, translateZ: 30 },
+                  whileTap: { scale: 0.92 },
+                  transition: { type: 'spring', stiffness: 160, damping: 14 }
+                };
+              case 'cinema':
+                return {
+                  whileHover: { scale: 1.05, skewX: -4, rotateY: 8, translateZ: 12 },
+                  whileTap: { scale: 0.95, skewX: 0 },
+                  transition: { type: 'spring', stiffness: 250, damping: 11 }
+                };
+              case 'fonte-letra':
+                return {
+                  whileHover: { scale: 1.04, scaleY: 1.12, rotate: 2, translateZ: 8 },
+                  whileTap: { scale: 0.96 },
+                  transition: { type: 'spring', stiffness: 190, damping: 9 }
+                };
+              case 'musica':
+                return {
+                  whileHover: { scaleX: 1.1, scaleY: 1.02, rotate: -2, rotateY: 12, translateZ: 22 },
+                  whileTap: { scale: 0.94 },
+                  transition: { type: 'spring', stiffness: 210, damping: 13 }
+                };
+              case 'comunidade':
+                return {
+                  whileHover: { scale: 1.06, rotateY: -15, rotateX: 5, translateZ: 18 },
+                  whileTap: { scale: 0.95 },
+                  transition: { type: 'spring', stiffness: 170, damping: 12 }
+                };
+              case 'config':
+                return {
+                  whileHover: { scale: 1.05, rotate: 45, translateZ: 10 },
+                  whileTap: { scale: 0.95, rotate: 180 },
+                  transition: { type: 'spring', stiffness: 120, damping: 15 }
+                };
+              default:
+                return {
+                  whileHover: { scale: 1.03, y: -1 },
+                  whileTap: { scale: 0.97 }
+                };
+            }
+          };
+
           return (
-            <button
+            <motion.button
               key={item.id}
               onClick={() => handleItemClick(item.id)}
+              {...getMotionProps(item.id)}
               className={`w-full flex items-center justify-between gap-2 px-4 py-2 rounded-xl text-left text-sm font-bold tracking-wide transition-all duration-300 cursor-pointer ${
                 isActive 
                   ? isRedOption
@@ -139,7 +224,7 @@ export default function Sidebar({
                   {unreadCount}
                 </span>
               )}
-            </button>
+            </motion.button>
           );
         })}
       </nav>
@@ -162,6 +247,7 @@ export default function Sidebar({
               { id: 'crepusculo', color: '#8b5cf6', title: 'Crepúsculo' },
               { id: 'neon-cyber', color: '#00ffcc', title: 'Cyberpunk' },
               { id: 'glass-minimalist', color: '#ffffff', title: 'Glass Minimalist' },
+              { id: 'eyes-max', color: '#fbbf24', title: 'Eyes Max' },
             ].map((t) => (
               <button
                 key={t.id}

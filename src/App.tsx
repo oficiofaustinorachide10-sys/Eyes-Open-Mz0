@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, Eye, Newspaper, Video, Calendar, Store, Users, Settings, 
   Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare 
@@ -50,7 +50,12 @@ import {
   dbCreateNotification,
   subscribeFriendships,
   dbCreateFriendship,
-  dbDeleteFriendship
+  dbDeleteFriendship,
+  dbUpdateFriendship,
+  subscribeChatPermissions,
+  dbCreateChatPermission,
+  dbUpdateChatPermission,
+  dbDeleteChatPermission
 } from './lib/db';
 
 export default function App() {
@@ -59,12 +64,150 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Extended theme state: support all themes, persisting the values properly
-  const [theme, setThemeState] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist'>(() => {
+  const [theme, setThemeState] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max'>(() => {
     const saved = localStorage.getItem('theme') as any;
     return (saved && THEME_CONFIGS[saved]) ? saved : 'noite';
   });
 
-  const setTheme = (newTheme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist') => {
+  // Eyes Max Special Theme & Virtual Assistant "Pay" states
+  const [eyesMaxDownloaded, setEyesMaxDownloaded] = useState<boolean>(() => {
+    return localStorage.getItem('eyesMaxDownloaded') === 'true';
+  });
+  const [showEyesMaxDownloadModal, setShowEyesMaxDownloadModal] = useState<boolean>(false);
+  const [isDownloadingEyesMax, setIsDownloadingEyesMax] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+
+  const [isApplyingEyesMax, setIsApplyingEyesMax] = useState<boolean>(false);
+  const [applyProgress, setApplyProgress] = useState<number>(0);
+  const [showEyesMaxWelcome, setShowEyesMaxWelcome] = useState<boolean>(false);
+
+  const [showPayAssistant, setShowPayAssistant] = useState<boolean>(false);
+  const [assistantMessages, setAssistantMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
+    { role: 'assistant', content: 'Olá! Sou o Pay, o assistente virtual oficial do site "Eyes Open MZ", criado e treinado pelo meu mentor, Ofício Faustino Rachide. Seja muito bem-vindo ao luxuoso ecossistema do tema EYES MAX! Como posso ajudar-te hoje? podes perguntar-me sobre o site, o tema EYES MAX ou qualquer outra dúvida!' }
+  ]);
+  const [assistantInput, setAssistantInput] = useState<string>('');
+  const [isAssistantTyping, setIsAssistantTyping] = useState<boolean>(false);
+
+  const playPaySignatureSound = () => {
+    if (typeof window === 'undefined') return;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    try {
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+      
+      const playTone = (freq: number, start: number, duration: number, type: 'triangle' | 'sine' = 'sine') => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, start);
+        
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.15, start + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start(start);
+        osc.stop(start + duration);
+      };
+      
+      // Luxurious golden chime arpeggio: C5 -> E5 -> G5 -> C6
+      playTone(523.25, now, 1.2, 'triangle');
+      playTone(659.25, now + 0.12, 1.0, 'sine');
+      playTone(783.99, now + 0.24, 0.8, 'sine');
+      playTone(1046.50, now + 0.36, 1.5, 'sine');
+    } catch (e) {
+      console.warn('Audio signature failed to play:', e);
+    }
+  };
+
+  const triggerDownloadEyesMax = () => {
+    setIsDownloadingEyesMax(true);
+    setDownloadProgress(0);
+    const interval = setInterval(() => {
+      setDownloadProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setIsDownloadingEyesMax(false);
+            setEyesMaxDownloaded(true);
+            localStorage.setItem('eyesMaxDownloaded', 'true');
+          }, 300);
+          return 100;
+        }
+        return prev + Math.floor(Math.random() * 15) + 5;
+      });
+    }, 150);
+  };
+
+  const triggerApplyEyesMaxFlow = () => {
+    setIsApplyingEyesMax(true);
+    setApplyProgress(0);
+    const interval = setInterval(() => {
+      setApplyProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setIsApplyingEyesMax(false);
+            setThemeState('eyes-max');
+            localStorage.setItem('theme', 'eyes-max');
+            setAdaptiveControls(false);
+            // Play brand sound signature
+            playPaySignatureSound();
+            // Automatically launch "Pay" assistant
+            setShowPayAssistant(true);
+            setShowEyesMaxWelcome(true);
+          }, 600);
+          return 100;
+        }
+        return prev + Math.floor(Math.random() * 10) + 4;
+      });
+    }, 120);
+  };
+
+  const handleSendAssistantMessage = async () => {
+    if (!assistantInput.trim()) return;
+    const userMsg = assistantInput;
+    setAssistantInput('');
+    setAssistantMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsAssistantTyping(true);
+
+    try {
+      const response = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMsg,
+          history: assistantMessages
+        })
+      });
+      const data = await response.json();
+      if (data.reply) {
+        setAssistantMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+      } else {
+        setAssistantMessages(prev => [...prev, { role: 'assistant', content: 'Lamento, ocorreu um erro ao comunicar com os meus sistemas. Por favor tenta novamente.' }]);
+      }
+    } catch (err) {
+      console.error('Chat Assistant error:', err);
+      setAssistantMessages(prev => [...prev, { role: 'assistant', content: 'Peço desculpas, não foi possível estabelecer ligação ao servidor. Por favor tenta novamente.' }]);
+    } finally {
+      setIsAssistantTyping(false);
+    }
+  };
+
+  const setTheme = (newTheme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max') => {
+    if (newTheme === 'eyes-max') {
+      if (!eyesMaxDownloaded) {
+        setShowEyesMaxDownloadModal(true);
+        return;
+      } else {
+        triggerApplyEyesMaxFlow();
+        return;
+      }
+    }
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
     // Manual selection overrides adaptive controls
@@ -225,6 +368,7 @@ export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
+  const [chatPermissions, setChatPermissions] = useState<ChatPermission[]>([]);
   const [selectedCommunityUser, setSelectedCommunityUser] = useState<User | null>(null);
   const [initialSelectedChatId, setInitialSelectedChatId] = useState<string | undefined>(undefined);
   
@@ -255,19 +399,101 @@ export default function App() {
     ? notifications.filter(n => !n.read && n.type !== 'message' && n.type !== 'chat' && n.type !== 'conversa' && n.type !== 'chat_request' && n.type !== 'chat_accepted').length
     : 0;
 
+  const resolvedPosts = useMemo(() => {
+    return posts.map(post => {
+      const authorUser = users.find(u => u.id === post.author.id);
+      const resolvedComments = (post.comments || []).map(comment => {
+        const commentAuthor = users.find(u => u.id === comment.author.id);
+        return {
+          ...comment,
+          author: {
+            id: comment.author.id,
+            name: commentAuthor ? commentAuthor.fullname : comment.author.name,
+            avatar: commentAuthor ? commentAuthor.avatar : comment.author.avatar,
+            nickname: commentAuthor ? commentAuthor.nickname : (comment.author as any).nickname,
+          }
+        };
+      });
+      return {
+        ...post,
+        author: {
+          id: post.author.id,
+          name: authorUser ? authorUser.fullname : post.author.name,
+          avatar: authorUser ? authorUser.avatar : post.author.avatar,
+          nickname: authorUser ? authorUser.nickname : (post.author as any).nickname,
+        },
+        comments: resolvedComments
+      };
+    });
+  }, [posts, users]);
+
+  const resolvedStories = useMemo(() => {
+    return stories.map(story => {
+      const authorUser = users.find(u => u.id === story.author.id);
+      return {
+        ...story,
+        author: {
+          id: story.author.id,
+          name: authorUser ? authorUser.fullname : story.author.name,
+          avatar: authorUser ? authorUser.avatar : story.author.avatar,
+          nickname: authorUser ? authorUser.nickname : (story.author as any).nickname,
+        }
+      };
+    });
+  }, [stories, users]);
+
+  // Keep selectedCommunityUser synced with loaded users to prevent stale data when updated
+  useEffect(() => {
+    if (selectedCommunityUser) {
+      const latest = users.find(u => u.id === selectedCommunityUser.id);
+      if (latest && JSON.stringify(latest) !== JSON.stringify(selectedCommunityUser)) {
+        setSelectedCommunityUser(latest);
+      }
+    }
+  }, [users, selectedCommunityUser]);
+
   // 1. Initial State Loading and Seeding with real-time Firestore Subscriptions
   useEffect(() => {
     // 1. First trigger seeding of the database if collections are completely blank
     seedDatabaseIfEmpty();
 
-    // 2. Load cached current user session (including guest or register/login cache)
-    const storedSession = localStorage.getItem('currentUser');
-    if (storedSession) {
-      try {
-        const sessionUser = JSON.parse(storedSession);
-        setCurrentUser(sessionUser);
-      } catch (e) {
-        setCurrentUser(null);
+    // 2. Load cached current user session (including JWT validation against server)
+    const token = localStorage.getItem('eo_jwt_token');
+    if (token) {
+      fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem('currentUser', JSON.stringify(data.user));
+        } else {
+          // Clears stale local sessions if backend verification fails
+          localStorage.removeItem('eo_jwt_token');
+          localStorage.removeItem('currentUser');
+          setCurrentUser(null);
+        }
+      })
+      .catch(() => {
+        // Fallback to local cache if server is offline during load
+        const stored = localStorage.getItem('currentUser');
+        if (stored) {
+          try {
+            setCurrentUser(JSON.parse(stored));
+          } catch (e) {}
+        }
+      });
+    } else {
+      const stored = localStorage.getItem('currentUser');
+      if (stored) {
+        try {
+          setCurrentUser(JSON.parse(stored));
+        } catch (e) {}
       }
     }
 
@@ -276,10 +502,11 @@ export default function App() {
       setUsers(loadedUsers);
       
       // Keep active user session in sync with database profile modifications
-      if (storedSession) {
+      const stored = localStorage.getItem('currentUser');
+      if (stored) {
         try {
-          const sessionUser = JSON.parse(storedSession);
-          const masterUser = loadedUsers.find(u => u.id === sessionUser.id);
+          const parsed = JSON.parse(stored);
+          const masterUser = loadedUsers.find(u => u.id === parsed.id);
           if (masterUser) {
             setCurrentUser(masterUser);
             localStorage.setItem('currentUser', JSON.stringify(masterUser));
@@ -308,12 +535,18 @@ export default function App() {
       setFriendships(loadedFriendships);
     });
 
+    // 8. Subscribe to real-time chat permissions
+    const unsubChatPerms = subscribeChatPermissions((loadedChatPerms) => {
+      setChatPermissions(loadedChatPerms);
+    });
+
     return () => {
       unsubUsers();
       unsubPosts();
       unsubStories();
       unsubChats();
       unsubFriendships();
+      unsubChatPerms();
     };
   }, []);
 
@@ -337,16 +570,26 @@ export default function App() {
   };
 
   // 2. Authentication handlers
-  const handleLoginSuccess = (user: User) => {
+  const handleLoginSuccess = (user: User, token: string, rememberMe?: boolean) => {
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
+    localStorage.setItem('eo_jwt_token', token);
+    if (rememberMe) {
+      try {
+        const raw = JSON.stringify(user);
+        const b64 = btoa(encodeURIComponent(raw));
+        localStorage.setItem('eo_secure_keychain_token', `EO_KEYCHAIN_SECURE_${b64}`);
+      } catch (e) {}
+    } else {
+      localStorage.removeItem('eo_secure_keychain_token');
+    }
     setActiveView('feed');
     triggerToast(`Sessão iniciada! Bem-vindo, ${user.nickname}`);
   };
 
-  const handleRegisterSuccess = async (newUser: User) => {
-    // Automatically write newly created user to Firestore!
-    await dbUpdateUser(newUser);
+  const handleRegisterSuccess = async (newUser: User, token: string) => {
+    // Save JWT token
+    localStorage.setItem('eo_jwt_token', token);
 
     // 1. Create personal Welcome Notification for the new user (the owner)
     const welcomeNotif: Notification = {
@@ -373,7 +616,7 @@ export default function App() {
       const suggestionNotif: Notification = {
         id: 'notif_reg_' + u.id + '_' + Math.random().toString(36).substring(2, 9),
         recipientId: u.id,
-        title: 'Sugestão de Vínculo 🤝👁️',
+        title: 'Sugestão de Vínculo 🤝',
         text: `${newUser.fullname} (@${newUser.nickname}) acabou de criar uma conta, quer interagir com ele? Solicite-o!`,
         type: 'system',
         sender: {
@@ -398,6 +641,8 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('eo_jwt_token');
+    localStorage.removeItem('eo_secure_keychain_token');
     setActiveView('feed');
     triggerToast('Terminou a sessão com sucesso!');
   };
@@ -489,7 +734,171 @@ export default function App() {
     }
   };
 
-  const handlePublishPost = async (imgSrc: string | null, text: string, font: string, color: string) => {
+  const handleConnectUser = async (targetUserId: string, level: 'amigo' | 'familia' | 'conhecido' = 'amigo') => {
+    if (!currentUser) return;
+    const targetUser = users.find(u => u.id === targetUserId);
+    if (!targetUser) return;
+
+    const pending = friendships.some(f => 
+      f.status === 'pending' && 
+      ((f.senderId === currentUser.id && f.receiverId === targetUserId) || 
+       (f.senderId === targetUserId && f.receiverId === currentUser.id))
+    );
+    
+    if (pending) {
+      triggerToast(`Já existe um pedido de vínculo pendente com ${targetUser.nickname}`);
+      return;
+    }
+
+    const newFriendship = {
+      id: 'friend_' + Math.random().toString(36).substring(2, 9),
+      senderId: currentUser.id,
+      receiverId: targetUserId,
+      status: 'pending' as const,
+      level: level,
+      timestamp: Date.now()
+    };
+    await dbCreateFriendship(newFriendship);
+    
+    // Send a real-time notification
+    const newNotif = {
+      id: 'notif_' + Math.random().toString(36).substring(2, 9),
+      recipientId: targetUserId,
+      title: 'Novo pedido de vínculo',
+      text: `@${currentUser.nickname} quer vincular-se contigo como ${level === 'amigo' ? 'Amigo' : level === 'familia' ? 'Família' : 'Conhecido'}!`,
+      type: 'friend_request' as const,
+      sender: {
+        id: currentUser.id,
+        name: currentUser.nickname,
+        avatar: currentUser.avatar
+      },
+      read: false,
+      targetId: newFriendship.id,
+      targetView: 'notificacoes' as const,
+      timestamp: Date.now()
+    };
+    await dbCreateNotification(newNotif);
+    triggerToast(`Pedido de vínculo enviado para ${targetUser.nickname}`);
+  };
+
+  const handleAcceptFriendship = async (friendshipId: string, notifId: string) => {
+    if (!currentUser) return;
+    const f = friendships.find(item => item.id === friendshipId);
+    if (f) {
+      const updatedFriendship = {
+        ...f,
+        status: 'accepted' as const
+      };
+      await dbUpdateFriendship(updatedFriendship);
+      
+      const recipientId = f.senderId === currentUser.id ? f.receiverId : f.senderId;
+      const newNotif = {
+        id: 'notif_' + Math.random().toString(36).substring(2, 9),
+        recipientId,
+        title: 'Vínculo Aceite',
+        text: `@${currentUser.nickname} aceitou o teu pedido de vínculo!`,
+        type: 'friend_accepted' as const,
+        sender: {
+          id: currentUser.id,
+          name: currentUser.nickname,
+          avatar: currentUser.avatar
+        },
+        read: false,
+        targetId: friendshipId,
+        targetView: 'profile' as const,
+        timestamp: Date.now()
+      };
+      await dbCreateNotification(newNotif);
+      triggerToast('Pedido de vínculo aceite com sucesso!');
+    }
+    await dbDeleteNotification(notifId);
+  };
+
+  const handleDeclineFriendship = async (friendshipId: string, notifId: string) => {
+    const f = friendships.find(item => item.id === friendshipId);
+    if (f) {
+      await dbDeleteFriendship(f.id);
+    }
+    await dbDeleteNotification(notifId);
+    triggerToast('Pedido de vínculo recusado.');
+  };
+
+  const handleIgnoreFriendship = async (notifId: string) => {
+    await dbDeleteNotification(notifId);
+    triggerToast('Pedido de vínculo ignorado.');
+  };
+
+  const handleAddChatPermission = async (targetUserId: string, durationDays: 7 | 30 | 'permanent') => {
+    if (!currentUser) return;
+    
+    // Check if there is already a permission
+    const existing = chatPermissions.find(p => 
+      (p.senderId === currentUser.id && p.receiverId === targetUserId) ||
+      (p.senderId === targetUserId && p.receiverId === currentUser.id)
+    );
+    
+    if (existing) {
+      if (existing.status === 'pending') {
+        triggerToast('Já existe um pedido de conversa pendente.');
+        return;
+      } else if (existing.status === 'accepted' && (existing.expiresAt === null || existing.expiresAt > Date.now())) {
+        triggerToast('Já possui uma conversa ativa/autorizada com este utilizador.');
+        return;
+      }
+    }
+
+    const expiresAt = durationDays === 'permanent' ? null : Date.now() + (durationDays * 24 * 60 * 60 * 1000);
+
+    const newPerm: ChatPermission = {
+      id: 'perm_' + Math.random().toString(36).substring(2, 9),
+      senderId: currentUser.id,
+      receiverId: targetUserId,
+      status: 'pending',
+      durationDays,
+      timestamp: Date.now(),
+      expiresAt
+    };
+
+    await dbCreateChatPermission(newPerm);
+
+    // Send a real-time notification
+    const newNotif = {
+      id: 'notif_' + Math.random().toString(36).substring(2, 9),
+      recipientId: targetUserId,
+      title: 'Pedido de conversa',
+      text: `@${currentUser.nickname} quer iniciar uma conversa de nível: ${durationDays === 'permanent' ? 'Permanente' : durationDays + ' dias'}!`,
+      type: 'chat_request' as const,
+      sender: {
+        id: currentUser.id,
+        name: currentUser.nickname,
+        avatar: currentUser.avatar
+      },
+      read: false,
+      targetId: newPerm.id,
+      targetView: 'conversas' as const,
+      timestamp: Date.now()
+    };
+    await dbCreateNotification(newNotif);
+
+    triggerToast(`Pedido de conversa enviado (${durationDays === 'permanent' ? 'Permanente' : durationDays + ' dias'})!`);
+  };
+
+  const handleDisconnectUser = async (targetUserId: string) => {
+    if (!currentUser) return;
+    const targetUser = users.find(u => u.id === targetUserId);
+    if (!targetUser) return;
+
+    const f = friendships.find(f => 
+      ((f.senderId === currentUser.id && f.receiverId === targetUserId) || 
+       (f.senderId === targetUserId && f.receiverId === currentUser.id))
+    );
+    if (f) {
+      await dbDeleteFriendship(f.id);
+      triggerToast(`Vínculo removido com ${targetUser.nickname}`);
+    }
+  };
+
+  const handlePublishPost = async (imgSrc: string | null, text: string, font: string, color: string, isPrivate: boolean) => {
     if (!currentUser) return;
     if (currentUser.id === 'guest') {
       alert('Convidados não possuem permissão para criar publicações.');
@@ -501,6 +910,7 @@ export default function App() {
       image: imgSrc,
       text,
       style: { font, color },
+      isPrivate,
       author: {
         name: currentUser.nickname,
         avatar: currentUser.avatar,
@@ -517,7 +927,7 @@ export default function App() {
     triggerToast('Publicação criada com sucesso!');
   };
 
-  const handleAddComment = async (postId: string, text: string) => {
+  const handleAddComment = async (postId: string, text: string, audioUrl?: string, audioDuration?: number) => {
     if (!currentUser || currentUser.id === 'guest') return;
     const p = posts.find(x => x.id === postId);
     if (!p) return;
@@ -530,6 +940,8 @@ export default function App() {
         avatar: currentUser.avatar
       },
       text,
+      audioUrl,
+      audioDuration,
       timestamp: Date.now()
     };
 
@@ -718,11 +1130,14 @@ export default function App() {
     triggerToast('Inicie registo para aceder a esta funcionalidade!');
   };
 
-  const navigateToView = (view: ViewType) => {
+  const navigateToView = (view: ViewType, clearSelectedCommunityUser: boolean = true) => {
     if (currentUser?.id === 'guest' && view !== 'feed' && (view as string) !== 'register') {
       alert('Como convidado, precisa de uma conta para aceder a esta funcionalidade. Vamos direcioná-lo para criar uma conta!');
       handleRedirectToRegister();
       return;
+    }
+    if (view === 'profile' && clearSelectedCommunityUser) {
+      setSelectedCommunityUser(null);
     }
     setActiveView(view);
   };
@@ -738,7 +1153,7 @@ export default function App() {
         setAutoOpenPostId(targetId);
       }
     }
-    navigateToView(view);
+    navigateToView(view, targetId ? false : true);
   };
 
   // 5. Views Switcher Router Routing logic (Ensures absolutely NO empty states or broken buttons)
@@ -750,8 +1165,8 @@ export default function App() {
         return (
           <FeedView
             currentUser={currentUser}
-            posts={posts}
-            stories={stories}
+            posts={resolvedPosts}
+            stories={resolvedStories}
             onNavigate={navigateToView}
             onLikePost={handleLikePost}
             onDeletePost={handleDeletePost}
@@ -764,10 +1179,28 @@ export default function App() {
             autoOpenPostId={autoOpenPostId}
             onClearAutoOpenPost={() => setAutoOpenPostId(undefined)}
             currentThemeConfig={currentThemeConfig}
+            onNavigateToTarget={handleNavigateToTarget}
           />
         );
       case 'profile':
-        return <ProfileView currentUser={currentUser} onNavigate={navigateToView} />;
+        return (
+          <ProfileView 
+            currentUser={currentUser} 
+            targetUser={selectedCommunityUser || currentUser}
+            friendships={friendships}
+            posts={resolvedPosts}
+            chatPermissions={chatPermissions}
+            onNavigate={navigateToView} 
+            onUpdateUser={handleUpdateUser}
+            onLogout={handleLogout}
+            onDeleteAccount={handleDeleteAccount}
+            onAddFriendship={handleConnectUser}
+            onDeleteFriendship={handleDisconnectUser}
+            onAddComment={handleAddComment}
+            onLikePost={handleLikePost}
+            onAddChatPermission={handleAddChatPermission}
+          />
+        );
       case 'account':
         return (
           <AccountView
@@ -799,6 +1232,9 @@ export default function App() {
             currentUser={currentUser}
             notifications={notifications}
             onNavigateToTarget={handleNavigateToTarget}
+            onAcceptFriendship={handleAcceptFriendship}
+            onDeclineFriendship={handleDeclineFriendship}
+            onIgnoreFriendship={handleIgnoreFriendship}
           />
         );
       case 'musica':
@@ -1074,6 +1510,7 @@ export default function App() {
                                     senderId: currentUser?.id || '',
                                     receiverId: mem.id,
                                     status: 'pending' as const,
+                                    level: 'conhecido' as const,
                                     timestamp: Date.now()
                                   };
                                   dbCreateFriendship(newFriendship);
@@ -1140,7 +1577,7 @@ export default function App() {
               {/* Theme Selector (9 MODOS) */}
               <div>
                 <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)] mb-3">
-                  SELEÇÃO MANUAL DE TEMA (9 MODOS DISPONÍVEIS)
+                  SELEÇÃO MANUAL DE TEMA (10 MODOS DISPONÍVEIS)
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {[
@@ -1153,6 +1590,7 @@ export default function App() {
                     { id: 'crepusculo', name: 'Crepúsculo', color: '#8b5cf6', desc: 'Roxo sideral' },
                     { id: 'neon-cyber', name: 'Cyberpunk', color: '#00ffcc', desc: 'Neon de alta energia' },
                     { id: 'glass-minimalist', name: 'Glass', color: '#ffffff', desc: 'Vidro contemporâneo' },
+                    { id: 'eyes-max', name: 'Eyes Max', color: '#fbbf24', desc: 'Foco dourado super nítido 👁️' },
                   ].map((t) => (
                     <button
                       key={t.id}
@@ -1504,6 +1942,7 @@ export default function App() {
                                 senderId: currentUser.id,
                                 receiverId: selectedCommunityUser.id,
                                 status: 'pending' as const,
+                                level: 'conhecido' as const,
                                 timestamp: Date.now()
                               };
                               dbCreateFriendship(newFriendship);
@@ -1611,6 +2050,315 @@ export default function App() {
           onClose={() => setIsGlobalSearchOpen(false)}
         />
       )}
+
+      {/* ========================================== */}
+      {/* 1. EYES MAX SPECIAL THEME DOWNLOAD MODAL */}
+      {/* ========================================== */}
+      <AnimatePresence>
+        {showEyesMaxDownloadModal && (
+          <div className="fixed inset-0 bg-[#070504]/90 backdrop-blur-md z-[50000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93, y: 15 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+              className="bg-[#15110e] border-2 border-[#fbbf24]/20 rounded-3xl p-6 md:p-8 max-w-lg w-full text-center relative shadow-[0_16px_40px_rgba(0,0,0,0.6)] space-y-6"
+            >
+              <button
+                onClick={() => setShowEyesMaxDownloadModal(false)}
+                disabled={isDownloadingEyesMax}
+                className="absolute top-4 right-4 p-2 text-amber-500/50 hover:text-amber-400 rounded-full hover:bg-white/5 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#d97706] to-[#78350f] flex items-center justify-center shadow-md">
+                <Sparkles className="w-8 h-8 text-[#fef3c7]" />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="font-orbitron font-black text-2xl tracking-wider text-[#fbbf24] uppercase">
+                  Tema Imperial Eyes Max
+                </h2>
+                <p className="text-[#fef3c7]/60 text-xs uppercase tracking-widest font-bold">
+                  Sinfonia em Chocolate & Ouro Real
+                </p>
+              </div>
+
+              <p className="text-amber-100/80 text-sm leading-relaxed max-w-md mx-auto">
+                Desbloqueie o ecossistema premium de alta performance. Desenvolvido com uma assinatura visual única de profundidade 4D realista, sem neons, e com suporte integral ao assistente virtual integrado <span className="text-[#fbbf24] font-bold">Pay</span>.
+              </p>
+
+              {isDownloadingEyesMax ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-xs font-mono text-amber-400/80 px-1">
+                    <span>A descarregar recursos do tema...</span>
+                    <span className="font-bold">{downloadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-neutral-900 rounded-full overflow-hidden border border-amber-500/10">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-[#d97706] to-[#fbbf24]"
+                      animate={{ width: `${downloadProgress}%` }}
+                      transition={{ duration: 0.1 }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-amber-500/50 italic">
+                    {downloadProgress < 40 && 'Configurando layouts horizontais...'}
+                    {downloadProgress >= 40 && downloadProgress < 80 && 'Compilando micro-físicas táteis...'}
+                    {downloadProgress >= 80 && 'Sincronizando modelos com Pay...'}
+                  </p>
+                </div>
+              ) : eyesMaxDownloaded ? (
+                <div className="space-y-4">
+                  <div className="py-2.5 px-4 bg-amber-950/20 border border-green-500/30 rounded-xl flex items-center justify-center gap-2 text-green-400 text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                    <span>Recursos descarregados com sucesso!</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowEyesMaxDownloadModal(false);
+                      triggerApplyEyesMaxFlow();
+                    }}
+                    className="w-full py-3.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-orbitron font-extrabold text-xs tracking-widest rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-lg cursor-pointer uppercase"
+                  >
+                    Aplicar Tema Especial
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={triggerDownloadEyesMax}
+                  className="w-full py-3.5 bg-gradient-to-r from-[#d97706] to-[#fbbf24] text-black font-orbitron font-extrabold text-xs tracking-widest rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-lg cursor-pointer uppercase"
+                >
+                  Aceitar e Descarregar Recursos (1.2 MB)
+                </button>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================== */}
+      {/* 2. EXCLUSIVE FULL SCREEN APPLYING LOADER   */}
+      {/* ========================================== */}
+      <AnimatePresence>
+        {isApplyingEyesMax && (
+          <div className="fixed inset-0 bg-[#0c0907] z-[99999] flex flex-col items-center justify-center p-6 select-none">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center space-y-8 max-w-sm w-full"
+            >
+              {/* Spinning luxury circular progress indicator */}
+              <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#1d1611"
+                    strokeWidth="4"
+                    fill="transparent"
+                  />
+                  <motion.circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#fbbf24"
+                    strokeWidth="4"
+                    fill="transparent"
+                    strokeDasharray={251.2}
+                    animate={{ strokeDashoffset: 251.2 - (251.2 * applyProgress) / 100 }}
+                    transition={{ duration: 0.1 }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="font-orbitron font-black text-xl text-[#fbbf24]">{applyProgress}%</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="font-orbitron font-black text-lg tracking-widest text-[#fbbf24] uppercase">
+                  A ATIVAR EYES MAX
+                </h3>
+                <p className="text-amber-100/50 text-xs uppercase tracking-wider h-6 transition-all duration-300">
+                  {applyProgress < 30 && 'Sincronizando matriz de profundidade 4D...'}
+                  {applyProgress >= 30 && applyProgress < 60 && 'Carregando paleta chocolate imperial...'}
+                  {applyProgress >= 60 && applyProgress < 85 && 'Ajustando grelha horizontal de publicações...'}
+                  {applyProgress >= 85 && 'Despertando assistente virtual "Pay"...'}
+                </p>
+              </div>
+
+              {/* Minimalist physical progress bar */}
+              <div className="w-full h-1 bg-amber-950/20 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-[#fbbf24]"
+                  animate={{ width: `${applyProgress}%` }}
+                  transition={{ duration: 0.1 }}
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================== */}
+      {/* 3. FLOATING "PAY" ASSISTANT LAUNCHER       */}
+      {/* ========================================== */}
+      {theme === 'eyes-max' && !showPayAssistant && (
+        <motion.button
+          onClick={() => setShowPayAssistant(true)}
+          initial={{ scale: 0, y: 50 }}
+          animate={{ 
+            scale: 1, 
+            y: 0,
+            transition: { type: 'spring', stiffness: 260, damping: 15 }
+          }}
+          whileHover={{ 
+            scale: 1.12, 
+            y: -5,
+            transition: { type: 'spring', stiffness: 300, damping: 10 }
+          }}
+          whileTap={{ scale: 0.90 }}
+          className="fixed bottom-6 right-6 z-[40000] w-14 h-14 rounded-full bg-gradient-to-br from-[#fbbf24] to-[#78350f] text-black shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-[#fbbf24]/30 cursor-pointer flex items-center justify-center group"
+          title="Falar com Pay"
+        >
+          <MessageSquare className="w-6 h-6 text-[#15110e] group-hover:rotate-12 transition-transform duration-300" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#15110e] animate-pulse"></span>
+        </motion.button>
+      )}
+
+      {/* ========================================== */}
+      {/* 4. PAY ASSISTANT CHAT DIALOG CONTAINER    */}
+      {/* ========================================== */}
+      <AnimatePresence>
+        {theme === 'eyes-max' && showPayAssistant && (
+          <motion.div
+            initial={{ opacity: 0, y: 80, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 80, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 20 }}
+            className="fixed bottom-6 right-6 z-[45000] w-96 max-w-[calc(100vw-2rem)] h-[520px] max-h-[85vh] bg-[#140f0c] border border-[#fbbf24]/30 rounded-3xl shadow-[0_16px_48px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden text-left"
+          >
+            {/* Header */}
+            <div className="bg-[#1b1410] border-b border-[#fbbf24]/10 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#fbbf24] to-[#78350f] flex items-center justify-center border border-[#fbbf24]/20 shadow-md">
+                  <MessageSquare className="w-5 h-5 text-[#15110e]" />
+                </div>
+                <div>
+                  <h4 className="font-orbitron font-extrabold text-sm text-[#fbbf24] tracking-wide uppercase">
+                    Pay Assistant
+                  </h4>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    <span className="text-[10px] text-amber-200/50 uppercase tracking-widest font-bold">Virtual</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowPayAssistant(false)}
+                  className="p-1.5 text-amber-500/50 hover:text-amber-400 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
+                >
+                  <X className="w-4.5 h-4.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Conversation Flow area */}
+            <div className="flex-grow p-4 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-amber-950 no-scrollbar">
+              {assistantMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs font-medium leading-relaxed shadow-sm ${
+                      msg.role === 'user'
+                        ? 'bg-[#fbbf24] text-[#15110e] rounded-br-none'
+                        : 'bg-[#1b1410] border border-amber-500/10 text-amber-100 rounded-bl-none'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+              ))}
+              {isAssistantTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-[#1b1410] border border-amber-500/10 text-amber-100 rounded-2xl rounded-bl-none px-4 py-2.5 flex items-center gap-1 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Form control bottom */}
+            <div className="p-3 bg-[#17120e] border-t border-[#fbbf24]/10 flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Pergunte ao Pay..."
+                value={assistantInput}
+                onChange={(e) => setAssistantInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSendAssistantMessage();
+                }}
+                disabled={isAssistantTyping}
+                className="flex-grow bg-[#100c09] border border-amber-500/10 hover:border-amber-500/25 focus:border-[#fbbf24]/40 rounded-xl px-3.5 py-2 text-xs text-amber-100 focus:outline-none placeholder-amber-500/30 transition-all duration-300"
+              />
+              <button
+                onClick={handleSendAssistantMessage}
+                disabled={isAssistantTyping || !assistantInput.trim()}
+                className="py-2 px-3.5 bg-gradient-to-r from-[#d97706] to-[#fbbf24] text-black text-xs font-bold rounded-xl transition-all hover:opacity-90 disabled:opacity-40 disabled:hover:opacity-40 cursor-pointer"
+              >
+                Enviar
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================== */}
+      {/* 5. WELCOME POPUP ALERT DIALOG FROM PAY    */}
+      {/* ========================================== */}
+      <AnimatePresence>
+        {showEyesMaxWelcome && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[48000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#15110e] border-2 border-[#fbbf24]/30 rounded-3xl p-6 max-w-md w-full text-center relative shadow-2xl space-y-5"
+            >
+              <div className="w-12 h-12 mx-auto rounded-xl bg-amber-950/30 border border-[#fbbf24]/20 flex items-center justify-center">
+                <MessageSquare className="w-6 h-6 text-[#fbbf24]" />
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="font-orbitron font-black text-base text-[#fbbf24] tracking-wide uppercase">
+                  Bem-vindo ao Eyes Max!
+                </h3>
+                <p className="text-[#fef3c7]/50 text-[10px] uppercase tracking-widest font-bold">
+                  Uma mensagem de Pay
+                </p>
+              </div>
+
+              <p className="text-amber-100/90 text-xs leading-relaxed">
+                "Olá! Eu sou o <span className="text-[#fbbf24] font-bold">Pay</span>, o assistente oficial do Eyes Open MZ. Estou muito feliz em apresentar este novo ecossistema de requinte imperial criado pelo meu mentor <span className="text-[#fbbf24] font-bold">Ofício Faustino Rachide</span>. O site agora apresenta publicações dispostas em grelha dupla horizontal, acabamentos premium sem neons e animações táteis customizadas. Conte comigo para qualquer ajuda!"
+              </p>
+
+              <button
+                onClick={() => setShowEyesMaxWelcome(false)}
+                className="w-full py-2.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-orbitron font-bold text-xs tracking-widest rounded-xl transition-all cursor-pointer uppercase shadow-md"
+              >
+                Começar a Explorar
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

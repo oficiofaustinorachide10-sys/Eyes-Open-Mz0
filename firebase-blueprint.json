@@ -14,11 +14,17 @@
         "nickname": { "type": "string" },
         "password": { "type": "string" },
         "province": { "type": "string" },
+        "district": { "type": "string" },
         "created": { "type": "string" },
         "avatar": { "type": "string" },
         "stats": { "type": "object" },
         "nameEditDate": { "type": "string" },
         "isVIP": { "type": "boolean" },
+        "isVerified": { "type": "boolean" },
+        "bio": { "type": "string" },
+        "cover": { "type": "string" },
+        "privacySettings": { "type": "object" },
+        "accountStatus": { "type": "string" },
         "lastReadChatTimestamp": { "type": "number" },
         "lastReadNotificationsTimestamp": { "type": "number" },
         "mutedNotifications": { "type": "boolean" }
@@ -52,9 +58,10 @@
         "senderId": { "type": "string" },
         "receiverId": { "type": "string" },
         "status": { "type": "string" },
+        "level": { "type": "string" },
         "timestamp": { "type": "number" }
       },
-      "required": ["id", "senderId", "receiverId", "status", "timestamp"]
+      "required": ["id", "senderId", "receiverId", "status", "level", "timestamp"]
     },
     "ChatPermission": {
       "title": "ChatPermission",

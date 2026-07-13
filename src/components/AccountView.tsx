@@ -123,13 +123,6 @@ export default function AccountView({
       };
       onUpdateUser(updated);
       triggerToast('Endereço de e-mail atualizado!');
-    } else if (activePopup === 'password') {
-      const updated: UserType = {
-        ...currentUser,
-        password: inputVal.trim() // standard client storage hashing already handled
-      };
-      onUpdateUser(updated);
-      triggerToast('Senha de acesso redefinida!');
     }
 
     setActivePopup(null);
@@ -245,7 +238,7 @@ export default function AccountView({
               </div>
 
               {/* Action buttons list */}
-              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/5">
+              <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/5">
                 <button
                   onClick={() => {
                     setActivePopup('phone');
@@ -263,15 +256,6 @@ export default function AccountView({
                   className="py-1.5 rounded-lg bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan/20 text-[10px] font-bold tracking-wider text-neon-cyan transition-colors cursor-pointer text-center uppercase"
                 >
                   Email
-                </button>
-                <button
-                  onClick={() => {
-                    setActivePopup('password');
-                    setInputVal('');
-                  }}
-                  className="py-1.5 rounded-lg bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan/20 text-[10px] font-bold tracking-wider text-neon-cyan transition-colors cursor-pointer text-center uppercase"
-                >
-                  Senha
                 </button>
               </div>
             </div>
@@ -319,7 +303,6 @@ export default function AccountView({
               <h3 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-wider uppercase">
                 {activePopup === 'phone' && 'Alterar Número de Telefone'}
                 {activePopup === 'email' && 'Alterar Endereço de Email'}
-                {activePopup === 'password' && 'Redefinir Senha de Acesso'}
                 {activePopup === 'delete' && '⚠️ ELIMINAR MINHA CONTA'}
               </h3>
 
@@ -328,11 +311,11 @@ export default function AccountView({
                   <div>
                     <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Novo valor</label>
                     <input
-                      type={activePopup === 'password' ? 'password' : 'text'}
+                      type="text"
                       value={inputVal}
                       onChange={(e) => setInputVal(e.target.value)}
                       className="w-full bg-black/40 border border-neon-cyan/30 rounded-xl px-4 py-2.5 text-xs text-white outline-none"
-                      placeholder={activePopup === 'password' ? 'Insira a nova senha' : 'Digite o novo valor'}
+                      placeholder="Digite o novo valor"
                     />
                   </div>
                   <button

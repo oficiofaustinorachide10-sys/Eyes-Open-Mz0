@@ -25,9 +25,25 @@ export interface User {
   stats: UserStats;
   nameEditDate: string | null;
   isVIP?: boolean;
+  isVerified?: boolean;
   lastReadChatTimestamp?: number;
   lastReadNotificationsTimestamp?: number;
   mutedNotifications?: boolean;
+  birthday?: string;
+  gender?: string;
+  orientation?: string;
+  bio?: string;
+  hideLocation?: boolean;
+  ghostMode?: boolean;
+  e2eeEnabled?: boolean;
+  cover?: string;
+  privacySettings?: {
+    comment: 'public' | 'community' | 'friends' | 'family' | 'conhecidos' | 'only_me';
+    react: 'public' | 'community' | 'friends' | 'family' | 'conhecidos' | 'only_me';
+    share: 'public' | 'community' | 'friends' | 'family' | 'conhecidos' | 'only_me';
+    view: 'public' | 'community' | 'friends' | 'family' | 'conhecidos' | 'only_me';
+  };
+  accountStatus?: 'active' | 'deactivated';
 }
 
 export interface Notification {
@@ -51,7 +67,8 @@ export interface Friendship {
   id: string;
   senderId: string;
   receiverId: string;
-  status: 'pending' | 'accepted' | 'declined';
+  status: 'pending' | 'accepted' | 'declined' | 'ignored';
+  level: 'amigo' | 'familia' | 'conhecido';
   timestamp: number;
 }
 
@@ -81,6 +98,8 @@ export interface Comment {
   };
   text: string;
   timestamp: number;
+  audioUrl?: string;
+  audioDuration?: number;
 }
 
 export interface Post {
@@ -96,6 +115,7 @@ export interface Post {
   stars: number;
   views: number;
   starred?: boolean;
+  isPrivate?: boolean;
   timestamp: number;
   comments?: Comment[];
 }

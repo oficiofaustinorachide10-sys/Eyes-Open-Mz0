@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 
 const config = JSON.parse(readFileSync('./firebase-applet-config.json', 'utf8'));
 const app = initializeApp(config);
-const db = getFirestore(app, config.firestoreDatabaseId);
+const db = getFirestore(app);
 
 async function test() {
   try {

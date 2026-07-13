@@ -149,6 +149,24 @@ export const SEED_USERS: User[] = [
     stats: { likes: 350, posts: 4, friends: 98 },
     nameEditDate: null,
     isVIP: false
+  },
+  {
+    id: 'user_oficiorachide2003',
+    phone: '+258841234567',
+    email: 'oficiorachide2003@gmail.com',
+    fullname: 'Oficio Faustino Rachide',
+    firstname: 'Oficio',
+    surname: 'Rachide',
+    nickname: 'oficiorachide2003',
+    password: simpleHash('Hellfuego005'),
+    province: 'Zambézia',
+    district: 'Quelimane',
+    created: new Date().toISOString(),
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+    stats: { likes: 350, posts: 4, friends: 98 },
+    nameEditDate: null,
+    isVIP: true,
+    isVerified: true
   }
 ];
 
@@ -171,7 +189,7 @@ export const SEED_POSTS: Post[] = [
   {
     id: 'post_2',
     image: null,
-    text: 'Cultura moçambicana no topo do mundo! Novidades incríveis chegando no canal de cinema em breve. Fiquem atentos, olhos bem abertos! 👁️🔥🇲🇿',
+    text: 'Cultura moçambicana no topo do mundo! Novidades incríveis chegando no canal de cinema em breve. Fiquem atentos, olhos bem abertos! 🔥🇲🇿',
     style: { font: 'Courier New', color: '#ff00aa' },
     author: {
       name: 'Alex MZ',

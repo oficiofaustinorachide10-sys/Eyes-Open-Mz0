@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { FONTS_LIST, COLOR_OPTIONS } from '../utils';
 
 interface PublishPostViewProps {
-  onPublish: (imgSrc: string | null, text: string, font: string, color: string) => void;
+  onPublish: (imgSrc: string | null, text: string, font: string, color: string, isPrivate: boolean) => void;
   onCancel: () => void;
 }
 
@@ -20,6 +20,7 @@ export default function PublishPostView({ onPublish, onCancel }: PublishPostView
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [selectedFont, setSelectedFont] = useState('Poppins');
   const [selectedColor, setSelectedColor] = useState('#ffffff');
+  const [isPrivate, setIsPrivate] = useState(false);
   
   const [isPublishing, setIsPublishing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -51,13 +52,14 @@ export default function PublishPostView({ onPublish, onCancel }: PublishPostView
       setShowSuccess(true);
 
       // Save post
-      onPublish(imgSrc, text.trim(), selectedFont, selectedColor);
+      onPublish(imgSrc, text.trim(), selectedFont, selectedColor, isPrivate);
 
       // Reset
       setText('');
       setImgSrc(null);
       setSelectedFont('Poppins');
       setSelectedColor('#ffffff');
+      setIsPrivate(false);
 
       setTimeout(() => {
         setShowSuccess(false);
@@ -77,7 +79,7 @@ export default function PublishPostView({ onPublish, onCancel }: PublishPostView
         </button>
 
         <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase">
-          👁️ CRIAR NOVA PUBLICAÇÃO
+          CRIAR NOVA PUBLICAÇÃO
         </h2>
       </div>
 
@@ -176,6 +178,25 @@ export default function PublishPostView({ onPublish, onCancel }: PublishPostView
               ))}
             </div>
           </div>
+        </div>
+
+        {/* PRIVACY TOGGLE */}
+        <div className="bg-black/35 border border-neon-cyan/20 rounded-2xl p-4 flex items-center justify-between">
+          <div className="text-left">
+            <span className="block text-neon-cyan font-bold text-xs uppercase tracking-wider">Visibilidade da Publicação</span>
+            <span className="block text-[10px] text-gray-400 mt-1 uppercase font-semibold">
+              {isPrivate ? 'Apenas Amigos (Restrito às suas conexões aceites)' : 'Público (Qualquer visitante pode ver)'}
+            </span>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={isPrivate} 
+              onChange={(e) => setIsPrivate(e.target.checked)}
+              className="sr-only peer" 
+            />
+            <div className="w-11 h-6 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon-cyan" />
+          </label>
         </div>
 
         {/* CORE CTA */}

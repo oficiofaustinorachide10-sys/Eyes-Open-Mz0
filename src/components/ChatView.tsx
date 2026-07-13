@@ -8,7 +8,7 @@ import {
   Send, MessageSquare, ShieldCheck, Clock, UserPlus, UserCheck, Lock, Unlock, 
   Hourglass, Phone, Video, FileUp, MapPin, Calendar, Award, Folder, Play, Check, 
   X, HelpCircle, Briefcase, Radio, AlertTriangle, Sparkles, Star, Users, CheckCircle2, UserX, Plus,
-  MoreVertical, Settings, ArrowLeft
+  MoreVertical, Settings, ArrowLeft, VideoOff, Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Friendship, ChatPermission, Notification } from '../types';
@@ -96,6 +96,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   const [isMobileChatActive, setIsMobileChatActive] = useState<boolean>(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDefinitionsOpen, setIsDefinitionsOpen] = useState(false);
+  const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
 
   // Mentions / Chamar states
   const [mentionQuery, setMentionQuery] = useState('');
@@ -293,6 +294,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
       senderId: currentUser.id,
       receiverId: targetUser.id,
       status: 'pending',
+      level: 'conhecido',
       timestamp: Date.now()
     };
     await dbCreateFriendship(newFriendship);
@@ -1009,17 +1011,18 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
         )}
 
         {/* Header bar */}
-        <div className="px-4 py-3 md:px-5 md:py-4 bg-[var(--theme-bg-card)] border-b border-[var(--theme-border)] flex items-center justify-between shrink-0 select-none">
-          {chatLayoutTheme === 'normal' && (
-            <button
-              onClick={() => setIsMobileChatActive(false)}
-              className="mr-3 px-2.5 py-1.5 bg-black/30 hover:bg-[var(--theme-accent)] hover:text-black border border-[var(--theme-border)] text-white rounded-xl text-[10px] font-bold font-orbitron tracking-widest uppercase transition-all flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Voltar
-            </button>
-          )}
-          {selectedChatId === 'group' ? (
-            <div className="flex items-center justify-between w-full">
+        <div className="px-4 py-3 md:px-5 md:py-4 bg-[var(--theme-bg-card)] border-b border-[var(--theme-border)] flex items-center justify-between shrink-0 select-none relative z-20">
+          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+            {chatLayoutTheme === 'normal' && (
+              <button
+                onClick={() => setIsMobileChatActive(false)}
+                className="mr-2 px-2.5 py-1.5 bg-black/30 hover:bg-[var(--theme-accent)] hover:text-black border border-[var(--theme-border)] text-white rounded-xl text-[10px] font-bold font-orbitron tracking-widest uppercase transition-all flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+              </button>
+            )}
+
+            {selectedChatId === 'group' ? (
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-[var(--theme-accent)]/15 border border-[var(--theme-accent)]/35 flex items-center justify-center">
                   <Users className="w-4 h-4 text-[var(--theme-accent)]" />
@@ -1037,29 +1040,8 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                   </p>
                 </div>
               </div>
-
-              {/* Live Video Button */}
-              <div className="flex items-center gap-2">
-                {isInGroupLive ? (
-                  <button
-                    onClick={handleLeaveLive}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-orbitron font-extrabold text-[10px] tracking-wider rounded-xl uppercase transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Video className="w-3.5 h-3.5 animate-pulse" /> Sair da Live
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleJoinLive}
-                    className="px-3 py-1.5 bg-gradient-to-r from-neon-cyan to-neon-magenta hover:brightness-110 text-black font-orbitron font-extrabold text-[10px] tracking-wider rounded-xl uppercase transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Video className="w-3.5 h-3.5" /> Entrar na Live
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            activeChatUser && (
-              <div className="flex items-center justify-between w-full">
+            ) : (
+              activeChatUser && (
                 <div className="flex items-center gap-2.5 min-w-0">
                   <UserAvatar 
                     src={activeChatUser.avatar} 
@@ -1082,33 +1064,118 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                     </div>
                   </div>
                 </div>
+              )
+            )}
+          </div>
 
-                {/* Expiration Timer Countdown Indicator */}
-                {activePermission?.active && activePermission.perm && (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/20 text-[9px] font-semibold font-mono text-[var(--theme-accent)] rounded-full uppercase shrink-0">
-                    <Clock className="w-3.5 h-3.5 text-[var(--theme-accent)] animate-spin-slow" />
-                    {activePermission.perm.duration === 'permanent' ? (
-                      <span>Permanente</span>
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Expiration Timer Countdown Indicator */}
+            {selectedChatId !== 'group' && activePermission?.active && activePermission.perm && (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/20 text-[9px] font-semibold font-mono text-[var(--theme-accent)] rounded-full uppercase">
+                <Clock className="w-3.5 h-3.5 text-[var(--theme-accent)] animate-spin-slow" />
+                {activePermission.perm.duration === 'permanent' ? (
+                  <span>Permanente</span>
+                ) : (
+                  <span>
+                    {activePermission.perm.expiresAt && activePermission.perm.expiresAt - now > 0 ? (
+                      (() => {
+                        const diff = activePermission.perm.expiresAt - now;
+                        const hrs = Math.floor(diff / 3600000);
+                        const mins = Math.floor((diff % 3600000) / 60000);
+                        const secs = Math.floor((diff % 60000) / 1000);
+                        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                      })()
                     ) : (
-                      <span>
-                        {activePermission.perm.expiresAt && activePermission.perm.expiresAt - now > 0 ? (
-                          (() => {
-                            const diff = activePermission.perm.expiresAt - now;
-                            const hrs = Math.floor(diff / 3600000);
-                            const mins = Math.floor((diff % 3600000) / 60000);
-                            const secs = Math.floor((diff % 60000) / 1000);
-                            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                          })()
-                        ) : (
-                          'Expirado'
-                        )}
-                      </span>
+                      'Expirado'
                     )}
-                  </div>
+                  </span>
                 )}
               </div>
-            )
-          )}
+            )}
+
+            {/* Menu de Ações da Conversa (Three Dots) */}
+            <div className="relative">
+              <button
+                onClick={() => setIsChatActionsMenuOpen(!isChatActionsMenuOpen)}
+                className="w-8 h-8 rounded-lg bg-black/40 hover:bg-white/10 border border-white/10 flex items-center justify-center cursor-pointer transition-all text-gray-400 hover:text-white"
+                title="Ações da Conversa"
+                id="conversation-actions-btn"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              <AnimatePresence>
+                {isChatActionsMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-2 w-56 bg-[#0a0a1a] border border-[var(--theme-border)] rounded-2xl p-2.5 shadow-2xl z-50 space-y-1 font-sans text-xs text-left text-white"
+                  >
+                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest px-2.5 py-1">Menu de Conversa</p>
+                    
+                    {/* Live Option */}
+                    {isInGroupLive ? (
+                      <button
+                        onClick={() => {
+                          handleLeaveLive();
+                          setIsChatActionsMenuOpen(false);
+                        }}
+                        className="w-full text-left px-2.5 py-2 hover:bg-red-500/10 hover:text-red-400 text-red-500 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
+                      >
+                        <VideoOff className="w-4 h-4" /> Sair da Live
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            handleJoinLive();
+                            setIsChatActionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-2.5 py-2 hover:bg-white/5 text-gray-200 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
+                        >
+                          <Video className="w-4 h-4 text-neon-cyan animate-pulse" /> Iniciar Live
+                        </button>
+                        {groupLives.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setIsChatActionsMenuOpen(false);
+                            }}
+                            className="w-full text-left px-2.5 py-2 hover:bg-white/5 text-gray-200 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
+                          >
+                            <Tv className="w-4 h-4 text-neon-magenta" /> Ver Live ({groupLives.length}/4)
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    <div className="border-t border-white/5 my-1" />
+
+                    {/* Context Actions / Location */}
+                    <p className="text-[8px] font-bold text-gray-500 uppercase tracking-widest px-2.5 py-1">Ações da Conversa</p>
+                    <button
+                      onClick={() => {
+                        setIsChatActionsMenuOpen(false);
+                        setSimulationModal({ type: 'location', requiredLevel: 'familia', targetUser: activeChatUser });
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-400 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-orange-400" /> Partilhar Localização
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsChatActionsMenuOpen(false);
+                        setSimulationModal({ type: 'file_share', requiredLevel: 'parceiro', targetUser: activeChatUser });
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-400 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                    >
+                      <Folder className="w-3.5 h-3.5 text-purple-400" /> Enviar Ficheiro
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
 
         {/* GROUP VIDEO LIVE GRID (Up to 4 participants, random real-time online live) */}

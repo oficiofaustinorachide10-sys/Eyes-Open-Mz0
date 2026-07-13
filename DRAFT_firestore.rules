@@ -1,0 +1,211 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Catch-all default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Users Collection Rules ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (
+        // Protect isVIP and isVerified from being self-assigned
+        request.resource.data.isVIP == resource.data.isVIP &&
+        request.resource.data.isVerified == resource.data.isVerified
+      );
+      allow delete: if isOwner(userId);
+    }
+
+    function isValidUser(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.phone is string && data.phone.size() <= 32
+          && data.email is string && data.email.size() <= 128
+          && data.fullname is string && data.fullname.size() <= 128
+          && data.firstname is string && data.firstname.size() <= 64
+          && data.surname is string && data.surname.size() <= 64
+          && data.nickname is string && data.nickname.size() <= 64
+          && data.province is string && data.province.size() <= 64;
+    }
+
+    // --- Friendships (Vínculos) Rules ---
+    match /friendships/{friendshipId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(friendshipId) && isValidFriendship(request.resource.data) && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(friendshipId) && isValidFriendship(request.resource.data) && (
+        // Only the receiver can accept, decline, or ignore
+        request.auth.uid == resource.data.receiverId &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.receiverId == resource.data.receiverId &&
+        request.resource.data.level == resource.data.level
+      );
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+    }
+
+    function isValidFriendship(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.senderId is string && data.senderId.size() <= 128
+          && data.receiverId is string && data.receiverId.size() <= 128
+          && data.status in ['pending', 'accepted', 'declined', 'ignored']
+          && data.level in ['amigo', 'familia', 'conhecido']
+          && data.timestamp is number;
+    }
+
+    // --- Chat Permissions Rules ---
+    match /chat_permissions/{chatPermissionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(chatPermissionId) && isValidChatPermission(request.resource.data) && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(chatPermissionId) && isValidChatPermission(request.resource.data) && (
+        // Only the receiver can update status
+        request.auth.uid == resource.data.receiverId &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.receiverId == resource.data.receiverId &&
+        request.resource.data.level == resource.data.level &&
+        request.resource.data.duration == resource.data.duration
+      );
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+    }
+
+    function isValidChatPermission(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.senderId is string && data.senderId.size() <= 128
+          && data.receiverId is string && data.receiverId.size() <= 128
+          && data.status in ['pending', 'accepted', 'declined', 'ignored']
+          && data.duration in ['24h', '48h', '7d', 'permanent']
+          && data.level in ['conhecido', 'amigo', 'parceiro', 'familia', 'equipe', 'vip']
+          && data.timestamp is number;
+    }
+
+    // --- Posts Rules ---
+    match /posts/{postId} {
+      allow read: if isSignedIn() && (
+        // Public posts are visible to all signed-in users
+        resource.data.isPrivate != true ||
+        // Owner can always read
+        request.auth.uid == resource.data.author.id ||
+        // Check friendship access if post is restricted
+        hasRelationAccess(resource.data.author.id)
+      );
+      allow create: if isSignedIn() && isValidId(postId) && isValidPost(request.resource.data) && request.resource.data.author.id == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(postId) && isValidPost(request.resource.data) && (
+        // Only owner can update non-star fields, or anyone can perform a star reaction increment
+        (request.auth.uid == resource.data.author.id && request.resource.data.author.id == resource.data.author.id) ||
+        // Star reaction update (only affectedKeys().hasOnly(['stars', 'comments']))
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stars', 'comments']))
+      );
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.author.id);
+    }
+
+    function isValidPost(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.author is map && data.author.id is string
+          && data.stars is number && data.views is number
+          && data.timestamp is number;
+    }
+
+    function hasRelationAccess(authorId) {
+      let pathA = /databases/$(database)/documents/friendships/$(request.auth.uid + '_' + authorId);
+      let pathB = /databases/$(database)/documents/friendships/$(authorId + '_' + request.auth.uid);
+      return (exists(pathA) && get(pathA).data.status == 'accepted') ||
+             (exists(pathB) && get(pathB).data.status == 'accepted');
+    }
+
+    // --- Stories Rules ---
+    match /stories/{storyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(storyId) && isValidStory(request.resource.data) && request.resource.data.author.id == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(storyId) && isValidStory(request.resource.data) && (
+        (request.auth.uid == resource.data.author.id && request.resource.data.author.id == resource.data.author.id) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stars', 'views']))
+      );
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.author.id);
+    }
+
+    function isValidStory(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.type in ['photo', 'text']
+          && data.src is string
+          && data.author is map && data.author.id is string
+          && data.timestamp is number;
+    }
+
+    // --- Chats Messages Rules ---
+    match /chats/{chatId} {
+      allow read: if isSignedIn() && (
+        // Group messages are public to all signed-in users
+        resource.data.recipientId == null ||
+        // Direct messages are only readable by the sender or the recipient
+        request.auth.uid == resource.data.sender.id ||
+        request.auth.uid == resource.data.recipientId
+      );
+      allow create: if isSignedIn() && isValidId(chatId) && isValidChat(request.resource.data) && (
+        // Group message is free, private direct message requires pre-approved ChatPermission
+        request.resource.data.recipientId == null ||
+        (request.resource.data.sender.id == request.auth.uid &&
+         hasChatPermission(request.resource.data.sender.id, request.resource.data.recipientId))
+      );
+      allow update: if isSignedIn() && isValidId(chatId) && (
+        // Only message sender can edit or delete
+        request.auth.uid == resource.data.sender.id &&
+        request.resource.data.sender.id == resource.data.sender.id
+      );
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.sender.id);
+    }
+
+    function isValidChat(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.sender is map && data.sender.id is string
+          && data.timestamp is number;
+    }
+
+    function hasChatPermission(senderId, receiverId) {
+      let pathA = /databases/$(database)/documents/chat_permissions/$(senderId + '_' + receiverId);
+      let pathB = /databases/$(database)/documents/chat_permissions/$(receiverId + '_' + senderId);
+      return (exists(pathA) && get(pathA).data.status == 'accepted' && (get(pathA).data.expiresAt == null || get(pathA).data.expiresAt > request.time.toMillis()))
+          || (exists(pathB) && get(pathB).data.status == 'accepted' && (get(pathB).data.expiresAt == null || get(pathB).data.expiresAt > request.time.toMillis()));
+    }
+
+    // --- Notifications Rules ---
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (
+        resource.data.recipientId == 'all' ||
+        resource.data.recipientId == request.auth.uid
+      );
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidNotification(request.resource.data) && (
+        // Limit notification sender to current user
+        request.resource.data.sender.id == request.auth.uid
+      );
+      allow update: if isSignedIn() && (
+        // Recipients can mark as read
+        request.auth.uid == resource.data.recipientId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+      );
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.recipientId);
+    }
+
+    function isValidNotification(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.recipientId is string && data.recipientId.size() <= 128
+          && data.title is string && data.title.size() <= 128
+          && data.text is string && data.text.size() <= 256
+          && data.type in ['like', 'comment', 'star', 'system', 'mention', 'friend_request', 'chat_request', 'friend_accepted', 'chat_accepted']
+          && data.sender is map && data.sender.id is string
+          && data.timestamp is number;
+    }
+  }
+}

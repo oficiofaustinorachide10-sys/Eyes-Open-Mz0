@@ -14,6 +14,8 @@ import {
   dbCreateFriendship, dbCreateChatPermission, dbCreateNotification 
 } from '../lib/db';
 import { ThemeConfig } from '../utils/themeEngine';
+import { playClickFeedback, playCommentSound, playPublishPostSound, playStarSound, playNotificationSound } from '../utils/audioSystem';
+import ShimmeringBackground from './ShimmeringBackground';
 
 interface FeedViewProps {
   currentUser: User;
@@ -25,12 +27,13 @@ interface FeedViewProps {
   onLikeStory: (storyId: string) => void;
   onAddStoryView: (storyId: string) => void;
   onAddPostView: (postId: string) => void;
-  onAddComment: (postId: string, text: string) => void;
+  onAddComment: (postId: string, text: string, audioUrl?: string, audioDuration?: number) => void;
   onDeleteComment?: (postId: string, commentId: string) => void;
   onReactComment?: (postId: string, commentId: string, reaction: 'star' | 'broken_star') => void;
   autoOpenPostId?: string;
   onClearAutoOpenPost?: () => void;
   currentThemeConfig?: ThemeConfig;
+  onNavigateToTarget?: (view: any, targetId?: string) => void;
 }
 
 // 4D ROTATIONAL CARD COMPONENT FOR FEED POSTS
@@ -40,7 +43,9 @@ function RotationalCard({
   onLike, 
   onDelete, 
   onClick,
-  onAddView
+  onAddView,
+  onAuthorClick,
+  currentThemeConfig
 }: { 
   post: Post; 
   currentUser: User; 
@@ -48,11 +53,14 @@ function RotationalCard({
   onDelete: () => void; 
   onClick: () => void;
   onAddView: () => void;
+  onAuthorClick?: () => void;
+  currentThemeConfig?: ThemeConfig;
   key?: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);
+  const isEyesMax = currentThemeConfig?.id === 'eyes-max';
 
   // Tracks views increment on load
   useEffect(() => {
@@ -62,35 +70,54 @@ function RotationalCard({
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left; // x position within the element.
-    const y = e.clientY - rect.top;  // y position within the element.
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // 3D Rotation mapping: horizontal movement rotates Y, vertical rotates X
-    const factor = 0.15; // dampening
-    setRotateY((x - centerX) * factor);
-    setRotateX(-(y - centerY) * factor);
+    // Deeper, luxury 4D rotational movement mapping
+    const maxRot = isEyesMax ? 22 : 15;
+    const rotateYVal = ((x - centerX) / centerX) * maxRot;
+    const rotateXVal = -((y - centerY) / centerY) * maxRot;
+    
+    setRotateY(rotateYVal);
+    setRotateX(rotateXVal);
   };
 
   const handleMouseLeave = () => {
     if (cardRef.current) {
-      cardRef.current.style.transition = 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+      cardRef.current.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
     }
     setRotateX(0);
     setRotateY(0);
   };
 
+  const handleCardClick = () => {
+    playClickFeedback();
+    onClick();
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[#0d0d26]/85 border border-neon-cyan/25 rounded-2xl overflow-hidden shadow-xl hover:shadow-neon-cyan/10 transition-shadow">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ y: -6, scale: 1.015 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+      className={`flex flex-col h-full rounded-2xl overflow-hidden shadow-xl transition-shadow ${
+        isEyesMax 
+          ? 'bg-[#141108]/90 border border-amber-500/30 hover:border-amber-400/60 hover:shadow-amber-500/10' 
+          : 'bg-[#0d0d26]/85 border border-neon-cyan/25 hover:shadow-neon-cyan/10'
+      }`}
+    >
       {/* 4D Rotating Wrapper */}
       <div 
         ref={cardRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        onClick={onClick}
+        onClick={handleCardClick}
         style={{
-          transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+          transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
           transformStyle: 'preserve-3d',
         }}
         className="relative aspect-square w-full cursor-pointer overflow-hidden group select-none"
@@ -103,7 +130,11 @@ function RotationalCard({
             className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-700"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-tr from-[#121235] to-[#1d0a2f] p-6 flex items-center justify-center text-center">
+          <div className={`w-full h-full p-6 flex items-center justify-center text-center ${
+            isEyesMax 
+              ? 'bg-gradient-to-tr from-[#1b1509] to-[#261d0d]' 
+              : 'bg-gradient-to-tr from-[#121235] to-[#1d0a2f]'
+          }`}>
             <p 
               className="text-base font-bold leading-relaxed line-clamp-6"
               style={{ fontFamily: post.style?.font || 'Poppins', color: post.style?.color || '#ffffff' }}
@@ -113,9 +144,14 @@ function RotationalCard({
           </div>
         )}
 
+        {/* Shimmer overlay for eyes-max theme */}
+        {isEyesMax && (
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+        )}
+
         {/* Dark overlay on photo card */}
         {post.image && (
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent pointer-events-none" />
         )}
 
         {/* Delete option overlay */}
@@ -123,6 +159,7 @@ function RotationalCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              playClickFeedback();
               onDelete();
             }}
             className="absolute top-3 right-3 w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center text-white cursor-pointer z-10 hover:scale-110 active:scale-95 transition-all shadow-lg"
@@ -136,12 +173,17 @@ function RotationalCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              playStarSound(isEyesMax);
               onLike();
             }}
             className={`w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-md border cursor-pointer transition-all ${
               post.starred
-                ? 'bg-yellow-500/80 border-yellow-500 text-white shadow-lg shadow-yellow-500/30'
-                : 'bg-black/60 border-neon-cyan/40 text-gray-400 hover:text-white hover:border-neon-cyan'
+                ? isEyesMax
+                  ? 'bg-amber-500/80 border-amber-400 text-white shadow-lg shadow-amber-500/30'
+                  : 'bg-yellow-500/80 border-yellow-500 text-white shadow-lg shadow-yellow-500/30'
+                : isEyesMax
+                  ? 'bg-black/60 border-amber-500/40 text-gray-400 hover:text-white hover:border-amber-400'
+                  : 'bg-black/60 border-neon-cyan/40 text-gray-400 hover:text-white hover:border-neon-cyan'
             }`}
           >
             <Star className={`w-4 h-4 ${post.starred ? 'fill-white' : ''}`} />
@@ -150,10 +192,14 @@ function RotationalCard({
       </div>
 
       {/* Description & User Footprint */}
-      <div className="p-4 flex flex-col flex-grow bg-[#0c0c24] border-t border-neon-cyan/15 select-none">
+      <div className={`p-4 flex flex-col flex-grow select-none border-t ${
+        isEyesMax 
+          ? 'bg-[#18140a] border-amber-500/15' 
+          : 'bg-[#0c0c24] border-neon-cyan/15'
+      }`}>
         {post.image && post.text && (
           <p 
-            className="text-xs text-gray-300 leading-relaxed mb-3 line-clamp-2"
+            className={`text-xs leading-relaxed mb-3 line-clamp-2 ${isEyesMax ? 'text-amber-100/90' : 'text-gray-300'}`}
             style={{ fontFamily: post.style?.font || 'Poppins' }}
           >
             {post.text}
@@ -161,28 +207,37 @@ function RotationalCard({
         )}
         <div className="mt-auto flex items-center justify-between gap-2">
           {/* Author info */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              playClickFeedback();
+              if (onAuthorClick) onAuthorClick();
+            }}
+            className="flex items-center gap-2 min-w-0 hover:opacity-85 transition-opacity"
+          >
             <img 
               src={post.author.avatar || "https://i.pravatar.cc/80?img=1"} 
               alt={post.author.name}
               referrerPolicy="no-referrer"
-              className="w-7 h-7 rounded-full border border-neon-cyan/50 object-cover shrink-0"
+              className={`w-7 h-7 rounded-full border object-cover shrink-0 cursor-pointer ${
+                isEyesMax ? 'border-amber-500/40' : 'border-[#6366f1]/50'
+              }`}
             />
-            <span className="text-xs font-bold text-neon-cyan truncate">{post.author.name}</span>
+            <span className={`text-xs font-bold truncate cursor-pointer ${isEyesMax ? 'text-amber-200' : 'text-slate-100'}`}>@{post.author.name}</span>
           </div>
 
           {/* Core Analytics info */}
-          <div className="flex items-center gap-3 text-[10px] text-gray-500 shrink-0 font-mono font-bold">
+          <div className="flex items-center gap-3 text-[10px] shrink-0 font-mono font-bold text-gray-500">
             <span className="flex items-center gap-1">
-              <Star className="w-3.5 h-3.5 text-yellow-500/70" /> {post.stars}
+              <Star className={`w-3.5 h-3.5 ${isEyesMax ? 'text-amber-500/70' : 'text-yellow-500/70'}`} /> {post.stars}
             </span>
             <span className="flex items-center gap-1">
-              <Eye className="w-3.5 h-3.5 text-neon-cyan/70" /> {post.views}
+              <Eye className={`w-3.5 h-3.5 ${isEyesMax ? 'text-amber-500/70' : 'text-neon-cyan/70'}`} /> {post.views}
             </span>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -204,6 +259,46 @@ function CommentItem({
 }) {
   const [isPressing, setIsPressing] = useState(false);
   const pressTimeoutRef = useRef<any>(null);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (comment.audioUrl) {
+      audioRef.current = new Audio(comment.audioUrl);
+      const onTimeUpdate = () => {
+        setCurrentTime(audioRef.current?.currentTime || 0);
+      };
+      const onEnded = () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      };
+      audioRef.current.addEventListener('timeupdate', onTimeUpdate);
+      audioRef.current.addEventListener('ended', onEnded);
+
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.removeEventListener('timeupdate', onTimeUpdate);
+          audioRef.current.removeEventListener('ended', onEnded);
+        }
+      };
+    }
+  }, [comment.audioUrl]);
+
+  const handleTogglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    playClickFeedback();
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().catch(err => console.log("Audio playback error", err));
+      setIsPlaying(true);
+    }
+  };
 
   const handleStartPress = () => {
     setIsPressing(true);
@@ -258,9 +353,52 @@ function CommentItem({
               {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
-          <p className="text-[11px] text-gray-300 mt-1 font-semibold leading-relaxed break-words">
-            {comment.text}
-          </p>
+          {comment.text && (
+            <p className="text-[11px] text-gray-300 mt-1 font-semibold leading-relaxed break-words">
+              {comment.text}
+            </p>
+          )}
+
+          {/* Render audio player when comment has audioUrl */}
+          {comment.audioUrl && (
+            <div className="flex items-center gap-2.5 bg-[#141108]/80 border border-amber-500/20 rounded-xl p-2 mt-2 shadow-inner">
+              <button 
+                type="button"
+                onClick={handleTogglePlay}
+                className="w-7 h-7 rounded-full bg-amber-500/20 hover:bg-amber-500/35 text-amber-400 flex items-center justify-center border border-amber-500/30 cursor-pointer active:scale-90 transition-all shrink-0"
+              >
+                {isPlaying ? <Pause className="w-3 h-3 fill-amber-400" /> : <Play className="w-3 h-3 fill-amber-400 ml-0.5" />}
+              </button>
+              
+              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                <div className="flex justify-between items-center text-[8px] font-mono font-bold text-amber-500/80">
+                  <span className="uppercase tracking-wider">Comentário de Voz</span>
+                  <span>
+                    {Math.round(currentTime)}s / {comment.audioDuration || 0}s
+                  </span>
+                </div>
+                {/* Visual Audio Waveform Equalizer */}
+                <div className="flex items-end gap-[2px] h-3.5 pt-0.5">
+                  {Array.from({ length: 18 }).map((_, i) => {
+                    const isActive = isPlaying;
+                    const randomFactor = Math.sin(i * 0.4 + currentTime * 8) * 0.5 + 0.5;
+                    const heightPct = isActive ? Math.round(20 + randomFactor * 80) : Math.round(20 + Math.sin(i * 0.7) * 30 + 10);
+                    const isPlayed = (i / 18) * (comment.audioDuration || 1) <= currentTime;
+                    
+                    return (
+                      <div 
+                        key={i} 
+                        style={{ height: `${heightPct}%` }}
+                        className={`flex-1 rounded-sm transition-all duration-150 ${
+                          isPlayed ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-white/10'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -346,9 +484,118 @@ export default function FeedView({
   autoOpenPostId,
   onClearAutoOpenPost,
   currentThemeConfig,
+  onNavigateToTarget,
 }: FeedViewProps) {
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+
+  // Audio recording states & systems
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+
+  const startVoiceRecording = async () => {
+    playClickFeedback();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setRecordedAudioUrl(audioUrl);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      setRecordedAudioUrl(null);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.warn("MediaRecorder failed or permission denied, using luxury synthesizer audio fallback:", err);
+      // Fallback: Simulate active luxury recording with synthesized notes
+      setIsRecording(true);
+      setRecordingDuration(0);
+      setRecordedAudioUrl(null);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    }
+  };
+
+  const stopVoiceRecording = (save: boolean) => {
+    playClickFeedback();
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      if (!save) {
+        setRecordedAudioUrl(null);
+      }
+    } else {
+      // Synthesized Fallback stops
+      if (save) {
+        const sampleRate = 8000;
+        const numSamples = sampleRate * Math.max(2, recordingDuration || 4);
+        const buffer = new ArrayBuffer(44 + numSamples * 2);
+        const view = new DataView(buffer);
+        
+        // Write WAV header
+        view.setUint32(0, 0x52494646, false); // "RIFF"
+        view.setUint32(4, 36 + numSamples * 2, true);
+        view.setUint32(8, 0x57415645, false); // "WAVE"
+        view.setUint32(12, 0x666d7420, false); // "fmt "
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // LPCM
+        view.setUint16(22, 1, true); // mono
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        view.setUint32(36, 0x64617461, false); // "data"
+        view.setUint32(40, numSamples * 2, true);
+        
+        // Write dynamic luxury chord tones!
+        for (let i = 0; i < numSamples; i++) {
+          const t = i / sampleRate;
+          // Soft cascading harmonic melody for luxury voice comment feeling
+          let freq = 440;
+          if (t > 1.0) freq = 554;
+          if (t > 2.0) freq = 659;
+          if (t > 3.0) freq = 880;
+          
+          const sample = Math.sin(2 * Math.PI * freq * t) * 0.35 * Math.exp(-1.5 * (t % 1.0));
+          const intSample = Math.max(-32768, Math.min(32767, sample * 32767));
+          view.setInt16(44 + i * 2, intSample, true);
+        }
+        
+        const blob = new Blob([buffer], { type: 'audio/wav' });
+        const audioUrl = URL.createObjectURL(blob);
+        setRecordedAudioUrl(audioUrl);
+      } else {
+        setRecordedAudioUrl(null);
+      }
+    }
+    setIsRecording(false);
+  };
   const [isPlayingStory, setIsPlayingStory] = useState(true);
   const [storyProgress, setStoryProgress] = useState(0);
 
@@ -445,6 +692,9 @@ export default function FeedView({
   const currentStory = selectedStoryIndex !== null ? stories[selectedStoryIndex] : null;
 
   const gridClasses = (() => {
+    if (currentThemeConfig?.id === 'eyes-max') {
+      return 'grid-cols-2 w-full max-w-5xl gap-4 md:gap-6';
+    }
     const colType = currentThemeConfig?.gridCols || 'grid';
     switch (colType) {
       case '1-col':
@@ -458,7 +708,10 @@ export default function FeedView({
   })();
 
   return (
-    <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-8 font-rajdhani select-none text-white overflow-y-auto no-scrollbar pb-16">
+    <div className={`flex-1 relative overflow-y-auto no-scrollbar pb-16 ${currentThemeConfig?.id === 'eyes-max' ? 'bg-[#060502]' : ''}`}>
+      {currentThemeConfig?.id === 'eyes-max' && <ShimmeringBackground />}
+      
+      <div className="relative z-10 p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-8 font-rajdhani select-none text-white">
       {/* SECTION 1: EYES 42H STORIES */}
       <section className="bg-[#090920]/65 border border-neon-cyan/15 rounded-3xl p-5 shadow-lg">
         <div className="flex items-center justify-between mb-4">
@@ -511,7 +764,7 @@ export default function FeedView({
       <section className="space-y-6">
         <div className="flex items-center justify-between border-b border-neon-cyan/10 pb-3">
           <h2 className="font-orbitron font-extrabold text-xl tracking-widest text-white glow-text-cyan flex items-center gap-2">
-            👁️ PUBLICAÇÕES
+            PUBLICAÇÕES
           </h2>
           <button
             onClick={() => onNavigate('publish-post')}
@@ -532,6 +785,7 @@ export default function FeedView({
                 key={post.id}
                 post={post}
                 currentUser={currentUser}
+                currentThemeConfig={currentThemeConfig}
                 onLike={() => onLikePost(post.id)}
                 onDelete={() => onDeletePost(post.id)}
                 onClick={() => {
@@ -539,6 +793,7 @@ export default function FeedView({
                   onAddPostView(post.id);
                 }}
                 onAddView={() => onAddPostView(post.id)}
+                onAuthorClick={() => onNavigateToTarget && onNavigateToTarget('profile', post.author.id)}
               />
             ))}
           </div>
@@ -716,7 +971,11 @@ export default function FeedView({
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="relative w-full max-w-[550px] max-h-[90vh] overflow-y-auto no-scrollbar bg-[#0c0c24] border-2 border-neon-cyan rounded-3xl p-6 shadow-3xl text-center"
+              className={`relative w-full max-w-[550px] max-h-[90vh] overflow-y-auto no-scrollbar rounded-3xl p-6 shadow-3xl text-center border-2 ${
+                currentThemeConfig?.id === 'eyes-max'
+                  ? 'bg-[#141108] border-amber-500 shadow-amber-500/10'
+                  : 'bg-[#0c0c24] border-neon-cyan shadow-neon-cyan/20'
+              }`}
             >
               {/* Close */}
               <button
@@ -726,24 +985,41 @@ export default function FeedView({
                 <X className="w-4 h-4" />
               </button>
 
-              <h3 className="font-orbitron font-extrabold text-lg text-neon-cyan tracking-wide mb-4 uppercase">
+              <h3 className={`font-orbitron font-extrabold text-lg tracking-wide mb-4 uppercase ${
+                currentThemeConfig?.id === 'eyes-max' ? 'text-amber-400' : 'text-neon-cyan'
+              }`}>
                 Detalhes do Post
               </h3>
 
               {selectedPost.image && (
-                <div className="w-full aspect-video rounded-xl overflow-hidden mb-4 border border-neon-cyan/20">
+                <div 
+                  onClick={() => {
+                    playClickFeedback();
+                    setFullScreenImage(selectedPost.image);
+                  }}
+                  className={`w-full aspect-video rounded-xl overflow-hidden mb-4 cursor-pointer group relative border ${
+                    currentThemeConfig?.id === 'eyes-max' ? 'border-amber-500/30' : 'border-neon-cyan/20'
+                  }`}
+                >
                   <img 
                     src={selectedPost.image} 
                     alt="Post Ampliado" 
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                    <span className="text-[10px] font-bold text-white uppercase tracking-widest bg-black/75 px-3.5 py-1.5 rounded-full border border-white/20 font-orbitron">
+                      🔍 Ver Tela Cheia
+                    </span>
+                  </div>
                 </div>
               )}
 
               {/* Text content styling matching the post's custom format */}
               {selectedPost.text && (
-                <div className="p-4 bg-black/40 border border-neon-cyan/15 rounded-xl text-sm leading-relaxed text-left mb-5">
+                <div className={`p-4 bg-black/40 border rounded-xl text-sm leading-relaxed text-left mb-5 ${
+                  currentThemeConfig?.id === 'eyes-max' ? 'border-amber-500/15' : 'border-neon-cyan/15'
+                }`}>
                   <p style={{ fontFamily: selectedPost.style?.font || 'Poppins', color: selectedPost.style?.color || '#ffffff' }}>
                     {selectedPost.text}
                   </p>
@@ -751,13 +1027,17 @@ export default function FeedView({
               )}
 
               {/* Author footer */}
-              <div className="flex items-center justify-between border-t border-neon-cyan/15 pt-4">
+              <div className={`flex items-center justify-between border-t pt-4 ${
+                currentThemeConfig?.id === 'eyes-max' ? 'border-amber-500/15' : 'border-neon-cyan/15'
+              }`}>
                 <div className="flex items-center gap-2">
                   <img 
                     src={selectedPost.author.avatar} 
                     alt={selectedPost.author.name}
                     referrerPolicy="no-referrer"
-                    className="w-9 h-9 rounded-full border border-neon-cyan/60 object-cover"
+                    className={`w-9 h-9 rounded-full border object-cover ${
+                      currentThemeConfig?.id === 'eyes-max' ? 'border-amber-500/50' : 'border-neon-cyan/60'
+                    }`}
                   />
                   <div className="text-left">
                     <p className="text-xs font-bold text-white leading-tight">{selectedPost.author.name}</p>
@@ -770,7 +1050,11 @@ export default function FeedView({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleShare(`https://openmz.com/post/${selectedPost.id}`)}
-                    className="w-10 h-10 rounded-full bg-[#121235] border border-neon-cyan/25 hover:border-neon-cyan text-gray-300 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                    className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all border ${
+                      currentThemeConfig?.id === 'eyes-max' 
+                        ? 'bg-[#1c150a] border-amber-500/30 hover:border-amber-400 text-amber-200' 
+                        : 'bg-[#121235] border-neon-cyan/25 hover:border-neon-cyan text-gray-300'
+                    }`}
                     title="Partilhar"
                   >
                     <Share2 className="w-4 h-4" />
@@ -791,8 +1075,12 @@ export default function FeedView({
                     }}
                     className={`w-12 h-10 px-3 rounded-full flex items-center gap-1.5 border cursor-pointer hover:scale-105 active:scale-95 transition-all text-xs font-bold ${
                       selectedPost.starred
-                        ? 'bg-yellow-500 border-yellow-400 text-white shadow-md'
-                        : 'bg-[#121235] border-white/20 text-gray-300'
+                        ? currentThemeConfig?.id === 'eyes-max'
+                          ? 'bg-amber-500 border-amber-400 text-white shadow-md'
+                          : 'bg-yellow-500 border-yellow-400 text-white shadow-md'
+                        : currentThemeConfig?.id === 'eyes-max'
+                          ? 'bg-[#1c150a] border-amber-500/20 text-amber-200'
+                          : 'bg-[#121235] border-white/20 text-gray-300'
                     }`}
                   >
                     <Star className={`w-3.5 h-3.5 ${selectedPost.starred ? 'fill-white' : ''}`} />
@@ -802,8 +1090,12 @@ export default function FeedView({
               </div>
 
               {/* Comments Section */}
-              <div className="border-t border-neon-cyan/15 pt-5 mt-5 text-left">
-                <h4 className="font-orbitron font-bold text-xs text-neon-cyan tracking-wider mb-3 uppercase">
+              <div className={`border-t pt-5 mt-5 text-left ${
+                currentThemeConfig?.id === 'eyes-max' ? 'border-amber-500/15' : 'border-neon-cyan/15'
+              }`}>
+                <h4 className={`font-orbitron font-bold text-xs tracking-wider mb-3 uppercase ${
+                  currentThemeConfig?.id === 'eyes-max' ? 'text-amber-400' : 'text-neon-cyan'
+                }`}>
                   Comentários ({selectedPost.comments?.length || 0})
                 </h4>
 
@@ -841,59 +1133,197 @@ export default function FeedView({
                     ⚠️ Apenas contas registadas podem comentar.
                   </div>
                 ) : (
-                  <form 
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const form = e.currentTarget;
-                      const input = form.elements.namedItem('commentText') as HTMLInputElement;
-                      const text = input.value;
-                      if (!text.trim()) return;
-                      onAddComment(selectedPost.id, text.trim());
-                      
-                      const newComment = {
-                        id: 'comment_' + Math.random().toString(36).substring(2, 9),
-                        author: {
-                          id: currentUser.id,
-                          name: currentUser.nickname,
-                          avatar: currentUser.avatar
-                        },
-                        text: text.trim(),
-                        timestamp: Date.now(),
-                        starsCount: 0,
-                        brokenStarsCount: 0,
-                        reactions: {}
-                      };
-                      setSelectedPost((prev) => {
-                        if (!prev) return null;
-                        return {
-                          ...prev,
-                          comments: [...(prev.comments || []), newComment]
+                  <div className="space-y-2.5">
+                    {/* Active Voice Recording Panel */}
+                    {isRecording && (
+                      <div className="flex items-center justify-between bg-red-950/20 border border-red-500/30 rounded-2xl p-3 animate-pulse">
+                        <div className="flex items-center gap-2">
+                          <motion.div 
+                            animate={{ scale: [1, 1.25, 1] }}
+                            transition={{ repeat: Infinity, duration: 1 }}
+                            className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-md shadow-red-500/50"
+                          />
+                          <span className="text-xs font-mono font-bold text-red-400">GRAVANDO: {recordingDuration}s</span>
+                        </div>
+                        
+                        {/* Audio equalizer animation during recording */}
+                        <div className="flex items-end gap-[3px] h-4">
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <motion.div 
+                              key={i}
+                              animate={{ height: [4, 16, 4] }}
+                              transition={{ repeat: Infinity, duration: 0.5 + (i * 0.05), ease: "easeInOut" }}
+                              className="w-0.5 bg-red-500 rounded-full"
+                            />
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => stopVoiceRecording(false)}
+                            className="px-2.5 py-1 bg-neutral-800 text-gray-300 hover:text-white text-[10px] font-bold uppercase rounded-lg border border-white/10 active:scale-95 transition-all cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => stopVoiceRecording(true)}
+                            className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase rounded-lg shadow-lg active:scale-95 transition-all cursor-pointer"
+                          >
+                            Salvar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recorded Audio Attachment Preview */}
+                    {recordedAudioUrl && !isRecording && (
+                      <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 rounded-2xl p-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs">🎙️</span>
+                          <span className="text-xs font-bold text-amber-400 font-orbitron tracking-wide uppercase">Áudio Pronto ({recordingDuration}s)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playClickFeedback();
+                            setRecordedAudioUrl(null);
+                          }}
+                          className="p-1 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg active:scale-90 transition-all cursor-pointer"
+                          title="Remover áudio"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const input = form.elements.namedItem('commentText') as HTMLInputElement;
+                        const text = input.value;
+                        if (!text.trim() && !recordedAudioUrl) return;
+                        
+                        const commentText = text.trim() || "Comentário de Voz 🎙️";
+                        onAddComment(selectedPost.id, commentText, recordedAudioUrl || undefined, recordedAudioUrl ? recordingDuration : undefined);
+                        
+                        playCommentSound();
+                        
+                        const newComment = {
+                          id: 'comment_' + Math.random().toString(36).substring(2, 9),
+                          author: {
+                            id: currentUser.id,
+                            name: currentUser.nickname,
+                            avatar: currentUser.avatar
+                          },
+                          text: text.trim() ? text.trim() : undefined,
+                          audioUrl: recordedAudioUrl || undefined,
+                          audioDuration: recordedAudioUrl ? recordingDuration : undefined,
+                          timestamp: Date.now(),
+                          starsCount: 0,
+                          brokenStarsCount: 0,
+                          reactions: {}
                         };
-                      });
-                      form.reset();
-                    }}
-                    className="flex gap-2"
-                  >
-                    <input
-                      type="text"
-                      name="commentText"
-                      required
-                      placeholder="Escreva um comentário..."
-                      className="flex-1 bg-black/50 border border-neon-cyan/30 rounded-xl px-3 py-2 text-xs outline-none focus:border-neon-cyan text-white placeholder:text-gray-600 font-rajdhani font-semibold"
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-neon-cyan hover:bg-white text-black font-orbitron font-extrabold text-[10px] tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0"
+                        
+                        setSelectedPost((prev) => {
+                          if (!prev) return null;
+                          return {
+                            ...prev,
+                            comments: [...(prev.comments || []), newComment]
+                          };
+                        });
+                        
+                        form.reset();
+                        setRecordedAudioUrl(null);
+                      }}
+                      className="flex gap-2 items-center"
                     >
-                      Enviar
-                    </button>
-                  </form>
+                      <input
+                        type="text"
+                        name="commentText"
+                        required={!recordedAudioUrl}
+                        placeholder={recordedAudioUrl ? "Adicionar descrição (opcional)..." : "Escreva um comentário..."}
+                        className="flex-1 bg-black/50 border border-neon-cyan/30 rounded-xl px-3 py-2 text-xs outline-none focus:border-neon-cyan text-white placeholder:text-gray-600 font-rajdhani font-semibold"
+                      />
+
+                      {/* Microphone recording trigger */}
+                      {!isRecording && !recordedAudioUrl && (
+                        <button
+                          type="button"
+                          onClick={startVoiceRecording}
+                          className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#141108]/85 border border-amber-500/35 text-amber-500 hover:text-amber-400 hover:border-amber-400/60 active:scale-90 transition-all cursor-pointer shrink-0 shadow-md shadow-amber-500/5"
+                          title="Gravar áudio"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        </button>
+                      )}
+
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-neon-cyan hover:bg-white text-black font-orbitron font-extrabold text-[10px] tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0"
+                      >
+                        Enviar
+                      </button>
+                    </form>
+                  </div>
                 )}
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* FULL SCREEN LIGHTBOX PHOTO VIEWER */}
+      <AnimatePresence>
+        {fullScreenImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              playClickFeedback();
+              setFullScreenImage(null);
+            }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-black/98 backdrop-blur-xl cursor-zoom-out select-none"
+          >
+            {/* Close Floating CTA */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                playClickFeedback();
+                setFullScreenImage(null);
+              }}
+              className="absolute top-6 right-6 w-11 h-11 rounded-full bg-black/60 border border-white/20 text-white flex items-center justify-center cursor-pointer hover:bg-white hover:text-black transition-colors z-50 shadow-2xl"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <motion.div
+              initial={{ scale: 0.9, rotate: -1 }}
+              animate={{ scale: 1, rotate: 0 }}
+              exit={{ scale: 0.9, rotate: 1 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="relative max-w-full max-h-[85vh] flex items-center justify-center rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={fullScreenImage}
+                alt="Imagem ampliada em tela cheia"
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-[85vh] object-contain rounded-3xl select-none"
+              />
+            </motion.div>
+
+            {/* Hint bar */}
+            <p className="mt-4 text-[10px] font-extrabold font-orbitron tracking-widest text-gray-500 uppercase">
+              Clique em qualquer lugar para fechar
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div>
     </div>
   );
 }

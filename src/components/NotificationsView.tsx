@@ -39,12 +39,18 @@ interface NotificationsViewProps {
   currentUser: User;
   notifications: Notification[];
   onNavigateToTarget: (view: any, targetId?: string) => void;
+  onAcceptFriendship?: (friendshipId: string, notifId: string) => void;
+  onDeclineFriendship?: (friendshipId: string, notifId: string) => void;
+  onIgnoreFriendship?: (notifId: string) => void;
 }
 
 export default function NotificationsView({ 
   currentUser, 
   notifications: rawNotifications, 
-  onNavigateToTarget 
+  onNavigateToTarget,
+  onAcceptFriendship,
+  onDeclineFriendship,
+  onIgnoreFriendship
 }: NotificationsViewProps) {
 
   // Strict Dual-Channel Segregation: filter only Canal A (Social) notifications
@@ -338,6 +344,29 @@ export default function NotificationsView({
                           </>
                         )}
                       </div>
+                      
+                      {notif.type === 'friend_request' && notif.targetId && (
+                        <div className="flex items-center gap-2 mt-3 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => onAcceptFriendship && onAcceptFriendship(notif.targetId!, notif.id)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer shadow-sm"
+                          >
+                            Aceitar
+                          </button>
+                          <button
+                            onClick={() => onDeclineFriendship && onDeclineFriendship(notif.targetId!, notif.id)}
+                            className="px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-950 border border-red-900/50 hover:border-red-500 text-red-400 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer"
+                          >
+                            Recusar
+                          </button>
+                          <button
+                            onClick={() => onIgnoreFriendship && onIgnoreFriendship(notif.id)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer"
+                          >
+                            Ignorar
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -400,7 +429,7 @@ export default function NotificationsView({
                     GUIA DE BOAS-VINDAS
                   </h3>
                   <p className="text-[10px] text-yellow-400 font-orbitron font-extrabold tracking-widest uppercase">
-                    COMO FUNCIONA O EYES OPEN MZ 👁️🇲🇿
+                    COMO FUNCIONA O EYES OPEN MZ 🇲🇿
                   </p>
                 </div>
               </div>

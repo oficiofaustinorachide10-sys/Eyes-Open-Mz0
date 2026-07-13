@@ -238,7 +238,7 @@ export default function StoryEditor({ onPublish, onCancel }: StoryEditorProps) {
         </button>
 
         <h1 className="font-orbitron font-extrabold text-lg text-neon-cyan tracking-wider hidden sm:block">
-          👁️ EYES 42H - CRIADOR DE HISTÓRIAS
+          EYES 42H - CRIADOR DE HISTÓRIAS
         </h1>
 
         {imgSrc && (

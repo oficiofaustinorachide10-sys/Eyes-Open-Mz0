@@ -1,10 +1,10 @@
 {
-  "projectId": "tenacious-harbor-5j4jh",
-  "appId": "1:6588037814:web:bb683f3d24eeaf90e40417",
-  "apiKey": "AIzaSyCkkZnps1JdKxyOXFUuiLdaN3vom1pvueU",
-  "authDomain": "tenacious-harbor-5j4jh.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-eyesopenmz-1232ad45-8e58-455b-90b8-813f4e529800",
-  "storageBucket": "tenacious-harbor-5j4jh.firebasestorage.app",
-  "messagingSenderId": "6588037814",
-  "measurementId": ""
+  "projectId": "eyes-open-mz-7a933",
+  "appId": "1:861329511037:web:f3fa1e64a37a8e18d69714",
+  "apiKey": "AIzaSyCstYApQqwFjsHjxqw7DpMiOG9JWhNeYec",
+  "authDomain": "eyes-open-mz-7a933.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "eyes-open-mz-7a933.firebasestorage.app",
+  "messagingSenderId": "861329511037",
+  "measurementId": "G-J69DPF3JSG"
 }

@@ -15,6 +15,45 @@ import { db } from './firebase';
 import { User, Post, Story, Notification, Friendship, ChatPermission } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES } from '../utils';
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  let userId: string | null = null;
+  try {
+    const stored = localStorage.getItem('currentUser');
+    if (stored) {
+      userId = JSON.parse(stored).id;
+    }
+  } catch (e) {}
+
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 // Helper to check if database has collections and seed them if empty
 export async function seedDatabaseIfEmpty() {
   try {
@@ -64,7 +103,7 @@ export async function seedDatabaseIfEmpty() {
             avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
             id: 'user1'
           },
-          text: 'Olá malta! Sejam muito bem-vindos à rede de conversação oficial do Eyes Open MZ 👁️🇲🇿',
+          text: 'Olá malta! Sejam muito bem-vindos à rede de conversação oficial do Eyes Open MZ 🇲🇿',
           timestamp: Date.now() - 3600000
         },
         {
@@ -141,7 +180,9 @@ export function subscribeUsers(callback: (users: User[]) => void) {
       list.push(docSnap.data() as User);
     });
     callback(list);
-  }, (err) => console.error('Users sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'users');
+  });
 }
 
 export function subscribePosts(callback: (posts: Post[]) => void) {
@@ -158,7 +199,9 @@ export function subscribePosts(callback: (posts: Post[]) => void) {
       } as Post);
     });
     callback(list);
-  }, (err) => console.error('Posts sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'posts');
+  });
 }
 
 export function subscribeStories(callback: (stories: Story[]) => void) {
@@ -174,7 +217,9 @@ export function subscribeStories(callback: (stories: Story[]) => void) {
       } as Story);
     });
     callback(list);
-  }, (err) => console.error('Stories sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'stories');
+  });
 }
 
 export function subscribeChats(callback: (messages: any[]) => void) {
@@ -189,50 +234,88 @@ export function subscribeChats(callback: (messages: any[]) => void) {
       });
     });
     callback(list);
-  }, (err) => console.error('Chats sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'chats');
+  });
 }
 
 // User Profile Actions
 export async function dbUpdateUser(user: User) {
-  await setDoc(doc(db, 'users', user.id), user, { merge: true });
+  try {
+    await setDoc(doc(db, 'users', user.id), user, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `users/${user.id}`);
+  }
 }
 
 export async function dbDeleteUser(userId: string) {
-  await deleteDoc(doc(db, 'users', userId));
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `users/${userId}`);
+  }
 }
 
 // Post Actions
 export async function dbCreatePost(post: Post) {
-  await setDoc(doc(db, 'posts', post.id), {
-    ...post,
-    comments: []
-  });
+  try {
+    await setDoc(doc(db, 'posts', post.id), {
+      ...post,
+      comments: post.comments || []
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `posts/${post.id}`);
+  }
 }
 
 export async function dbDeletePost(postId: string) {
-  await deleteDoc(doc(db, 'posts', postId));
+  try {
+    await deleteDoc(doc(db, 'posts', postId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `posts/${postId}`);
+  }
 }
 
 export async function dbUpdatePost(post: Post) {
-  await setDoc(doc(db, 'posts', post.id), post, { merge: true });
+  try {
+    await setDoc(doc(db, 'posts', post.id), post, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}`);
+  }
 }
 
 // Story Actions
 export async function dbCreateStory(story: Story) {
-  await setDoc(doc(db, 'stories', story.id), story);
+  try {
+    await setDoc(doc(db, 'stories', story.id), story);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `stories/${story.id}`);
+  }
 }
 
 export async function dbDeleteStory(storyId: string) {
-  await deleteDoc(doc(db, 'stories', storyId));
+  try {
+    await deleteDoc(doc(db, 'stories', storyId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `stories/${storyId}`);
+  }
 }
 
 export async function dbUpdateStory(story: Story) {
-  await setDoc(doc(db, 'stories', story.id), story, { merge: true });
+  try {
+    await setDoc(doc(db, 'stories', story.id), story, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `stories/${story.id}`);
+  }
 }
 
 // Message Actions
 export async function dbSendMessage(message: { id: string; sender: any; text: string; timestamp: number }) {
-  await setDoc(doc(db, 'chats', message.id), message);
+  try {
+    await setDoc(doc(db, 'chats', message.id), message);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `chats/${message.id}`);
+  }
 }
 
 // Notification Actions
@@ -251,19 +334,33 @@ export function subscribeNotifications(recipientId: string, callback: (notificat
       }
     });
     callback(list);
-  }, (err) => console.error('Notifications sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'notifications');
+  });
 }
 
 export async function dbCreateNotification(notif: Notification) {
-  await setDoc(doc(db, 'notifications', notif.id), notif);
+  try {
+    await setDoc(doc(db, 'notifications', notif.id), notif);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `notifications/${notif.id}`);
+  }
 }
 
 export async function dbUpdateNotification(notif: Notification) {
-  await setDoc(doc(db, 'notifications', notif.id), notif, { merge: true });
+  try {
+    await setDoc(doc(db, 'notifications', notif.id), notif, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `notifications/${notif.id}`);
+  }
 }
 
 export async function dbDeleteNotification(notifId: string) {
-  await deleteDoc(doc(db, 'notifications', notifId));
+  try {
+    await deleteDoc(doc(db, 'notifications', notifId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `notifications/${notifId}`);
+  }
 }
 
 export async function dbClearAllNotifications(recipientId: string) {
@@ -280,6 +377,7 @@ export async function dbClearAllNotifications(recipientId: string) {
     await Promise.all(promises);
   } catch (err) {
     console.error('Error clearing notifications:', err);
+    handleFirestoreError(err, OperationType.DELETE, 'notifications');
   }
 }
 
@@ -295,19 +393,33 @@ export function subscribeFriendships(callback: (friendships: Friendship[]) => vo
       } as Friendship);
     });
     callback(list);
-  }, (err) => console.error('Friendships sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'friendships');
+  });
 }
 
 export async function dbCreateFriendship(friendship: Friendship) {
-  await setDoc(doc(db, 'friendships', friendship.id), friendship);
+  try {
+    await setDoc(doc(db, 'friendships', friendship.id), friendship);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `friendships/${friendship.id}`);
+  }
 }
 
 export async function dbUpdateFriendship(friendship: Friendship) {
-  await setDoc(doc(db, 'friendships', friendship.id), friendship, { merge: true });
+  try {
+    await setDoc(doc(db, 'friendships', friendship.id), friendship, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `friendships/${friendship.id}`);
+  }
 }
 
 export async function dbDeleteFriendship(friendshipId: string) {
-  await deleteDoc(doc(db, 'friendships', friendshipId));
+  try {
+    await deleteDoc(doc(db, 'friendships', friendshipId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `friendships/${friendshipId}`);
+  }
 }
 
 // Chat Permission Subscriptions and Actions
@@ -322,19 +434,33 @@ export function subscribeChatPermissions(callback: (permissions: ChatPermission[
       } as ChatPermission);
     });
     callback(list);
-  }, (err) => console.error('Chat permissions sub error:', err));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'chat_permissions');
+  });
 }
 
 export async function dbCreateChatPermission(permission: ChatPermission) {
-  await setDoc(doc(db, 'chat_permissions', permission.id), permission);
+  try {
+    await setDoc(doc(db, 'chat_permissions', permission.id), permission);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `chat_permissions/${permission.id}`);
+  }
 }
 
 export async function dbUpdateChatPermission(permission: ChatPermission) {
-  await setDoc(doc(db, 'chat_permissions', permission.id), permission, { merge: true });
+  try {
+    await setDoc(doc(db, 'chat_permissions', permission.id), permission, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `chat_permissions/${permission.id}`);
+  }
 }
 
 export async function dbDeleteChatPermission(permissionId: string) {
-  await deleteDoc(doc(db, 'chat_permissions', permissionId));
+  try {
+    await deleteDoc(doc(db, 'chat_permissions', permissionId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `chat_permissions/${permissionId}`);
+  }
 }
 
 // Group Live Video Actions
@@ -349,19 +475,29 @@ export function subscribeGroupLives(callback: (participants: any[]) => void) {
       });
     });
     callback(list);
-  }, (err) => console.error('Group lives sub error:', err));
-}
-
-export async function dbJoinGroupLive(userId: string, data: { nickname: string; avatar: string }) {
-  await setDoc(doc(db, 'group_lives', userId), {
-    userId,
-    nickname: data.nickname,
-    avatar: data.avatar,
-    joinedAt: Date.now()
+  }, (err) => {
+    handleFirestoreError(err, OperationType.LIST, 'group_lives');
   });
 }
 
+export async function dbJoinGroupLive(userId: string, data: { nickname: string; avatar: string }) {
+  try {
+    await setDoc(doc(db, 'group_lives', userId), {
+      userId,
+      nickname: data.nickname,
+      avatar: data.avatar,
+      joinedAt: Date.now()
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `group_lives/${userId}`);
+  }
+}
+
 export async function dbLeaveGroupLive(userId: string) {
-  await deleteDoc(doc(db, 'group_lives', userId));
+  try {
+    await deleteDoc(doc(db, 'group_lives', userId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `group_lives/${userId}`);
+  }
 }
 
