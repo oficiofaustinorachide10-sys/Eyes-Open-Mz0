@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Post, Story, Comment, Notification, Friendship, ChatPermission } from './types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES, simpleHash } from './utils';
+import { authVerify, authLogin } from './lib/authService';
 
 // Import our modular subcomponents
 import LoginView from './components/LoginView';
@@ -220,6 +221,23 @@ export default function App() {
     }, 120);
   };
 
+  const getLocalAssistantReply = (message: string): string => {
+    const msg = message.toLowerCase();
+    if (msg.includes('olá') || msg.includes('oi') || msg.includes('bom dia') || msg.includes('boa tarde')) {
+      return 'Olá! Eu sou o assistente virtual do Eyes Open MZ. Como posso ajudar-te hoje com segurança cibernética ou com a nossa plataforma?';
+    }
+    if (msg.includes('senha') || msg.includes('password') || msg.includes('palavra-passe')) {
+      return 'Dicas de Segurança para Palavras-passe:\n1. Use pelo menos 12 caracteres.\n2. Misture letras maiúsculas, minúsculas, números e símbolos.\n3. Nunca use a mesma senha em vários sites.\n4. Altere sua senha imediatamente se suspeitar de vazamento.';
+    }
+    if (msg.includes('hack') || msg.includes('segurança') || msg.includes('cyber') || msg.includes('seguro')) {
+      return 'No Eyes Open MZ, a tua segurança é a nossa prioridade número um! Todas as comunicações de chat usam chaves de autorização temporárias e o feed 4D protege a tua privacidade regional.';
+    }
+    if (msg.includes('moçambique') || msg.includes('mz') || msg.includes('província') || msg.includes('maputo')) {
+      return 'O Eyes Open MZ foi desenhado especificamente para a comunidade moçambicana, conectando províncias de Maputo a Cabo Delgado com segurança máxima e baixa latência de dados!';
+    }
+    return 'Obrigado pela tua mensagem! Estou a correr em modo local/offline seguro. Se precisas de suporte técnico ou queres reportar uma vulnerabilidade, podes fazê-lo diretamente nas definições da tua conta.';
+  };
+
   const handleSendAssistantMessage = async () => {
     if (!assistantInput.trim()) return;
     const userMsg = assistantInput;
@@ -237,14 +255,16 @@ export default function App() {
         })
       });
       const data = await response.json();
-      if (data.reply) {
+      if (data && data.reply) {
         setAssistantMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
       } else {
-        setAssistantMessages(prev => [...prev, { role: 'assistant', content: 'Lamento, ocorreu um erro ao comunicar com os meus sistemas. Por favor tenta novamente.' }]);
+        const fallbackReply = getLocalAssistantReply(userMsg);
+        setAssistantMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
       }
     } catch (err) {
-      console.error('Chat Assistant error:', err);
-      setAssistantMessages(prev => [...prev, { role: 'assistant', content: 'Peço desculpas, não foi possível estabelecer ligação ao servidor. Por favor tenta novamente.' }]);
+      console.warn('Chat Assistant API error, falling back to local chat:', err);
+      const fallbackReply = getLocalAssistantReply(userMsg);
+      setAssistantMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
     } finally {
       setIsAssistantTyping(false);
     }
@@ -537,16 +557,9 @@ export default function App() {
     // 2. Load cached current user session (including JWT validation against server)
     const token = localStorage.getItem('eo_jwt_token');
     if (token) {
-      fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      .then(async (res) => {
-        const data = await res.json();
-        if (res.ok && data.user) {
+      authVerify(token)
+      .then((data) => {
+        if (data.user) {
           setCurrentUser(data.user);
           localStorage.setItem('currentUser', JSON.stringify(data.user));
         } else {
@@ -694,19 +707,11 @@ export default function App() {
 
     if (method === 'password') {
       try {
-        const response = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: acc.email, password: credential })
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          return { success: false, error: data.error || 'Palavra-passe incorreta.' };
-        }
+        const data = await authLogin(acc.email, credential);
         handleLoginSuccess(data.user, data.token, true);
         return { success: true };
-      } catch (e) {
-        return { success: false, error: 'Erro de ligação ao servidor de autenticação.' };
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Palavra-passe incorreta.' };
       }
     } else {
       const pinHash = localStorage.getItem(`eo_pin_hash_${accountId}`);
@@ -721,15 +726,8 @@ export default function App() {
         const decryptedToken = decryptToken(encryptedToken, credential);
         if (decryptedToken) {
           try {
-            const response = await fetch('/api/auth/verify', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${decryptedToken}`
-              }
-            });
-            const data = await response.json();
-            if (response.ok && data.user) {
+            const data = await authVerify(decryptedToken);
+            if (data.user) {
               handleLoginSuccess(data.user, decryptedToken, true);
               return { success: true };
             } else {

@@ -11,6 +11,7 @@ import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
+import { authLogin, authRecover, authResetPassword } from '../lib/authService';
 
 interface LoginViewProps {
   users: UserType[];
@@ -51,29 +52,15 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
     }
 
     try {
-      const response = await fetch('/api/auth/recover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: recoveryEmail.trim().toLowerCase(),
-          method: 'email'
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setErrorMsg(data.error || 'Nenhuma conta encontrada com este e-mail.');
-        return;
-      }
-
+      const data = await authRecover(recoveryEmail.trim().toLowerCase());
       setSentCode(data.code);
       setSuccessMsg(`Código gerado com sucesso!`);
       setTimeout(() => {
         setSuccessMsg('');
         setRecoveryStep('code');
       }, 1000);
-    } catch (err) {
-      setErrorMsg('Erro de ligação ao servidor de recuperação.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro de ligação ao servidor de recuperação.');
     }
   };
 
@@ -114,27 +101,16 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
     }
 
     try {
-      const response = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: recoveryEmail.trim().toLowerCase(),
-          newPassword
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setErrorMsg(data.error || 'Erro ao redefinir a palavra-passe.');
-        return;
-      }
-
+      await authResetPassword(recoveryEmail.trim().toLowerCase(), newPassword);
       setSuccessMsg('Sua palavra-passe foi atualizada! Acedendo...');
+      
+      // Perform automated login with the new password
+      const data = await authLogin(recoveryEmail.trim().toLowerCase(), newPassword);
       setTimeout(() => {
         onLoginSuccess(data.user, data.token, false);
       }, 1500);
-    } catch (err) {
-      setErrorMsg('Erro de ligação ao servidor ao redefinir palavra-passe.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro de ligação ao servidor ao redefinir palavra-passe.');
     }
   };
 
@@ -154,27 +130,13 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
     }
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          password
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setErrorMsg(data.error || 'Dados de login incorretos ou erro de autenticação.');
-        return;
-      }
-
+      const data = await authLogin(email.trim(), password);
       setSuccessMsg('Acesso autorizado! Redirecionando...');
       setTimeout(() => {
         onLoginSuccess(data.user, data.token, rememberMe);
       }, 1200);
-    } catch (err) {
-      setErrorMsg('Erro de ligação ao servidor de autenticação.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro de ligação ao servidor de autenticação.');
     }
   };
 

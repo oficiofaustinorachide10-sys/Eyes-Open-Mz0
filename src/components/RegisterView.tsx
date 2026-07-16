@@ -11,6 +11,7 @@ import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
+import { authRegister } from '../lib/authService';
 
 interface RegisterViewProps {
   users: UserType[];
@@ -127,28 +128,20 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
     setStatusMsg('Registando utilizador no servidor...');
     setStatusType('info');
 
-    fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: userId,
-        phone: phoneCheck.normalized,
-        email: email.trim(),
-        fullname: fullname.trim(),
-        firstname: firstname.trim(),
-        surname: surname.trim(),
-        nickname: nickname.trim(),
-        password: password,
-        province,
-        district,
-        avatar: avatarUrl
-      })
+    authRegister({
+      id: userId,
+      phone: phoneCheck.normalized,
+      email: email.trim(),
+      fullname: fullname.trim(),
+      firstname: firstname.trim(),
+      surname: surname.trim(),
+      nickname: nickname.trim(),
+      password: password,
+      province,
+      district,
+      avatar: avatarUrl
     })
-    .then(async (res) => {
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao criar conta.');
-      }
+    .then((data) => {
       setStatusMsg('Conta criada com sucesso!');
       setStatusType('success');
       setCreatedUser(data.user);
