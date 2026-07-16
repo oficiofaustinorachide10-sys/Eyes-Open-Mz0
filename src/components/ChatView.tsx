@@ -6,13 +6,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, MessageSquare, ShieldCheck, Clock, UserPlus, UserCheck, Lock, Unlock, 
-  Hourglass, Phone, Video, FileUp, MapPin, Calendar, Award, Folder, Play, Check, 
+  Hourglass, Phone, Video, FileUp, MapPin, Calendar, Award, Folder, Play, Check, CheckCheck, Mic, Square,
   X, HelpCircle, Briefcase, Radio, AlertTriangle, Sparkles, Star, Users, CheckCircle2, UserX, Plus,
   MoreVertical, Settings, ArrowLeft, VideoOff, Tv, Pin, Volume2, VolumeX, Trash2, Edit3, Download, Share2, Smile, MessageCircle,
   Search, ShieldAlert, User as UserIcon, Palette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Friendship, ChatPermission, Notification } from '../types';
+import { User, Friendship, ChatPermission } from '../types';
+import type { Notification } from '../types';
 import { UserAvatar } from './UserAvatar';
 import { 
   subscribeChats, dbSendMessage, dbUpdateMessage, dbDeleteMessage, dbUpdateUser, subscribeUsers,
@@ -36,7 +37,11 @@ interface Message {
   recipientId?: string; // empty means group chat
   text: string;
   timestamp: number;
-  messageType?: 'text' | 'call' | 'file' | 'location' | 'calendar' | 'task';
+  messageType?: 'text' | 'call' | 'file' | 'location' | 'calendar' | 'task' | 'audio';
+  audioUrl?: string;
+  audioDuration?: number;
+  transcribedText?: string;
+  status?: 'sent' | 'delivered' | 'read';
 }
 
 export default function ChatView({ currentUser, initialSelectedChatId }: ChatViewProps) {
@@ -149,6 +154,40 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                '';
     setChatBg(bg);
   }, [selectedChatId, currentUser.id]);
+
+  // Voice Recording and Audio Transcription States
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState('');
+  const [isTranscribingState, setIsTranscribingState] = useState(false);
+  const [transcriptionText, setTranscriptionText] = useState('');
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+
+  // Accept Request Level Modal State
+  const [showAcceptModal, setShowAcceptModal] = useState<ChatPermission | null>(null);
+
+  // States to configure individual chat permissions inline
+  const [acceptingPermId, setAcceptingPermId] = useState<string | null>(null);
+  const [acceptingPermLevel, setAcceptingPermLevel] = useState<string>('conhecido');
+  const [acceptingPermDuration, setAcceptingPermDuration] = useState<string>('48h');
+
+  // Real-time Accepted Request Banner/Toast State for User A
+  const [showAcceptedBanner, setShowAcceptedBanner] = useState<{
+    visible: boolean;
+    userName: string;
+    level: string;
+    duration: string;
+    targetUserId: string;
+  }>({
+    visible: false,
+    userName: '',
+    level: 'conhecido',
+    duration: '48h',
+    targetUserId: ''
+  });
 
   const [replyingToMessage, setReplyingToMessage] = useState<any | null>(null);
   const [searchInChatQuery, setSearchInChatQuery] = useState('');
@@ -494,6 +533,107 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
     );
   };
 
+  // Native Notification permission prompt on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(console.error);
+      }
+    }
+  }, []);
+
+  const playedMessageIdsRef = useRef<Set<string>>(new Set());
+
+  // Listen for new incoming messages and trigger ringtones & native push notifications
+  useEffect(() => {
+    if (!currentUser || currentUser.id === 'guest') return;
+    if (messages.length === 0) return;
+
+    messages.forEach(msg => {
+      // If we haven't played a notification for this message and it's sent by someone else
+      if (msg.sender.id !== currentUser.id && !playedMessageIdsRef.current.has(msg.id)) {
+        playedMessageIdsRef.current.add(msg.id);
+
+        // Only play if the message is fresh (sent in the last 15 seconds)
+        if (Date.now() - msg.timestamp < 15000) {
+          playBeautifulRingtone();
+
+          // Show a real browser notification if the tab is backgrounded / hidden or if they're on another chat
+          const isBackgrounded = typeof document !== 'undefined' && document.hidden;
+          const isNotActiveChat = selectedChatId !== msg.sender.id;
+
+          if ((isBackgrounded || isNotActiveChat) && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            const bodyText = msg.messageType === 'audio' 
+              ? '🎤 Gravação de voz recebida' 
+              : (msg.text.length > 60 ? msg.text.substring(0, 57) + '...' : msg.text);
+            
+            try {
+              new Notification(`Nova mensagem de @${msg.sender.name}`, {
+                body: bodyText,
+                icon: msg.sender.avatar
+              });
+            } catch (err) {
+              console.warn('Native notification failed:', err);
+            }
+          }
+        }
+      }
+    });
+  }, [messages, currentUser, selectedChatId]);
+
+  // Message Status (Sent -> Delivered -> Read) Auto-Sync Engine
+  useEffect(() => {
+    if (!currentUser || currentUser.id === 'guest') return;
+
+    const receivedMessages = messages.filter(m => 
+      m.recipientId === currentUser.id && 
+      m.sender.id !== currentUser.id
+    );
+
+    receivedMessages.forEach(async (m) => {
+      if (selectedChatId === m.sender.id) {
+        // If the user has this chat open, mark as read
+        if (m.status !== 'read') {
+          const updated = { ...m, status: 'read' as const };
+          await dbUpdateMessage(updated).catch(console.error);
+        }
+      } else {
+        // If received in background/other tab, mark as delivered
+        if (m.status === 'sent') {
+          const updated = { ...m, status: 'delivered' as const };
+          await dbUpdateMessage(updated).catch(console.error);
+        }
+      }
+    });
+  }, [messages, selectedChatId, currentUser]);
+
+  const handledAcceptedPermsRef = useRef<Set<string>>(new Set());
+
+  // Listen for newly accepted chat permission requests to show the redirection banner to User A
+  useEffect(() => {
+    if (!currentUser || currentUser.id === 'guest') return;
+
+    const acceptedPerms = permissions.filter(p => p.senderId === currentUser.id && p.status === 'accepted');
+
+    acceptedPerms.forEach(p => {
+      if (!handledAcceptedPermsRef.current.has(p.id)) {
+        handledAcceptedPermsRef.current.add(p.id);
+
+        const partnerUser = users.find(u => u.id === p.receiverId);
+        if (partnerUser) {
+          playBeautifulRingtone();
+          setShowAcceptedBanner({
+            visible: true,
+            userName: partnerUser.nickname,
+            level: p.level || 'conhecido',
+            duration: p.duration || '48h',
+            targetUserId: partnerUser.id
+          });
+        }
+      }
+    });
+  }, [permissions, users, currentUser]);
+
   const isSocialFriend = (userId: string): boolean => {
     const friendship = getFriendshipWith(userId);
     return friendship?.status === 'accepted';
@@ -621,20 +761,194 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
     await dbCreateNotification(notif);
   };
 
-  const handleAcceptChatPermission = async (perm: ChatPermission) => {
+  const playBeautifulRingtone = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 (ascending beautiful chime)
+      const duration = 0.18;
+      
+      notes.forEach((freq, index) => {
+        const startTime = audioCtx.currentTime + index * 0.08;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+        
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.08, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      });
+    } catch (e) {
+      console.warn('AudioContext ringtone playback failed:', e);
+    }
+  };
+
+  // Start Voice Recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const options = { mimeType: 'audio/webm' };
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        recorder = new MediaRecorder(stream);
+      }
+      
+      mediaRecorderRef.current = recorder;
+      
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setRecordedBlob(audioBlob);
+        const url = URL.createObjectURL(audioBlob);
+        setRecordedUrl(url);
+        
+        // Stop stream tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      setRecordedBlob(null);
+      setRecordedUrl('');
+      setTranscriptionText('');
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Error starting audio recording:', err);
+      alert('Não foi possível aceder ao microfone. Por favor, verifique as permissões.');
+    }
+  };
+
+  // Stop Voice Recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    }
+  };
+
+  // Cancel/Discard Recording
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+    setRecordedBlob(null);
+    setRecordedUrl('');
+    setTranscriptionText('');
+  };
+
+  // Convert audio base64 and call server API to transcribe
+  const transcribeAudio = async () => {
+    if (!recordedBlob) return;
+    setIsTranscribingState(true);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(recordedBlob);
+      reader.onloadend = async () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        
+        const response = await fetch('/api/audio/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            base64Audio: base64Data,
+            mimeType: 'audio/webm',
+          }),
+        });
+        
+        const data = await response.json();
+        if (data.text) {
+          setTranscriptionText(data.text);
+          setInputText(data.text);
+        } else {
+          setTranscriptionText("Não foi possível transcrever.");
+        }
+        setIsTranscribingState(false);
+      };
+    } catch (e) {
+      console.error('Transcription failed:', e);
+      setTranscriptionText("Erro na transcrição automática.");
+      setIsTranscribingState(false);
+    }
+  };
+
+  // Send the voice recording
+  const sendVoiceMessage = async () => {
+    if (!recordedBlob) return;
+    
+    const reader = new FileReader();
+    reader.readAsDataURL(recordedBlob);
+    reader.onloadend = async () => {
+      const base64AudioUrl = reader.result as string;
+      
+      const newMsg: Partial<Message> = {
+        id: 'msg_' + Math.random().toString(36).substring(2, 9),
+        sender: {
+          id: currentUser.id,
+          name: currentUser.nickname,
+          avatar: currentUser.avatar
+        },
+        recipientId: selectedChatId === 'group' ? undefined : selectedChatId,
+        text: transcriptionText ? `[Gravação de Voz: ${transcriptionText}]` : '[Gravação de Voz]',
+        timestamp: Date.now(),
+        messageType: 'audio',
+        audioUrl: base64AudioUrl,
+        audioDuration: recordingDuration || 1,
+        transcribedText: transcriptionText || undefined,
+        status: 'sent'
+      };
+      
+      await dbSendMessage(newMsg as any);
+      
+      // Clear recorder state
+      setRecordedBlob(null);
+      setRecordedUrl('');
+      setTranscriptionText('');
+      setRecordingDuration(0);
+    };
+  };
+
+  const handleAcceptChatPermission = async (perm: ChatPermission, levelToApply: any, durationToApply: any) => {
     let durationMs = 0;
-    if (selectedDuration === '24h') durationMs = 24 * 60 * 60 * 1000;
-    else if (selectedDuration === '48h') durationMs = 48 * 60 * 60 * 1000;
-    else if (selectedDuration === '7d') durationMs = 7 * 24 * 60 * 60 * 1000;
+    if (durationToApply === '24h') durationMs = 24 * 60 * 60 * 1000;
+    else if (durationToApply === '48h') durationMs = 48 * 60 * 60 * 1000;
+    else if (durationToApply === '7d') durationMs = 7 * 24 * 60 * 60 * 1000;
 
     const acceptedAt = Date.now();
-    const expiresAt = selectedDuration === 'permanent' ? null : acceptedAt + durationMs;
+    const expiresAt = durationToApply === 'permanent' ? null : acceptedAt + durationMs;
 
     const updated: ChatPermission = {
       ...perm,
       status: 'accepted',
-      duration: selectedDuration,
-      level: selectedLevel,
+      duration: durationToApply,
+      level: levelToApply,
       acceptedAt,
       expiresAt,
       timestamp: Date.now()
@@ -646,7 +960,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
       id: 'notif_chat_acc_' + Math.random().toString(36).substring(2, 9),
       recipientId: perm.senderId === currentUser.id ? perm.receiverId : perm.senderId,
       title: 'Conversa Autorizada! ✅',
-      text: `${currentUser.nickname} autorizou a conversa como "${getConnectionLayerLabel(selectedLevel)}" por ${selectedDuration}.`,
+      text: `${currentUser.nickname} autorizou a conversa como "${getConnectionLayerLabel(levelToApply)}" por ${durationToApply === 'permanent' ? 'Permanente' : durationToApply}.`,
       type: 'chat_accepted',
       sender: {
         id: currentUser.id,
@@ -656,7 +970,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
       read: false,
       timestamp: Date.now()
     };
-    await dbCreateNotification(notif);
+    await dbCreateNotification(notif).catch(console.error);
   };
 
   const handleDeclineChatPermission = async (perm: ChatPermission) => {
@@ -819,6 +1133,50 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   return (
     <div className="flex-grow p-2 md:p-4 lg:p-6 max-w-6xl mx-auto flex flex-col h-[86vh] font-rajdhani text-white select-none gap-3">
       
+      {/* FLOATING CHAT ACCEPTANCE NOTIFICATION BANNER */}
+      <AnimatePresence>
+        {showAcceptedBanner.visible && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            className="bg-[#031d10]/95 border-2 border-[#00ff66]/70 text-white p-4 rounded-2xl shadow-[0_0_25px_rgba(0,255,102,0.25)] flex flex-col sm:flex-row items-center justify-between gap-4 z-50 animate-pulse relative"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#00ff66]/10 border border-[#00ff66]/40 rounded-full flex items-center justify-center text-[#00ff66] animate-bounce">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-black uppercase text-[#00ff66] tracking-widest">Pedido Aceito! 🎉</p>
+                <p className="text-[11px] text-gray-200 font-semibold leading-normal">
+                  Seu pedido de conversa com <span className="text-[#00ff66] font-bold">@{showAcceptedBanner.userName}</span> foi autorizado como <span className="underline">{getConnectionLayerLabel(showAcceptedBanner.level)}</span> por <span className="font-bold">{showAcceptedBanner.duration === 'permanent' ? 'Permanente' : showAcceptedBanner.duration}</span>.
+                </p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Deseja conversar agora?</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+              <button
+                onClick={() => setShowAcceptedBanner({ ...showAcceptedBanner, visible: false })}
+                className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer text-gray-300"
+              >
+                Depois
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedChatId(showAcceptedBanner.targetUserId);
+                  setIsMobileChatActive(true);
+                  setShowAcceptedBanner({ ...showAcceptedBanner, visible: false });
+                }}
+                className="px-4 py-1.5 bg-[#00ff66] hover:bg-[#00ff88] text-black font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_12px_rgba(0,255,102,0.4)] hover:scale-105 active:scale-95"
+              >
+                Sim, Conversar!
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* GLOBAL CHAT VIEWS TOP HEADER */}
       <div className="flex items-center justify-between bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-2xl px-4 py-2.5 shadow-md shrink-0 relative">
         <div className="flex items-center gap-2">
@@ -977,26 +1335,14 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                   return perm.active && isMatch;
                 });
 
-                // Dynamically sort based on Pinned, Unread, Recent Message activity, and Old
+                // Dynamically sort based strictly on Pinned and then Recent Message activity (Most recent on top)
                 const sortedUsers = [...communityUsers].sort((a, b) => {
                   // 1. Pin priority
                   const pinA = pinnedConversations.includes(a.id) ? 1 : 0;
                   const pinB = pinnedConversations.includes(b.id) ? 1 : 0;
                   if (pinA !== pinB) return pinB - pinA;
 
-                  // 2. Unread message priority
-                  const getUnreadCount = (uId: string) => {
-                    return messages.filter(m => 
-                      m.recipientId === currentUser.id && 
-                      m.sender.id === uId && 
-                      m.timestamp > (currentUser.lastReadChatTimestamp || 0)
-                    ).length;
-                  };
-                  const unreadA = getUnreadCount(a.id) > 0 ? 1 : 0;
-                  const unreadB = getUnreadCount(b.id) > 0 ? 1 : 0;
-                  if (unreadA !== unreadB) return unreadB - unreadA;
-
-                  // 3 & 4. Recent activity (timestamp of last message)
+                  // 2. Recent activity (timestamp of last message)
                   const getLastMsgTime = (uId: string) => {
                     const userMsgs = messages.filter(m => 
                       (m.recipientId === currentUser.id && m.sender.id === uId) ||
@@ -1046,9 +1392,11 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                     <div
                       key={u.id}
                       className={`p-2.5 rounded-2xl border transition-all relative flex flex-col gap-1 hover:bg-[var(--theme-bg-hover)] group ${
-                        isSelected 
-                          ? 'bg-[var(--theme-bg-hover)] border-neon-cyan/40 shadow-lg shadow-neon-cyan/5' 
-                          : 'bg-black/10 border-white/5'
+                        unreadCount > 0 
+                          ? 'border-[#00ff66]/60 bg-[#00ff66]/5 shadow-[0_0_12px_rgba(0,255,102,0.05)] animate-pulse' 
+                          : isSelected 
+                            ? 'bg-[var(--theme-bg-hover)] border-neon-cyan/40 shadow-lg shadow-neon-cyan/5' 
+                            : 'bg-black/10 border-white/5'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2.5">
@@ -1111,8 +1459,8 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                         </span>
                         
                         {unreadCount > 0 && (
-                          <span className="bg-red-500 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-full animate-bounce">
-                            {unreadCount} novas
+                          <span className="bg-[#00ff66] text-black border border-[#00ff88] font-black text-[9px] px-1.5 py-0.5 rounded-full animate-pulse shadow-[0_0_6px_rgba(0,255,102,0.4)]">
+                            {unreadCount} {unreadCount === 1 ? 'mensagem' : 'mensagens'}
                           </span>
                         )}
                       </div>
@@ -1208,60 +1556,89 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                         </div>
                       </div>
 
-                      {/* Dropdowns to customize connection layers on acceptance */}
-                      <div className="space-y-1.5 text-left border-t border-white/5 pt-2">
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tight">Definir Nível:</span>
-                          <select
-                            value={selectedLevel}
-                            onChange={(e: any) => setSelectedLevel(e.target.value)}
-                            className="bg-black border border-white/10 rounded px-1 py-0.5 text-[9px] text-white outline-none focus:border-neon-cyan"
-                          >
-                            <option value="conhecido">🟢 Conhecido</option>
-                            <option value="amigo">🔵 Amigo</option>
-                            <option value="parceiro">🟣 Parceiro</option>
-                            <option value="familia">🟠 Família</option>
-                            <option value="equipe">🟡 Equipe</option>
-                            <option value="vip">⭐ VIP</option>
-                          </select>
-                        </div>
+                      {/* Step-by-step Connection Layer selection on acceptance */}
+                      {acceptingPermId === chatReq.id ? (
+                        <div className="space-y-2.5 text-left border-t border-white/5 pt-2 animate-fadeIn">
+                          <p className="text-[9px] text-[#00ff66] font-extrabold uppercase tracking-wide mb-1">
+                            Escolha o nível de acesso e tempo para este utilizador:
+                          </p>
 
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tight">Duração:</span>
-                          <select
-                            value={selectedDuration}
-                            onChange={(e: any) => setSelectedDuration(e.target.value)}
-                            className="bg-black border border-white/10 rounded px-1 py-0.5 text-[9px] text-white outline-none focus:border-neon-cyan"
-                          >
-                            <option value="24h">24 Horas</option>
-                            <option value="48h">48 Horas</option>
-                            <option value="7d">7 Dias</option>
-                            <option value="permanent">Permanente</option>
-                          </select>
-                        </div>
-                      </div>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tight">Definir Nível:</span>
+                            <select
+                              value={acceptingPermLevel}
+                              onChange={(e: any) => setAcceptingPermLevel(e.target.value)}
+                              className="bg-black border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white outline-none focus:border-neon-cyan cursor-pointer"
+                            >
+                              <option value="conhecido">🟢 Conhecido</option>
+                              <option value="amigo">🔵 Amigo</option>
+                              <option value="parceiro">🟣 Parceiro</option>
+                              <option value="familia">🟠 Família</option>
+                              <option value="equipe">🟡 Equipe</option>
+                              <option value="vip">⭐ VIP</option>
+                            </select>
+                          </div>
 
-                      {/* Action buttons */}
-                      <div className="grid grid-cols-3 gap-1 pt-1">
-                        <button
-                          onClick={() => handleAcceptChatPermission(chatReq)}
-                          className="py-1 px-1.5 bg-green-500/20 hover:bg-green-500 text-green-400 hover:text-black border border-green-500/40 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
-                        >
-                          Aceitar
-                        </button>
-                        <button
-                          onClick={() => handleDeclineChatPermission(chatReq)}
-                          className="py-1 px-1.5 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/40 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
-                        >
-                          Recusar
-                        </button>
-                        <button
-                          onClick={() => handleIgnoreChatPermission(chatReq)}
-                          className="py-1 px-1.5 bg-gray-500/20 hover:bg-gray-500 text-gray-400 hover:text-white border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
-                        >
-                          Ignorar
-                        </button>
-                      </div>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tight">Duração:</span>
+                            <select
+                              value={acceptingPermDuration}
+                              onChange={(e: any) => setAcceptingPermDuration(e.target.value)}
+                              className="bg-black border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white outline-none focus:border-neon-cyan cursor-pointer"
+                            >
+                              <option value="24h">24 Horas</option>
+                              <option value="48h">48 Horas</option>
+                              <option value="7d">7 Dias</option>
+                              <option value="permanent">Permanente</option>
+                            </select>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-1 pt-1.5">
+                            <button
+                              onClick={() => {
+                                setAcceptingPermId(null);
+                              }}
+                              className="py-1 px-1.5 bg-gray-500/10 hover:bg-gray-500 hover:text-white border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
+                            >
+                              Voltar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await handleAcceptChatPermission(chatReq, acceptingPermLevel, acceptingPermDuration);
+                                setAcceptingPermId(null);
+                              }}
+                              className="py-1 px-1.5 bg-green-500 text-black font-extrabold rounded-lg text-[9px] uppercase tracking-wider text-center cursor-pointer hover:bg-green-400 transition-all shadow-[0_0_8px_rgba(34,197,94,0.3)] animate-pulse"
+                            >
+                              Aplicar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/5">
+                          <button
+                            onClick={() => {
+                              setAcceptingPermId(chatReq.id);
+                              setAcceptingPermLevel('conhecido');
+                              setAcceptingPermDuration('48h');
+                            }}
+                            className="py-1 px-1.5 bg-green-500/20 hover:bg-green-500 text-green-400 hover:text-black border border-green-500/40 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
+                          >
+                            Aceitar
+                          </button>
+                          <button
+                            onClick={() => handleDeclineChatPermission(chatReq)}
+                            className="py-1 px-1.5 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/40 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
+                          >
+                            Recusar
+                          </button>
+                          <button
+                            onClick={() => handleIgnoreChatPermission(chatReq)}
+                            className="py-1 px-1.5 bg-gray-500/20 hover:bg-gray-500 text-gray-400 hover:text-white border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-wider text-center cursor-pointer transition-colors"
+                          >
+                            Ignorar
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -1971,18 +2348,41 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <div className={`px-4 py-2 rounded-2xl text-xs leading-relaxed font-semibold relative ${
-                      isMe 
-                        ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
-                        : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
-                    } ${msg.text?.includes('@' + currentUser.nickname) ? 'border-2 border-red-500 animate-pulse bg-red-500/10 text-red-200' : ''}`}>
-                      {msg.text?.includes('@' + currentUser.nickname) && (
-                        <div className="text-[9px] font-orbitron font-extrabold text-red-400 mb-1 tracking-widest uppercase animate-pulse">
-                          🚨 CHAMANDO VOCÊ (MENÇÃO)
+
+                    {msg.messageType === 'audio' ? (
+                      <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed font-semibold relative ${
+                        isMe 
+                          ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
+                          : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
+                      }`}>
+                        <div className="flex flex-col gap-2 min-w-[200px]">
+                          <div className="flex items-center gap-2">
+                            <Mic className="w-4 h-4 text-red-400 shrink-0" />
+                            <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">Gravação de Voz ({msg.audioDuration}s)</span>
+                          </div>
+                          <audio src={msg.audioUrl} controls className="w-full h-8 outline-none filter invert brightness-200" />
+                          {msg.transcribedText && (
+                            <div className="bg-black/20 border border-white/5 rounded-lg p-2 mt-1 text-[11px] text-gray-300">
+                              <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Transcrição Automática:</p>
+                              <p className="italic">"{msg.transcribedText}"</p>
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {msg.text}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className={`px-4 py-2 rounded-2xl text-xs leading-relaxed font-semibold relative ${
+                        isMe 
+                          ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
+                          : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
+                      } ${msg.text?.includes('@' + currentUser.nickname) ? 'border-2 border-red-500 animate-pulse bg-red-500/10 text-red-200' : ''}`}>
+                        {msg.text?.includes('@' + currentUser.nickname) && (
+                          <div className="text-[9px] font-orbitron font-extrabold text-red-400 mb-1 tracking-widest uppercase animate-pulse">
+                            🚨 CHAMANDO VOCÊ (MENÇÃO)
+                          </div>
+                        )}
+                        {msg.text}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -2131,7 +2531,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
                             <div className="grid grid-cols-2 gap-2 pt-2">
                               <button
-                                onClick={() => handleAcceptChatPermission(permCheck.perm!)}
+                                onClick={() => handleAcceptChatPermission(permCheck.perm!, selectedLevel, selectedDuration)}
                                 className="py-2 bg-neon-cyan text-black font-orbitron font-extrabold text-[10px] tracking-widest rounded-xl hover:scale-[1.02] active:scale-95 transition-all uppercase cursor-pointer"
                               >
                                 Autorizar
@@ -2243,10 +2643,41 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                               <Clock className="w-2.5 h-2.5" />{' '}
                               {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
+                            {isMe && (
+                              <span className="flex items-center ml-1">
+                                {msg.status === 'read' ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-neon-cyan" title="Mensagem lida pelo destinatário" />
+                                ) : msg.status === 'delivered' ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-gray-500" title="Mensagem entregue no dispositivo" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 text-gray-500" title="Mensagem enviada" />
+                                )}
+                              </span>
+                            )}
                           </div>
 
-                          {/* Style bubbles based on message type (text vs. simulated action) */}
-                          {msg.messageType === 'text' ? (
+                          {/* Style bubbles based on message type (text vs. audio vs. simulated action) */}
+                          {msg.messageType === 'audio' ? (
+                            <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed font-semibold relative ${
+                              isMe 
+                                ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
+                                : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
+                            }`}>
+                              <div className="flex flex-col gap-2 min-w-[200px]">
+                                <div className="flex items-center gap-2">
+                                  <Mic className="w-4 h-4 text-red-400 shrink-0" />
+                                  <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">Gravação de Voz ({msg.audioDuration}s)</span>
+                                </div>
+                                <audio src={msg.audioUrl} controls className="w-full h-8 outline-none filter invert brightness-200" />
+                                {msg.transcribedText && (
+                                  <div className="bg-black/20 border border-white/5 rounded-lg p-2 mt-1 text-[11px] text-gray-300">
+                                    <p className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">Transcrição Automática:</p>
+                                    <p className="italic">"{msg.transcribedText}"</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : msg.messageType === 'text' ? (
                             <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed font-semibold relative ${
                               isMe 
                                 ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
@@ -2485,18 +2916,113 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                     </button>
                   </div>
 
+                  {/* Audio Recording Status / Controls Overlay */}
+                  {isRecording && (
+                    <div className="flex items-center justify-between gap-3 bg-red-950/20 border border-red-500/30 rounded-xl p-3 mb-2 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                        </span>
+                        <span className="text-xs font-black uppercase text-red-400 font-mono">
+                          Gravar: {Math.floor(recordingDuration / 60).toString().padStart(2, '0')}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelRecording}
+                          className="px-3 py-1.5 bg-gray-500/10 hover:bg-red-500 hover:text-black border border-white/5 hover:border-red-500 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopRecording}
+                          className="px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-black border border-red-500/40 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Square className="w-3 h-3" /> Parar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Captured Voice Recording Preview Panel */}
+                  {recordedBlob && (
+                    <div className="bg-black/30 border border-white/10 rounded-xl p-3.5 mb-2.5 flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Mic className="w-4 h-4 text-neon-cyan animate-bounce" />
+                          <span className="text-xs font-bold text-gray-300">Gravação Pronta para Envio ({recordingDuration}s)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setRecordedBlob(null); setRecordedUrl(''); setTranscriptionText(''); }}
+                          className="text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Native Audio Player */}
+                      <audio src={recordedUrl} controls className="w-full h-8 outline-none" />
+
+                      {/* Transcribed Text Display (if available) */}
+                      {isTranscribingState ? (
+                        <div className="text-[10px] text-neon-cyan flex items-center gap-2 font-bold uppercase tracking-wider py-1">
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" /> A converter voz em texto...
+                        </div>
+                      ) : transcriptionText ? (
+                        <div className="bg-white/5 border border-white/5 rounded-lg p-2 text-[11px] text-gray-300">
+                          <p className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-1">Transcrição Inteligente AI:</p>
+                          <p className="italic font-semibold">"{transcriptionText}"</p>
+                        </div>
+                      ) : null}
+
+                      {/* Actions */}
+                      <div className="flex items-center justify-end gap-2 pt-1.5 border-t border-white/5">
+                        <button
+                          type="button"
+                          onClick={transcribeAudio}
+                          disabled={isTranscribingState}
+                          className="px-3 py-1.5 bg-purple-500/15 text-purple-400 hover:bg-purple-500 hover:text-black border border-purple-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" /> Converter em Texto
+                        </button>
+                        <button
+                          type="button"
+                          onClick={sendVoiceMessage}
+                          className="px-3.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-black border border-green-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          Enviar Gravação
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Message submit form */}
                   <form onSubmit={handleSendMessage} className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={startRecording}
+                      disabled={isRecording || !!recordedBlob}
+                      className="w-12 h-12 rounded-xl bg-gray-500/10 hover:bg-red-500/20 border border-white/5 hover:border-red-500/30 text-gray-400 hover:text-red-400 flex items-center justify-center cursor-pointer active:scale-95 transition-all shrink-0 disabled:opacity-30 disabled:pointer-events-none"
+                      title="Gravar Mensagem de Voz"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </button>
                     <input
                       type="text"
                       value={inputText}
                       onChange={(e) => handleInputChange(e.target.value)}
                       placeholder="Escreva a sua mensagem privada..."
-                      className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold"
+                      disabled={isRecording || !!recordedBlob}
+                      className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold disabled:opacity-50"
                     />
                     <button
                       type="submit"
-                      className="w-12 h-12 rounded-xl bg-[var(--theme-accent)] hover:opacity-90 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-sm shrink-0"
+                      disabled={isRecording || !!recordedBlob}
+                      className="w-12 h-12 rounded-xl bg-[var(--theme-accent)] hover:opacity-90 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-sm shrink-0 disabled:opacity-50"
                     >
                       <Send className="w-5 h-5 text-white" />
                     </button>

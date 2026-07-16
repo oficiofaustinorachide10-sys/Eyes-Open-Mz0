@@ -871,6 +871,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setThemeState('noite');
     localStorage.removeItem('currentUser');
     localStorage.removeItem('eo_jwt_token');
     localStorage.removeItem('eo_secure_keychain_token');
