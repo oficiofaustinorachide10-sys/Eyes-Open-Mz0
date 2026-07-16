@@ -19,6 +19,19 @@ export default function ShimmeringBackground() {
     let width = (canvas.width = canvas.offsetWidth || window.innerWidth);
     let height = (canvas.height = canvas.offsetHeight || window.innerHeight);
 
+    // Mouse positions for 3D/4D perspective tilt
+    let mouseX = width / 2;
+    let mouseY = height / 2;
+    let targetMouseX = width / 2;
+    let targetMouseY = height / 2;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      targetMouseX = e.clientX;
+      targetMouseY = e.clientY;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+
     // Create 4D stars (golden, amber, chocolate aura)
     interface Star {
       x: number;
@@ -66,6 +79,10 @@ export default function ShimmeringBackground() {
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
+      // Interpolate mouse coordinates for fluid tilt
+      mouseX += (targetMouseX - mouseX) * 0.04;
+      mouseY += (targetMouseY - mouseY) * 0.04;
+
       // Radial background aura of deep luxury chocolate / onyx
       const grad = ctx.createRadialGradient(
         width / 2,
@@ -79,6 +96,71 @@ export default function ShimmeringBackground() {
       grad.addColorStop(1, '#080504');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
+
+      // Render 3D/4D Infinite perspective Grid lines (Floor & Ceiling)
+      // Vanishing point tilts dynamically with mouse for 4D parallax perspective
+      const vanishX = width / 2 + (mouseX - width / 2) * 0.18;
+      const vanishY = height * 0.45 + (mouseY - height / 2) * 0.12;
+
+      // Longitudinal lines converging to perspective center
+      const gridLinesCount = 36;
+      ctx.lineWidth = 0.8;
+      
+      // Bottom/Floor Grid
+      for (let i = 0; i <= gridLinesCount; i++) {
+        const t = i / gridLinesCount;
+        const startX = width * (t * 2.4 - 0.7);
+        ctx.strokeStyle = `rgba(245, 158, 11, ${0.045 * (1 - Math.abs(t - 0.5) * 1.5)})`;
+        ctx.beginPath();
+        ctx.moveTo(startX, height);
+        ctx.lineTo(vanishX, vanishY);
+        ctx.stroke();
+      }
+
+      // Top/Ceiling Grid
+      for (let i = 0; i <= gridLinesCount; i++) {
+        const t = i / gridLinesCount;
+        const startX = width * (t * 2.4 - 0.7);
+        ctx.strokeStyle = `rgba(245, 158, 11, ${0.02 * (1 - Math.abs(t - 0.5) * 1.5)})`;
+        ctx.beginPath();
+        ctx.moveTo(startX, 0);
+        ctx.lineTo(vanishX, vanishY);
+        ctx.stroke();
+      }
+
+      // Latitudinal grid lines scrolling forward in time
+      const latLinesCount = 14;
+      const timeFactor = (Date.now() * 0.0006) % 1; // forward motion rate
+
+      // Floor Scrolling
+      for (let i = 0; i < latLinesCount; i++) {
+        const norm = (i + timeFactor) / latLinesCount;
+        const currentY = vanishY + (height - vanishY) * Math.pow(norm, 2.8);
+        const currentWidth = width * norm * 2.8;
+        const startX = vanishX - currentWidth / 2;
+        const endX = vanishX + currentWidth / 2;
+
+        ctx.strokeStyle = `rgba(245, 158, 11, ${0.08 * Math.pow(norm, 2)})`;
+        ctx.beginPath();
+        ctx.moveTo(startX, currentY);
+        ctx.lineTo(endX, currentY);
+        ctx.stroke();
+      }
+
+      // Ceiling Scrolling
+      for (let i = 0; i < latLinesCount; i++) {
+        const norm = (i + timeFactor) / latLinesCount;
+        const currentY = vanishY - vanishY * Math.pow(norm, 2.8);
+        const currentWidth = width * norm * 2.8;
+        const startX = vanishX - currentWidth / 2;
+        const endX = vanishX + currentWidth / 2;
+
+        ctx.strokeStyle = `rgba(245, 158, 11, ${0.04 * Math.pow(norm, 2)})`;
+        ctx.beginPath();
+        ctx.moveTo(startX, currentY);
+        ctx.lineTo(endX, currentY);
+        ctx.stroke();
+      }
 
       // Render each golden particle
       for (let i = 0; i < stars.length; i++) {
@@ -121,6 +203,7 @@ export default function ShimmeringBackground() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousemove', handleMouseMove);
     };
   }, []);
 

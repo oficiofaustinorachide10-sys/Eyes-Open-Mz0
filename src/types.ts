@@ -59,7 +59,7 @@ export interface Notification {
   };
   read: boolean;
   targetId?: string; // e.g. post ID or request ID
-  targetView?: 'feed' | 'conversas' | 'abra-olhos' | 'notificacoes' | 'comunidade';
+  targetView?: 'feed' | 'conversas' | 'abra-olhos' | 'notificacoes' | 'comunidade' | 'profile';
   timestamp: number;
 }
 
@@ -115,9 +115,26 @@ export interface Post {
   stars: number;
   views: number;
   starred?: boolean;
+  starredBy?: Record<string, boolean>;
+  viewedBy?: Record<string, boolean>;
   isPrivate?: boolean;
   timestamp: number;
   comments?: Comment[];
+  type?: 'photo' | 'video' | 'audio' | 'voice' | 'document' | 'file' | 'text';
+  mediaUrl?: string;
+  mediaCover?: string;
+  title?: string;
+  artist?: string;
+  duration?: number;
+  resolution?: string;
+  fileSize?: string;
+  pageCount?: number;
+  location?: string;
+  hashtags?: string[];
+  taggedPeople?: string[];
+  ratings?: Record<string, number>; // Maps userId to star rating value (1-5)
+  listensCount?: number;
+  sharesCount?: number;
 }
 
 export interface Story {
@@ -136,5 +153,7 @@ export interface Story {
   stars?: number;
   views?: number;
   starred?: boolean;
+  starredBy?: Record<string, boolean>;
+  viewedBy?: Record<string, boolean>;
   timestamp: number;
 }

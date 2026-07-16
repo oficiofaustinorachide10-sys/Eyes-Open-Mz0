@@ -318,6 +318,22 @@ export async function dbSendMessage(message: { id: string; sender: any; text: st
   }
 }
 
+export async function dbUpdateMessage(message: any) {
+  try {
+    await setDoc(doc(db, 'chats', message.id), message);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `chats/${message.id}`);
+  }
+}
+
+export async function dbDeleteMessage(messageId: string) {
+  try {
+    await deleteDoc(doc(db, 'chats', messageId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `chats/${messageId}`);
+  }
+}
+
 // Notification Actions
 export function subscribeNotifications(recipientId: string, callback: (notifications: Notification[]) => void) {
   const notificationsCol = collection(db, 'notifications');

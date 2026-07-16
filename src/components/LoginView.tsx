@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, ArrowLeft, KeyRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { simpleHash, validateEmail } from '../utils';
 import { User as UserType } from '../types';
@@ -16,14 +16,127 @@ interface LoginViewProps {
   users: UserType[];
   onLoginSuccess: (user: UserType, token: string, rememberMe?: boolean) => void;
   onGoToRegister: () => void;
+  onGoToSavedAccounts?: () => void;
 }
 
-export default function LoginView({ users, onLoginSuccess, onGoToRegister }: LoginViewProps) {
+export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoToSavedAccounts }: LoginViewProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Password Recovery States
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [recoveryStep, setRecoveryStep] = useState<'email' | 'code' | 'new_password'>('email');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
+  const [sentCode, setSentCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+
+  const handleInitiateRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!recoveryEmail.trim()) {
+      setErrorMsg('Por favor, introduza o seu endereço de e-mail.');
+      return;
+    }
+
+    if (!validateEmail(recoveryEmail)) {
+      setErrorMsg('Por favor, introduza um e-mail válido.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: recoveryEmail.trim().toLowerCase(),
+          method: 'email'
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setErrorMsg(data.error || 'Nenhuma conta encontrada com este e-mail.');
+        return;
+      }
+
+      setSentCode(data.code);
+      setSuccessMsg(`Código gerado com sucesso!`);
+      setTimeout(() => {
+        setSuccessMsg('');
+        setRecoveryStep('code');
+      }, 1000);
+    } catch (err) {
+      setErrorMsg('Erro de ligação ao servidor de recuperação.');
+    }
+  };
+
+  const handleVerifyCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (recoveryCodeInput.trim() !== sentCode) {
+      setErrorMsg('Código de confirmação incorreto. Verifique e tente novamente.');
+      return;
+    }
+
+    setSuccessMsg('Código validado com sucesso!');
+    setTimeout(() => {
+      setSuccessMsg('');
+      setRecoveryStep('new_password');
+    }, 1000);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!newPassword || !confirmNewPassword) {
+      setErrorMsg('Por favor, preencha todos os campos de palavra-passe.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMsg('A nova palavra-passe deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setErrorMsg('As palavras-passe introduzidas não coincidem.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: recoveryEmail.trim().toLowerCase(),
+          newPassword
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setErrorMsg(data.error || 'Erro ao redefinir a palavra-passe.');
+        return;
+      }
+
+      setSuccessMsg('Sua palavra-passe foi atualizada! Acedendo...');
+      setTimeout(() => {
+        onLoginSuccess(data.user, data.token, false);
+      }, 1500);
+    } catch (err) {
+      setErrorMsg('Erro de ligação ao servidor ao redefinir palavra-passe.');
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,127 +216,328 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister }: Log
           <div className="absolute -top-[1.5px] -left-[1.5px] w-12 h-12 border-t-2 border-l-2 border-neon-cyan rounded-tl-3xl" />
           <div className="absolute -bottom-[1.5px] -right-[1.5px] w-12 h-12 border-b-2 border-r-2 border-neon-magenta rounded-br-3xl" />
           
-          <h2 className="text-xl font-orbitron font-semibold text-center mb-6 tracking-wide text-white/90">
-            ENTRAR NA CONTA
-          </h2>
+          {isRecovering ? (
+            <div className="space-y-5">
+              {/* Header with back button */}
+              <div className="flex items-center gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                    if (recoveryStep === 'email') {
+                      setIsRecovering(false);
+                    } else if (recoveryStep === 'code') {
+                      setRecoveryStep('email');
+                    } else if (recoveryStep === 'new_password') {
+                      setRecoveryStep('code');
+                    }
+                  }}
+                  className="p-2 bg-white/5 border border-white/10 hover:border-neon-cyan/50 hover:bg-white/10 rounded-xl text-[#a0a0c0] hover:text-white transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="text-left">
+                  <h2 className="text-sm font-orbitron font-extrabold text-neon-cyan tracking-wider uppercase">
+                    Recuperar Conta
+                  </h2>
+                  <p className="text-[9px] text-[#a0a0c0] font-rajdhani font-bold uppercase tracking-wider">
+                    {recoveryStep === 'email' && 'Etapa 1: Endereço de e-mail'}
+                    {recoveryStep === 'code' && 'Etapa 2: Código de confirmação'}
+                    {recoveryStep === 'new_password' && 'Etapa 3: Nova senha'}
+                  </p>
+                </div>
+              </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            {/* Email Input */}
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
-                <Mail className="w-5 h-5" />
-              </span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Endereço de e-mail (Gmail)"
-                className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
-              />
+              {recoveryStep === 'email' && (
+                <form onSubmit={handleInitiateRecovery} className="space-y-5">
+                  <p className="text-xs text-[#a0a0c0] font-rajdhani font-semibold leading-relaxed text-left">
+                    Introduza o seu endereço de e-mail registado. Enviaremos um código de verificação para que possa redefinir a sua palavra-passe com toda a segurança.
+                  </p>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
+                      <Mail className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="email"
+                      value={recoveryEmail}
+                      onChange={(e) => setRecoveryEmail(e.target.value)}
+                      placeholder="Endereço de e-mail (Gmail)"
+                      className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-xs tracking-widest cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
+                  >
+                    Enviar Código de Segurança
+                  </button>
+                </form>
+              )}
+
+              {recoveryStep === 'code' && (
+                <form onSubmit={handleVerifyCode} className="space-y-5">
+                  <div className="p-3.5 bg-neon-cyan/5 border border-neon-cyan/25 rounded-2xl text-xs text-center font-rajdhani">
+                    <p className="text-[#a0a0c0] font-semibold">
+                      O código de recuperação foi gerado!
+                    </p>
+                    <p className="text-white font-orbitron font-black text-sm tracking-widest mt-1 bg-black/40 py-1.5 rounded-xl border border-white/5 select-all">
+                      {sentCode}
+                    </p>
+                    <p className="text-[9px] text-gray-500 uppercase font-bold tracking-wider mt-1.5">
+                      Copie o código acima e insira-o abaixo para prosseguir.
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
+                      <KeyRound className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={recoveryCodeInput}
+                      onChange={(e) => setRecoveryCodeInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Introduza o código de 6 dígitos"
+                      className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-center text-sm tracking-widest font-orbitron outline-none transition-all placeholder:text-gray-500 font-bold"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-xs tracking-widest cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
+                  >
+                    Confirmar Código
+                  </button>
+                </form>
+              )}
+
+              {recoveryStep === 'new_password' && (
+                <form onSubmit={handleResetPasswordSubmit} className="space-y-5">
+                  <p className="text-xs text-[#a0a0c0] font-rajdhani font-semibold leading-relaxed text-left">
+                    Excelente! Crie uma palavra-passe forte que ainda não tenha utilizado nesta conta para garantir a máxima segurança dos seus dados.
+                  </p>
+
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
+                      <Lock className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Nova Senha de Acesso"
+                      className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
+                      <Lock className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="password"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Confirmar Nova Senha"
+                      className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-green-500 to-teal-500 hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-xs tracking-widest cursor-pointer shadow-lg shadow-green-500/20 uppercase"
+                  >
+                    Gravar & Iniciar Sessão
+                  </button>
+                </form>
+              )}
+
+              {/* Feedback Messages */}
+              {errorMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-400 text-xs text-center font-rajdhani font-bold"
+                >
+                  {errorMsg}
+                </motion.div>
+              )}
+
+              {successMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-xl bg-green-950/40 border border-green-500/30 text-green-400 text-xs text-center font-rajdhani font-bold"
+                >
+                  {successMsg}
+                </motion.div>
+              )}
+
+              {/* Cancel Link */}
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                    setIsRecovering(false);
+                  }}
+                  className="text-xs font-rajdhani font-bold text-neon-cyan hover:text-white transition-colors underline underline-offset-4 decoration-neon-cyan/50 uppercase tracking-wider cursor-pointer"
+                >
+                  Voltar ao Login
+                </button>
+              </div>
             </div>
+          ) : (
+            <>
+              <h2 className="text-xl font-orbitron font-semibold text-center mb-6 tracking-wide text-white/90">
+                ENTRAR NA CONTA
+              </h2>
 
-            {/* Password Input */}
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
-                <Lock className="w-5 h-5" />
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Senha de Acesso"
-                className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
-              />
-            </div>
+              <form onSubmit={handleLogin} className="space-y-5">
+                {/* Email Input */}
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
+                    <Mail className="w-5 h-5" />
+                  </span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Endereço de e-mail (Gmail)"
+                    className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
+                  />
+                </div>
 
-            {/* Remember Login Checkbox */}
-            <div className="flex items-center justify-between px-1 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer select-none text-[#a0a0c0] font-rajdhani font-semibold">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-neon-cyan/40 bg-black/40 text-neon-cyan focus:ring-neon-cyan cursor-pointer"
-                />
-                <span>Lembrar Login neste dispositivo</span>
-              </label>
-            </div>
+                {/* Password Input */}
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
+                    <Lock className="w-5 h-5" />
+                  </span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Senha de Acesso"
+                    className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base"
+                  />
+                </div>
 
-            {/* Action Button */}
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-sm tracking-wider cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
-            >
-              CONFIRMAR ENTRADA
-            </button>
-          </form>
+                {/* Remember Login Checkbox and Forgot Password */}
+                <div className="flex items-center justify-between px-1 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-[#a0a0c0] font-rajdhani font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded border-neon-cyan/40 bg-black/40 text-neon-cyan focus:ring-neon-cyan cursor-pointer"
+                    />
+                    <span>Lembrar Login</span>
+                  </label>
 
-          {/* Feedback Messages */}
-          {errorMsg && (
-            <motion.div 
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-400 text-xs text-center font-rajdhani font-bold"
-            >
-              {errorMsg}
-            </motion.div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMsg('');
+                      setSuccessMsg('');
+                      setIsRecovering(true);
+                      setRecoveryStep('email');
+                      setRecoveryEmail(email || '');
+                    }}
+                    className="text-neon-cyan hover:text-white transition-colors font-rajdhani font-bold underline underline-offset-2 decoration-neon-cyan/30 cursor-pointer"
+                  >
+                    Esqueci-me da senha
+                  </button>
+                </div>
+
+                {/* Action Button */}
+                <button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-sm tracking-wider cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
+                >
+                  CONFIRMAR ENTRADA
+                </button>
+              </form>
+
+              {/* Feedback Messages */}
+              {errorMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-400 text-xs text-center font-rajdhani font-bold"
+                >
+                  {errorMsg}
+                </motion.div>
+              )}
+
+              {successMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-xl bg-green-950/40 border border-green-500/30 text-green-400 text-xs text-center font-rajdhani font-bold"
+                >
+                  {successMsg}
+                </motion.div>
+              )}
+
+              {/* Register Redirect */}
+              <div className="mt-6 text-center space-y-4">
+                <button
+                  onClick={onGoToRegister}
+                  className="text-xs font-rajdhani font-bold text-neon-cyan hover:text-white transition-colors underline underline-offset-4 decoration-neon-cyan/50"
+                >
+                  Criar uma nova conta de acesso
+                </button>
+
+                {/* Divider and Guest Login */}
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-white/5"></div>
+                  <span className="flex-shrink mx-3 text-gray-600 text-[9px] font-bold tracking-widest font-orbitron uppercase">OU</span>
+                  <div className="flex-grow border-t border-white/5"></div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const guestUser: UserType = {
+                      id: 'guest',
+                      fullname: 'Convidado Eyes Open',
+                      firstname: 'Convidado',
+                      surname: 'Eyes Open',
+                      nickname: 'Convidado 🇲🇿',
+                      email: 'guest@openmz.com',
+                      phone: '000000000',
+                      province: 'Maputo',
+                      password: 'guest',
+                      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+                      created: new Date().toISOString(),
+                      stats: {
+                        likes: 0,
+                        posts: 0,
+                        friends: 0
+                      },
+                      nameEditDate: null
+                    };
+                    onLoginSuccess(guestUser, 'guest_token', false);
+                  }}
+                  className="w-full py-3 bg-black/40 hover:bg-[#121235]/60 border border-white/10 hover:border-neon-cyan/60 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-gray-300 hover:text-white cursor-pointer uppercase transition-all"
+                >
+                  Entrar como Convidado
+                </button>
+
+                {onGoToSavedAccounts && localStorage.getItem('eo_saved_accounts') && (
+                  <button
+                    type="button"
+                    onClick={onGoToSavedAccounts}
+                    className="w-full mt-2.5 py-3 bg-blue-950/30 hover:bg-blue-900/40 border border-blue-500/10 hover:border-blue-400/50 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-blue-400 hover:text-white cursor-pointer uppercase transition-all"
+                  >
+                    Ver Contas Guardadas
+                  </button>
+                )}
+              </div>
+            </>
           )}
-
-          {successMsg && (
-            <motion.div 
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-3 rounded-xl bg-green-950/40 border border-green-500/30 text-green-400 text-xs text-center font-rajdhani font-bold"
-            >
-              {successMsg}
-            </motion.div>
-          )}
-
-          {/* Register Redirect */}
-          <div className="mt-6 text-center space-y-4">
-            <button
-              onClick={onGoToRegister}
-              className="text-xs font-rajdhani font-bold text-neon-cyan hover:text-white transition-colors underline underline-offset-4 decoration-neon-cyan/50"
-            >
-              Criar uma nova conta de acesso
-            </button>
-
-            {/* Divider and Guest Login */}
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-white/5"></div>
-              <span className="flex-shrink mx-3 text-gray-600 text-[9px] font-bold tracking-widest font-orbitron uppercase">OU</span>
-              <div className="flex-grow border-t border-white/5"></div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                const guestUser: UserType = {
-                  id: 'guest',
-                  fullname: 'Convidado Eyes Open',
-                  firstname: 'Convidado',
-                  surname: 'Eyes Open',
-                  nickname: 'Convidado 🇲🇿',
-                  email: 'guest@openmz.com',
-                  phone: '000000000',
-                  province: 'Maputo',
-                  password: 'guest',
-                  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
-                  created: new Date().toISOString(),
-                  stats: {
-                    likes: 0,
-                    posts: 0,
-                    friends: 0
-                  },
-                  nameEditDate: null
-                };
-                onLoginSuccess(guestUser, 'guest_token', false);
-              }}
-              className="w-full py-3 bg-black/40 hover:bg-[#121235]/60 border border-white/10 hover:border-neon-cyan/60 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-gray-300 hover:text-white cursor-pointer uppercase transition-all"
-            >
-              Entrar como Convidado
-            </button>
-          </div>
         </div>
       </motion.div>
     </div>

@@ -8,6 +8,11 @@
 
 let audioCtx: AudioContext | null = null;
 
+export function isSoundEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('eo_interface_sounds_enabled') !== 'false';
+}
+
 function getAudioContext() {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
@@ -24,6 +29,7 @@ function getAudioContext() {
 }
 
 export function playClickFeedback() {
+  if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   try {
@@ -50,6 +56,7 @@ export function playClickFeedback() {
 }
 
 export function playCommentSound() {
+  if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   try {
@@ -81,6 +88,7 @@ export function playCommentSound() {
 }
 
 export function playPublishPostSound() {
+  if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   try {
@@ -111,6 +119,7 @@ export function playPublishPostSound() {
 }
 
 export function playStarSound(isGoldImperial: boolean = false) {
+  if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   try {
@@ -175,6 +184,7 @@ export function playStarSound(isGoldImperial: boolean = false) {
 }
 
 export function playNotificationSound() {
+  if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   try {

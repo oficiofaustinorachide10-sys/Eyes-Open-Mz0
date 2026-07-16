@@ -3,17 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Menu, Eye, Newspaper, Video, Calendar, Store, Users, Settings, 
   Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Post, Story, Comment, Notification, Friendship } from './types';
-import { SEED_USERS, SEED_POSTS, SEED_STORIES } from './utils';
+import { User, Post, Story, Comment, Notification, Friendship, ChatPermission } from './types';
+import { SEED_USERS, SEED_POSTS, SEED_STORIES, simpleHash } from './utils';
 
 // Import our modular subcomponents
 import LoginView from './components/LoginView';
+import AccountSelectorView, { SavedAccount } from './components/AccountSelectorView';
 import RegisterView from './components/RegisterView';
 import Sidebar, { ViewType } from './components/Sidebar';
 import NotificationsView from './components/NotificationsView';
@@ -30,6 +31,7 @@ import AbraView from './components/AbraView';
 import { FloatingSearch } from './components/FloatingSearch';
 import { UserAvatar } from './components/UserAvatar';
 import { THEME_CONFIGS, injectThemeVariables, ThemeConfig } from './utils/themeEngine';
+import { playClickFeedback, playCommentSound, playPublishPostSound, playStarSound, playNotificationSound } from './utils/audioSystem';
 
 // Import our Firestore synchronization utilities
 import {
@@ -48,6 +50,7 @@ import {
   subscribeChats,
   subscribeNotifications,
   dbCreateNotification,
+  dbDeleteNotification,
   subscribeFriendships,
   dbCreateFriendship,
   dbDeleteFriendship,
@@ -63,11 +66,57 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+  // Saved device sessions / accounts selector states
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const saved = localStorage.getItem('eo_saved_accounts');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { return []; }
+    }
+    return [];
+  });
+  const [showAccountSelector, setShowAccountSelector] = useState<boolean>(true);
+
+  const currentUserRef = useRef<User | null>(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   // Extended theme state: support all themes, persisting the values properly
   const [theme, setThemeState] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max'>(() => {
+    let userId = '';
+    try {
+      const stored = localStorage.getItem('currentUser');
+      if (stored) {
+        userId = JSON.parse(stored).id;
+      }
+    } catch (e) {}
+    if (userId && userId !== 'guest') {
+      const savedUserTheme = localStorage.getItem(`theme_user_${userId}`);
+      if (savedUserTheme && THEME_CONFIGS[savedUserTheme as any]) {
+        return savedUserTheme as any;
+      }
+    }
     const saved = localStorage.getItem('theme') as any;
     return (saved && THEME_CONFIGS[saved]) ? saved : 'noite';
   });
+
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.id === 'guest') {
+        setThemeState('noite');
+      } else {
+        const savedUserTheme = localStorage.getItem(`theme_user_${currentUser.id}`);
+        if (savedUserTheme && THEME_CONFIGS[savedUserTheme as any]) {
+          setThemeState(savedUserTheme as any);
+        } else {
+          setThemeState('noite');
+        }
+      }
+    } else {
+      setThemeState('noite');
+    }
+  }, [currentUser]);
 
   // Eyes Max Special Theme & Virtual Assistant "Pay" states
   const [eyesMaxDownloaded, setEyesMaxDownloaded] = useState<boolean>(() => {
@@ -154,6 +203,9 @@ export default function App() {
             setIsApplyingEyesMax(false);
             setThemeState('eyes-max');
             localStorage.setItem('theme', 'eyes-max');
+            if (currentUser && currentUser.id !== 'guest') {
+              localStorage.setItem(`theme_user_${currentUser.id}`, 'eyes-max');
+            }
             setAdaptiveControls(false);
             // Play brand sound signature
             playPaySignatureSound();
@@ -210,6 +262,9 @@ export default function App() {
     }
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
+    if (currentUser && currentUser.id !== 'guest') {
+      localStorage.setItem(`theme_user_${currentUser.id}`, newTheme);
+    }
     // Manual selection overrides adaptive controls
     setAdaptiveControls(false);
   };
@@ -225,6 +280,10 @@ export default function App() {
     return (saved === 'performance' || saved === 'immersive') ? saved : 'immersive';
   });
 
+  const [interfaceSounds, setInterfaceSounds] = useState<boolean>(() => {
+    return localStorage.getItem('eo_interface_sounds_enabled') !== 'false';
+  });
+
   const [simulatedBattery, setSimulatedBattery] = useState<number>(100);
   const [actualBattery, setActualBattery] = useState<number | null>(null);
   const [isUltraSaver, setIsUltraSaver] = useState<boolean>(false);
@@ -238,6 +297,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('uiMode', uiMode);
   }, [uiMode]);
+
+  useEffect(() => {
+    localStorage.setItem('eo_interface_sounds_enabled', String(interfaceSounds));
+  }, [interfaceSounds]);
 
   // Sync physical battery level if supported
   useEffect(() => {
@@ -333,26 +396,40 @@ export default function App() {
     } as any).catch(console.error);
 
     const interval = setInterval(() => {
-      dbUpdateUser({
-        ...currentUser,
-        isOnline: true,
-        lastActive: Date.now()
-      } as any).catch(console.error);
+      const latestUser = currentUserRef.current;
+      if (latestUser && latestUser.id !== 'guest') {
+        dbUpdateUser({
+          ...latestUser,
+          isOnline: true,
+          lastActive: Date.now()
+        } as any).catch(console.error);
+      }
     }, 20000);
 
     const handleUnload = () => {
-      dbUpdateUser({
-        ...currentUser,
-        isOnline: false,
-        lastActive: Date.now()
-      } as any).catch(console.error);
+      const latestUser = currentUserRef.current;
+      if (latestUser && latestUser.id !== 'guest') {
+        dbUpdateUser({
+          ...latestUser,
+          isOnline: false,
+          lastActive: Date.now()
+        } as any).catch(console.error);
+      }
     };
     window.addEventListener('beforeunload', handleUnload);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('beforeunload', handleUnload);
-      handleUnload();
+      // Only set offline if they actually changed ID or logged out
+      const latestUser = currentUserRef.current;
+      if (!latestUser || latestUser.id !== currentUser.id) {
+        dbUpdateUser({
+          ...currentUser,
+          isOnline: false,
+          lastActive: Date.now()
+        } as any).catch(console.error);
+      }
     };
   }, [currentUser?.id]);
 
@@ -556,9 +633,20 @@ export default function App() {
       setNotifications([]);
       return;
     }
+    let isFirstRun = true;
     const unsubNotifs = subscribeNotifications(currentUser.id, (loadedNotifs) => {
       // Exclude notifications triggered by the user themselves
       const filtered = loadedNotifs.filter(n => n.sender.id !== currentUser.id);
+      
+      // Play notification sound on new unread notification (not on initial snapshot)
+      if (!isFirstRun && filtered.some(n => !n.read)) {
+        const unreadNew = filtered.filter(n => !n.read);
+        const hasRecentUnread = unreadNew.some(n => (Date.now() - n.timestamp) < 10000);
+        if (hasRecentUnread) {
+          playNotificationSound();
+        }
+      }
+      isFirstRun = false;
       setNotifications(filtered);
     });
     return () => unsubNotifs();
@@ -570,10 +658,153 @@ export default function App() {
   };
 
   // 2. Authentication handlers
+  // Symmetric lightweight encryption helper for local credentials using security PIN
+  const encryptToken = (token: string, pin: string): string => {
+    let result = '';
+    const key = pin + '_eyesopen_mz_secure_key';
+    for (let i = 0; i < token.length; i++) {
+      const charCode = token.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+      result += String.fromCharCode(charCode);
+    }
+    return btoa(unescape(encodeURIComponent(result)));
+  };
+
+  const decryptToken = (encrypted: string, pin: string): string => {
+    try {
+      const decoded = decodeURIComponent(escape(atob(encrypted)));
+      let result = '';
+      const key = pin + '_eyesopen_mz_secure_key';
+      for (let i = 0; i < decoded.length; i++) {
+        const charCode = decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+        result += String.fromCharCode(charCode);
+      }
+      return result;
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const handleSelectSavedAccount = async (
+    accountId: string, 
+    method: 'pin' | 'password', 
+    credential: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const acc = savedAccounts.find(a => a.id === accountId);
+    if (!acc) return { success: false, error: 'Conta não encontrada.' };
+
+    if (method === 'password') {
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: acc.email, password: credential })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          return { success: false, error: data.error || 'Palavra-passe incorreta.' };
+        }
+        handleLoginSuccess(data.user, data.token, true);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: 'Erro de ligação ao servidor de autenticação.' };
+      }
+    } else {
+      const pinHash = localStorage.getItem(`eo_pin_hash_${accountId}`);
+      if (!pinHash) return { success: false, error: 'PIN não configurado para esta conta.' };
+
+      if (simpleHash(credential) !== pinHash) {
+        return { success: false, error: 'PIN incorreto.' };
+      }
+
+      const encryptedToken = acc.encryptedToken || localStorage.getItem(`eo_enc_token_${accountId}`);
+      if (encryptedToken) {
+        const decryptedToken = decryptToken(encryptedToken, credential);
+        if (decryptedToken) {
+          try {
+            const response = await fetch('/api/auth/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${decryptedToken}`
+              }
+            });
+            const data = await response.json();
+            if (response.ok && data.user) {
+              handleLoginSuccess(data.user, decryptedToken, true);
+              return { success: true };
+            } else {
+              return { success: false, error: 'A sua sessão expirou no servidor. Por favor, utilize Palavra-passe.' };
+            }
+          } catch (err) {
+            // Offline fallback
+            const masterUser = users.find(u => u.id === accountId);
+            if (masterUser) {
+              handleLoginSuccess(masterUser, decryptedToken, true);
+              return { success: true };
+            }
+            return { success: false, error: 'Servidor offline e sem cache local.' };
+          }
+        }
+      }
+      return { success: false, error: 'Sessão cifrada local expirou ou está corrompida. Use Palavra-passe.' };
+    }
+  };
+
+  const handleRemoveSavedAccount = (accountId: string) => {
+    const updated = savedAccounts.filter(acc => acc.id !== accountId);
+    localStorage.setItem('eo_saved_accounts', JSON.stringify(updated));
+    setSavedAccounts(updated);
+    
+    // Also clear keys/PIN hashes for this user
+    localStorage.removeItem(`eo_pin_hash_${accountId}`);
+    localStorage.removeItem(`eo_enc_token_${accountId}`);
+    triggerToast('Conta removida deste dispositivo com sucesso.');
+  };
+
+  const handleRegisterSavedPin = async (accountId: string, pin: string) => {
+    const hash = simpleHash(pin);
+    localStorage.setItem(`eo_pin_hash_${accountId}`, hash);
+
+    const token = localStorage.getItem('eo_jwt_token');
+    if (token) {
+      const encrypted = encryptToken(token, pin);
+      localStorage.setItem(`eo_enc_token_${accountId}`, encrypted);
+
+      const updated = savedAccounts.map(acc => {
+        if (acc.id === accountId) {
+          return { ...acc, hasPin: true, encryptedToken: encrypted };
+        }
+        return acc;
+      });
+      localStorage.setItem('eo_saved_accounts', JSON.stringify(updated));
+      setSavedAccounts(updated);
+    }
+  };
+
   const handleLoginSuccess = (user: User, token: string, rememberMe?: boolean) => {
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('eo_jwt_token', token);
+    
+    // Save account to local device-saved accounts lists (always saved to enable fast switching/saved accounts on device)
+    const savedListRaw = localStorage.getItem('eo_saved_accounts');
+    let savedList: SavedAccount[] = [];
+    if (savedListRaw) {
+      try { savedList = JSON.parse(savedListRaw); } catch(e){}
+    }
+    savedList = savedList.filter(acc => acc.id !== user.id);
+    const hasPin = localStorage.getItem(`eo_pin_hash_${user.id}`) !== null;
+    savedList.unshift({
+      id: user.id,
+      nickname: user.nickname,
+      fullname: user.fullname || user.nickname,
+      avatar: user.avatar || "https://i.pravatar.cc/100?img=1",
+      email: user.email,
+      hasPin
+    });
+    localStorage.setItem('eo_saved_accounts', JSON.stringify(savedList));
+    setSavedAccounts(savedList);
+
     if (rememberMe) {
       try {
         const raw = JSON.stringify(user);
@@ -643,6 +874,7 @@ export default function App() {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('eo_jwt_token');
     localStorage.removeItem('eo_secure_keychain_token');
+    setShowAccountSelector(true);
     setActiveView('feed');
     triggerToast('Terminou a sessão com sucesso!');
   };
@@ -683,11 +915,18 @@ export default function App() {
     const p = posts.find(x => x.id === postId);
     if (!p) return;
 
-    const nextStarred = !p.starred;
+    const starredBy = p.starredBy ? { ...p.starredBy } : {};
+    const hasStarred = !!starredBy[currentUser.id];
+    const nextStarred = !hasStarred;
+    starredBy[currentUser.id] = nextStarred;
+
+    const nextStars = Object.values(starredBy).filter(Boolean).length;
+
     const updated: Post = {
       ...p,
+      starredBy,
       starred: nextStarred,
-      stars: nextStarred ? p.stars + 1 : p.stars - 1
+      stars: nextStars
     };
     await dbUpdatePost(updated);
 
@@ -719,12 +958,28 @@ export default function App() {
     const p = posts.find(x => x.id === postId);
     if (!p) return;
 
-    const updated: Post = {
-      ...p,
-      views: p.views + 1
-    };
-    await dbUpdatePost(updated);
-    sessionStorage.setItem(sessionKey, 'true');
+    if (currentUser) {
+      const viewedBy = p.viewedBy ? { ...p.viewedBy } : {};
+      if (viewedBy[currentUser.id]) {
+        sessionStorage.setItem(sessionKey, 'true');
+        return;
+      }
+      viewedBy[currentUser.id] = true;
+      const updated: Post = {
+        ...p,
+        viewedBy,
+        views: (p.views || 0) + 1
+      };
+      await dbUpdatePost(updated);
+      sessionStorage.setItem(sessionKey, 'true');
+    } else {
+      const updated: Post = {
+        ...p,
+        views: (p.views || 0) + 1
+      };
+      await dbUpdatePost(updated);
+      sessionStorage.setItem(sessionKey, 'true');
+    }
   };
 
   const handleDeletePost = async (postId: string) => {
@@ -809,6 +1064,7 @@ export default function App() {
         timestamp: Date.now()
       };
       await dbCreateNotification(newNotif);
+      playPublishPostSound();
       triggerToast('Pedido de vínculo aceite com sucesso!');
     }
     await dbDeleteNotification(notifId);
@@ -854,7 +1110,8 @@ export default function App() {
       senderId: currentUser.id,
       receiverId: targetUserId,
       status: 'pending',
-      durationDays,
+      duration: durationDays === 7 ? '7d' : 'permanent',
+      level: 'conhecido',
       timestamp: Date.now(),
       expiresAt
     };
@@ -898,7 +1155,15 @@ export default function App() {
     }
   };
 
-  const handlePublishPost = async (imgSrc: string | null, text: string, font: string, color: string, isPrivate: boolean) => {
+  const handlePublishPost = async (
+    imgSrc: string | null,
+    text: string,
+    font: string,
+    color: string,
+    isPrivate: boolean,
+    type?: 'photo' | 'video' | 'audio' | 'voice' | 'document' | 'file' | 'text',
+    extraData?: any
+  ) => {
     if (!currentUser) return;
     if (currentUser.id === 'guest') {
       alert('Convidados não possuem permissão para criar publicações.');
@@ -919,7 +1184,9 @@ export default function App() {
       stars: 0,
       views: 0,
       timestamp: Date.now(),
-      comments: []
+      comments: [],
+      type: type || 'text',
+      ...extraData
     };
 
     await dbCreatePost(newPost);
@@ -1047,14 +1314,26 @@ export default function App() {
 
   // 4. Story interactions (Like, View, Post)
   const handleLikeStory = async (storyId: string) => {
+    if (currentUser?.id === 'guest') {
+      alert('Como convidado, precisa de uma conta para interagir. Vamos direcioná-lo para criar uma conta!');
+      handleRedirectToRegister();
+      return;
+    }
     const s = stories.find(x => x.id === storyId);
     if (!s) return;
 
-    const nextStarred = !s.starred;
+    const starredBy = s.starredBy ? { ...s.starredBy } : {};
+    const hasStarred = !!starredBy[currentUser.id];
+    const nextStarred = !hasStarred;
+    starredBy[currentUser.id] = nextStarred;
+
+    const nextStars = Object.values(starredBy).filter(Boolean).length;
+
     const updated: Story = {
       ...s,
+      starredBy,
       starred: nextStarred,
-      stars: (s.stars || 0) + (nextStarred ? 1 : -1)
+      stars: nextStars
     };
     await dbUpdateStory(updated);
 
@@ -1086,12 +1365,28 @@ export default function App() {
     const s = stories.find(x => x.id === storyId);
     if (!s) return;
 
-    const updated: Story = {
-      ...s,
-      views: (s.views || 0) + 1
-    };
-    await dbUpdateStory(updated);
-    sessionStorage.setItem(sessionKey, 'true');
+    if (currentUser) {
+      const viewedBy = s.viewedBy ? { ...s.viewedBy } : {};
+      if (viewedBy[currentUser.id]) {
+        sessionStorage.setItem(sessionKey, 'true');
+        return;
+      }
+      viewedBy[currentUser.id] = true;
+      const updated: Story = {
+        ...s,
+        viewedBy,
+        views: (s.views || 0) + 1
+      };
+      await dbUpdateStory(updated);
+      sessionStorage.setItem(sessionKey, 'true');
+    } else {
+      const updated: Story = {
+        ...s,
+        views: (s.views || 0) + 1
+      };
+      await dbUpdateStory(updated);
+      sessionStorage.setItem(sessionKey, 'true');
+    }
   };
 
   const handlePublishStory = async (storySrc: string, text: string | null, font: string, color: string, musicName?: string) => {
@@ -1198,6 +1493,7 @@ export default function App() {
             onDeleteFriendship={handleDisconnectUser}
             onAddComment={handleAddComment}
             onLikePost={handleLikePost}
+            onDeletePost={handleDeletePost}
             onAddChatPermission={handleAddChatPermission}
           />
         );
@@ -1215,6 +1511,7 @@ export default function App() {
           <PublishPostView
             onPublish={handlePublishPost}
             onCancel={() => navigateToView('feed')}
+            users={users}
           />
         );
       case 'publish-story':
@@ -1639,6 +1936,28 @@ export default function App() {
                   </label>
                 </div>
 
+                {/* Interface Sounds Toggle Switch */}
+                <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
+                  <div>
+                    <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Efeitos Sonoros da Interface</h5>
+                    <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
+                      Ativa ou desativa sons discretos para avaliações por estrelas, amizades, notificações e outras interações.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={interfaceSounds} 
+                      onChange={(e) => {
+                        setInterfaceSounds(e.target.checked);
+                        triggerToast(e.target.checked ? 'Efeitos sonoros ativos!' : 'Efeitos sonoros desativados!');
+                      }}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-9 h-5 bg-neutral-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-[var(--theme-accent)]/30 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--theme-accent)]"></div>
+                  </label>
+                </div>
+
                 {/* UI Performance Switch */}
                 <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
                   <div>
@@ -1745,19 +2064,32 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-[var(--theme-bg-main)] text-[var(--theme-text-main)] flex theme-${theme} transition-colors duration-500`}>
       {!currentUser ? (
-        /* If session is not authenticated, render Login/Register views */
+        /* If session is not authenticated, render Saved Accounts list or Login/Register views */
         <div className="flex-1">
-          {activeView === 'register' ? (
+          {showAccountSelector && savedAccounts.length > 0 ? (
+            <AccountSelectorView
+              savedAccounts={savedAccounts}
+              onSelectAccount={handleSelectSavedAccount}
+              onUseAnotherAccount={() => setShowAccountSelector(false)}
+              onRemoveAccount={handleRemoveSavedAccount}
+              onRegisterPin={handleRegisterSavedPin}
+              theme={theme}
+            />
+          ) : activeView === 'register' ? (
             <RegisterView
               users={users}
               onRegisterSuccess={handleRegisterSuccess}
-              onGoToLogin={() => setActiveView('feed')}
+              onGoToLogin={() => {
+                setShowAccountSelector(true);
+                setActiveView('feed');
+              }}
             />
           ) : (
             <LoginView
               users={users}
               onLoginSuccess={handleLoginSuccess}
               onGoToRegister={() => setActiveView('register')}
+              onGoToSavedAccounts={() => setShowAccountSelector(true)}
             />
           )}
         </div>

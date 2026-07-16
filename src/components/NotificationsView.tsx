@@ -181,8 +181,10 @@ export default function NotificationsView({
 
   const handleDeleteIndividual = async (e: React.MouseEvent, notifId: string) => {
     e.stopPropagation(); // prevent triggering the click navigation
-    await dbDeleteNotification(notifId);
-    setSessionReadIds(prev => prev.filter(id => id !== notifId));
+    if (window.confirm('Tem a certeza que deseja eliminar esta notificação?')) {
+      await dbDeleteNotification(notifId);
+      setSessionReadIds(prev => prev.filter(id => id !== notifId));
+    }
   };
 
   // Helper to choose corresponding icons

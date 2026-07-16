@@ -29,6 +29,7 @@ interface ProfileViewProps {
   onDeleteFriendship?: (targetUserId: string) => void;
   onAddComment?: (postId: string, text: string, audioUrl?: string, audioDuration?: number) => void;
   onLikePost?: (postId: string) => void;
+  onDeletePost?: (postId: string) => void;
   onAddChatPermission?: (targetUserId: string, duration: 7 | 30 | 'permanent') => void;
 }
 
@@ -46,6 +47,7 @@ export default function ProfileView({
   onDeleteFriendship,
   onAddComment,
   onLikePost,
+  onDeletePost,
   onAddChatPermission
 }: ProfileViewProps) {
   
@@ -138,7 +140,18 @@ export default function ProfileView({
       setAvatar(activeUser.avatar || "https://i.pravatar.cc/150?img=1");
       setCover((activeUser as any).cover || "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=1200");
     }
-  }, [activeUser, isEditing]);
+  }, [
+    activeUser.id,
+    activeUser.bio,
+    activeUser.birthday,
+    activeUser.gender,
+    activeUser.orientation,
+    activeUser.hideLocation,
+    activeUser.fullname,
+    activeUser.avatar,
+    (activeUser as any).cover,
+    isEditing
+  ]);
 
   // Auto-sign Calculation
   const calculateZodiac = (dateStr: string) => {
@@ -296,29 +309,84 @@ export default function ProfileView({
   };
 
   const confirmFramedCrop = () => {
-    if (tempImageSrc) {
-      // In a real app we'd crop using a canvas.
-      // Here we simulate the cropped result with the modified image properties or keep the base64.
+    if (!tempImageSrc) return;
+
+    const img = new Image();
+    img.src = tempImageSrc;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      let targetWidth = 300;
+      let targetHeight = 300;
+      if (cropTarget === 'cover') {
+        targetWidth = 800;
+        targetHeight = 300;
+      }
+
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
+      // Dark solid background
+      ctx.fillStyle = '#0a0f1d';
+      ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+      ctx.save();
+      ctx.translate(targetWidth / 2, targetHeight / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.scale(zoom, zoom);
+
+      const imgRatio = img.width / img.height;
+      let drawWidth = targetWidth;
+      let drawHeight = targetWidth / imgRatio;
+
+      if (cropTarget === 'cover') {
+        const targetRatio = 800 / 300;
+        if (imgRatio > targetRatio) {
+          drawHeight = targetHeight;
+          drawWidth = targetHeight * imgRatio;
+        } else {
+          drawWidth = targetWidth;
+          drawHeight = targetWidth / imgRatio;
+        }
+      } else {
+        if (imgRatio > 1) {
+          drawHeight = targetHeight;
+          drawWidth = targetHeight * imgRatio;
+        } else {
+          drawWidth = targetWidth;
+          drawHeight = targetWidth / imgRatio;
+        }
+      }
+
+      ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
+
+      // Export as heavily compressed, high-performance base64 JPEG
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+
       if (cropTarget === 'avatar') {
-        setAvatar(tempImageSrc);
+        setAvatar(compressedBase64);
         if (!isEditing && onUpdateUser && isOwner) {
           onUpdateUser({
             ...currentUser,
-            avatar: tempImageSrc
+            avatar: compressedBase64
           });
         }
       } else if (cropTarget === 'cover') {
-        setCover(tempImageSrc);
+        setCover(compressedBase64);
         if (!isEditing && onUpdateUser && isOwner) {
           onUpdateUser({
             ...currentUser,
-            cover: tempImageSrc as any
+            cover: compressedBase64 as any
           });
         }
       }
-    }
-    setCropTarget(null);
-    setTempImageSrc(null);
+
+      setCropTarget(null);
+      setTempImageSrc(null);
+    };
   };
 
   // 7. Profile Edit Saving
@@ -1406,9 +1474,25 @@ export default function ProfileView({
                 className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-lg text-left overflow-hidden relative"
               >
                 {post.isPrivate && (
-                  <div className="absolute top-4 right-4 bg-indigo-500/10 border border-indigo-500/25 px-2.5 py-0.5 rounded-full text-indigo-400 text-[8px] font-bold uppercase tracking-wider">
+                  <div className={`absolute top-4 ${isOwner ? 'right-14' : 'right-4'} bg-indigo-500/10 border border-indigo-500/25 px-2.5 py-0.5 rounded-full text-indigo-400 text-[8px] font-bold uppercase tracking-wider`}>
                     Amigos
                   </div>
+                )}
+
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Tem a certeza que deseja eliminar esta publicação permanentemente?')) {
+                        if (onDeletePost) {
+                          onDeletePost(post.id);
+                        }
+                      }
+                    }}
+                    className="absolute top-3.5 right-4 w-7 h-7 rounded-full bg-red-600/90 hover:bg-red-500 flex items-center justify-center text-white cursor-pointer z-10 hover:scale-110 active:scale-95 transition-all shadow-lg border border-red-500/10"
+                    title="Eliminar Publicação"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 )}
 
                 {/* Post Author Info */}

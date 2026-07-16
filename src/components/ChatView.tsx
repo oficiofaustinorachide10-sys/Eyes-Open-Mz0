@@ -8,13 +8,14 @@ import {
   Send, MessageSquare, ShieldCheck, Clock, UserPlus, UserCheck, Lock, Unlock, 
   Hourglass, Phone, Video, FileUp, MapPin, Calendar, Award, Folder, Play, Check, 
   X, HelpCircle, Briefcase, Radio, AlertTriangle, Sparkles, Star, Users, CheckCircle2, UserX, Plus,
-  MoreVertical, Settings, ArrowLeft, VideoOff, Tv
+  MoreVertical, Settings, ArrowLeft, VideoOff, Tv, Pin, Volume2, VolumeX, Trash2, Edit3, Download, Share2, Smile, MessageCircle,
+  Search, ShieldAlert, User as UserIcon, Palette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Friendship, ChatPermission, Notification } from '../types';
 import { UserAvatar } from './UserAvatar';
 import { 
-  subscribeChats, dbSendMessage, dbUpdateUser, subscribeUsers,
+  subscribeChats, dbSendMessage, dbUpdateMessage, dbDeleteMessage, dbUpdateUser, subscribeUsers,
   subscribeFriendships, dbCreateFriendship, dbUpdateFriendship, dbDeleteFriendship,
   subscribeChatPermissions, dbCreateChatPermission, dbUpdateChatPermission, dbDeleteChatPermission,
   dbCreateNotification, subscribeGroupLives, dbJoinGroupLive, dbLeaveGroupLive
@@ -69,7 +70,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
       setSelectedChatId(initialSelectedChatId);
     }
   }, [initialSelectedChatId]);
-  const [activeTab, setActiveTab] = useState<'conversas' | 'pedidos'>('conversas');
+  const [activeTab, setActiveTab] = useState<'conversas' | 'pedidos' | 'grupos'>('conversas');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dropdown options for accepting conversation requests
@@ -101,6 +102,232 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
   // Mentions / Chamar states
   const [mentionQuery, setMentionQuery] = useState('');
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+
+  // New States for Extended Chat Features
+  const [pinnedConversations, setPinnedConversations] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`eo_pinned_${currentUser.id}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) { return []; }
+  });
+
+  const [mutedConversations, setMutedConversations] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`eo_muted_${currentUser.id}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) { return []; }
+  });
+
+  const [favoritedMessageIds, setFavoritedMessageIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`eo_favorites_${currentUser.id}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) { return []; }
+  });
+
+  const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`eo_blocked_${currentUser.id}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) { return []; }
+  });
+
+  // Chat Background Customization
+  const [showBgCustomizer, setShowBgCustomizer] = useState(false);
+  const [customBgInput, setCustomBgInput] = useState('');
+  const [applyBgGlobally, setApplyBgGlobally] = useState(false);
+  const [chatBg, setChatBg] = useState<string>(() => {
+    return localStorage.getItem(`eo_chat_bg_${currentUser.id}_${selectedChatId}`) || 
+           localStorage.getItem(`eo_chat_bg_${currentUser.id}_global`) || 
+           '';
+  });
+
+  // Re-load background when chat selection or user changes
+  useEffect(() => {
+    const bg = localStorage.getItem(`eo_chat_bg_${currentUser.id}_${selectedChatId}`) || 
+               localStorage.getItem(`eo_chat_bg_${currentUser.id}_global`) || 
+               '';
+    setChatBg(bg);
+  }, [selectedChatId, currentUser.id]);
+
+  const [replyingToMessage, setReplyingToMessage] = useState<any | null>(null);
+  const [searchInChatQuery, setSearchInChatQuery] = useState('');
+  const [showSearchInChat, setShowSearchInChat] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<any | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
+  const [groupSearchQuery, setGroupSearchQuery] = useState('');
+
+  // Group creation states
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [newGroupMinLevel, setNewGroupMinLevel] = useState('conhecido');
+  const [newGroupPhoto, setNewGroupPhoto] = useState('https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=200');
+
+  const [groups, setGroups] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('eo_groups_' + currentUser.id);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'group_general',
+        name: 'Geral Eyes Open MZ',
+        photo: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=200',
+        description: 'Espaço principal para debate, novidades académicas e partilha social na nossa rede nacional.',
+        admins: ['Alex MZ', 'Oficio MZ'],
+        mods: ['Helena Maputo'],
+        participants: [currentUser.nickname, 'Alex MZ', 'Oficio MZ', 'Helena Maputo', 'Lucas Beira'],
+        rules: [
+          'Respeito mútuo entre todos os membros.',
+          'Partilhar apenas conteúdos pedagógicos e de interesse geral.',
+          'Proibido spam ou publicidade não autorizada.'
+        ],
+        invites: [],
+        files: [
+          { name: 'Guia de Boas-Vindas Eyes Open.pdf', sender: 'Alex MZ', date: '12/07/2026' }
+        ]
+      },
+      {
+        id: 'group_math',
+        name: 'Matemática e Física Geral',
+        photo: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&q=80&w=200',
+        description: 'Grupo dedicado à resolução de problemas de Física, Análise Matemática e Álgebra.',
+        admins: ['Alex MZ'],
+        mods: ['Oficio MZ'],
+        participants: [currentUser.nickname, 'Alex MZ', 'Oficio MZ', 'Lucas Beira'],
+        rules: [
+          'Colocar sempre o enunciado claro do problema.',
+          'Ajudar os colegas com explicações passo a passo.',
+          'Manter o foco em ciência e engenharia.'
+        ],
+        invites: ['Helena Maputo'],
+        files: [
+          { name: 'Sebenta_Exercicios_Resolvidos_Calculo_I.pdf', sender: 'Alex MZ', date: '13/07/2026' }
+        ]
+      },
+      {
+        id: 'group_programming',
+        name: 'Engenharia de Software & Web',
+        photo: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=200',
+        description: 'Fórum de programação, inteligência artificial e tecnologias web em Moçambique.',
+        admins: ['Oficio MZ'],
+        mods: ['Alex MZ'],
+        participants: [currentUser.nickname, 'Oficio MZ', 'Alex MZ'],
+        rules: [
+          'Partilhar repositórios úteis de código ou ideias de projetos.',
+          'Explicar conceitos sem recorrer a plágio.',
+          'Manter uma atitude construtiva no feedback.'
+        ],
+        invites: [],
+        files: [
+          { name: 'Introducao_React_TypeScript_Vite.pdf', sender: 'Oficio MZ', date: '14/07/2026' }
+        ]
+      }
+    ];
+  });
+
+  const togglePinConversation = (userId: string) => {
+    setPinnedConversations(prev => {
+      const updated = prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId];
+      localStorage.setItem(`eo_pinned_${currentUser.id}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const toggleMuteConversation = (userId: string) => {
+    setMutedConversations(prev => {
+      const updated = prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId];
+      localStorage.setItem(`eo_muted_${currentUser.id}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const toggleFavoriteMessage = (msgId: string) => {
+    setFavoritedMessageIds(prev => {
+      const updated = prev.includes(msgId) ? prev.filter(id => id !== msgId) : [...prev, msgId];
+      localStorage.setItem(`eo_favorites_${currentUser.id}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleBlockUser = async (userId: string) => {
+    if (window.confirm("Deseja realmente bloquear este utilizador? Isso irá encerrar todas as permissões de conversa e apagar os pedidos de amizade.")) {
+      const updatedBlocked = [...blockedUsers, userId];
+      setBlockedUsers(updatedBlocked);
+      localStorage.setItem(`eo_blocked_${currentUser.id}`, JSON.stringify(updatedBlocked));
+
+      const perm = getChatPermissionWith(userId);
+      if (perm) {
+        await dbDeleteChatPermission(perm.id).catch(console.error);
+      }
+      const friendship = getFriendshipWith(userId);
+      if (friendship) {
+        await dbDeleteFriendship(friendship.id).catch(console.error);
+      }
+
+      if (selectedChatId === userId) {
+        setSelectedChatId('group');
+      }
+      setIsChatActionsMenuOpen(false);
+      alert("Utilizador bloqueado.");
+    }
+  };
+
+  const handleClearConversationOnlyForMe = (userId: string) => {
+    localStorage.setItem(`eo_cleared_${currentUser.id}_${userId}`, Date.now().toString());
+    setIsChatActionsMenuOpen(false);
+    alert("Histórico de conversa limpo localmente.");
+  };
+
+  const handleClearConversationForEveryone = async (userId: string) => {
+    if (window.confirm("Deseja realmente eliminar esta conversa para ambos os utilizadores?")) {
+      const messagesToDelete = messages.filter((msg) => {
+        return (msg.recipientId === currentUser.id && msg.sender.id === userId) ||
+               (msg.recipientId === userId && msg.sender.id === currentUser.id);
+      });
+
+      for (const m of messagesToDelete) {
+        await dbDeleteMessage(m.id).catch(console.error);
+      }
+      setIsChatActionsMenuOpen(false);
+      alert("Conversa eliminada para todos.");
+    }
+  };
+
+  const handleEndChatPermission = async (userId: string) => {
+    if (window.confirm("Deseja encerrar a permissão de conversa com este utilizador?")) {
+      const perm = getChatPermissionWith(userId);
+      if (perm) {
+        await dbDeleteChatPermission(perm.id).catch(console.error);
+      }
+      setIsChatActionsMenuOpen(false);
+      alert("Permissão de conversa encerrada.");
+    }
+  };
+
+  const handleExportConversation = (nickname: string, uId: string) => {
+    const chatMsgs = messages.filter((msg) => {
+      return (msg.recipientId === currentUser.id && msg.sender.id === uId) ||
+             (msg.recipientId === uId && msg.sender.id === currentUser.id);
+    });
+
+    const exportText = chatMsgs.map(m => 
+      `[${new Date(m.timestamp).toLocaleString()}] ${m.sender.name}: ${m.text}`
+    ).join('\n');
+
+    const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `conversa_${nickname}_eyes_open.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setIsChatActionsMenuOpen(false);
+  };
 
   // Sync layout theme to localStorage and auto activate if needed
   const changeChatLayoutTheme = (mode: 'normal' | 'division') => {
@@ -560,12 +787,18 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
   // Filter messages for current selected view
   const currentChatMessages = messages.filter((msg) => {
+    let matchesChat = false;
     if (selectedChatId === 'group') {
-      return !msg.recipientId;
+      matchesChat = !msg.recipientId;
     } else {
-      return (msg.recipientId === currentUser.id && msg.sender.id === selectedChatId) ||
-             (msg.recipientId === selectedChatId && msg.sender.id === currentUser.id);
+      matchesChat = (msg.recipientId === currentUser.id && msg.sender.id === selectedChatId) ||
+                    (msg.recipientId === selectedChatId && msg.sender.id === currentUser.id);
     }
+    if (!matchesChat) return false;
+    if (showSearchInChat && searchInChatQuery) {
+      return msg.text.toLowerCase().includes(searchInChatQuery.toLowerCase());
+    }
+    return true;
   });
 
   // Calculate unread badge numbers for notifications list
@@ -678,143 +911,215 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
           <div className="w-full md:w-80 shrink-0 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
         
         {/* Sidebar tabs */}
-        <div className="grid grid-cols-2 border-b border-[var(--theme-border)] font-orbitron font-extrabold text-[11px] tracking-wider text-center select-none shrink-0">
+        <div className="grid grid-cols-3 border-b border-[var(--theme-border)] font-orbitron font-extrabold text-[10px] tracking-widest text-center select-none shrink-0">
           <button
             onClick={() => setActiveTab('conversas')}
-            className={`py-3.5 flex items-center justify-center gap-1.5 transition-colors uppercase cursor-pointer ${
+            className={`py-3.5 flex flex-col items-center justify-center gap-1 transition-all uppercase cursor-pointer ${
               activeTab === 'conversas' 
-                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)] font-black' 
+                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-neon-cyan text-neon-cyan font-black' 
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
-            <MessageSquare className="w-4 h-4" /> Conversas
+            <MessageCircle className="w-3.5 h-3.5" />
+            Comunidade
           </button>
           <button
             onClick={() => setActiveTab('pedidos')}
-            className={`py-3.5 flex items-center justify-center gap-1.5 transition-colors uppercase relative cursor-pointer ${
+            className={`py-3.5 flex flex-col items-center justify-center gap-1 transition-all uppercase cursor-pointer relative ${
               activeTab === 'pedidos' 
-                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-[var(--theme-accent-secondary)] text-[var(--theme-accent-secondary)] font-black' 
+                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-neon-magenta text-neon-magenta font-black' 
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
-            <Users className="w-4 h-4" /> Pedidos
-            {totalRequestsCount > 0 && (
-              <span className="absolute top-2 right-4 flex h-4 min-w-4 px-1 items-center justify-center text-[8px] font-black bg-[var(--theme-accent-secondary)] text-white rounded-full animate-bounce">
-                {totalRequestsCount}
-              </span>
+            {(incomingFriendRequestsCount + incomingChatRequestsCount) > 0 && (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-neon-magenta animate-ping" />
             )}
+            <UserPlus className="w-3.5 h-3.5" />
+            Pedidos
+          </button>
+          <button
+            onClick={() => setActiveTab('grupos')}
+            className={`py-3.5 flex flex-col items-center justify-center gap-1 transition-all uppercase cursor-pointer ${
+              activeTab === 'grupos' 
+                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-purple-500 text-purple-400 font-black' 
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            Grupos
           </button>
         </div>
 
-        {/* Tab 1 content: Conversas e Utilizadores */}
+        {/* Tab 1 content: Comunidade (Conversas ativas) */}
         {activeTab === 'conversas' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Search filter input */}
-            <div className="p-3 border-b border-[var(--theme-border)] shrink-0">
+          <div className="flex-grow flex flex-col overflow-hidden">
+            {/* Search filter bar */}
+            <div className="p-3 border-b border-[var(--theme-border)] bg-black/10 shrink-0">
               <input
                 type="text"
                 placeholder="Pesquisar utilizador..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold font-rajdhani"
+                className="w-full bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-2xl px-3.5 py-1.5 text-xs text-white outline-none focus:border-neon-cyan font-semibold transition-all shadow-inner"
               />
             </div>
 
             {/* Conversation list */}
-            <div className="flex-grow overflow-y-auto no-scrollbar p-2 space-y-1">
-              {/* Group chat item */}
-              <button
-                onClick={() => {
-                  setSelectedChatId('group');
-                  setIsMobileChatActive(true);
-                }}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left group cursor-pointer ${
-                  selectedChatId === 'group'
-                    ? 'bg-[var(--theme-bg-hover)] border-[var(--theme-accent)] text-[var(--theme-accent)] shadow-sm'
-                    : 'bg-black/10 border-white/5 hover:border-[var(--theme-accent)]/30 text-gray-300'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-[var(--theme-accent)] p-[1.5px] shadow-sm">
-                    <div className="w-full h-full rounded-full bg-[var(--theme-bg-card)] flex items-center justify-center">
-                      <Users className="w-5 h-5 text-[var(--theme-accent)] group-hover:scale-105 transition-transform" />
+            <div className="flex-grow overflow-y-auto no-scrollbar p-2 space-y-1.5">
+              {(() => {
+                // Filter community users who have active chat permissions
+                const communityUsers = users.filter(u => {
+                  if (u.id === currentUser.id) return false;
+                  if (blockedUsers.includes(u.id)) return false;
+                  
+                  const perm = hasChatPermission(u.id);
+                  const isMatch = u.nickname.toLowerCase().includes(searchQuery.toLowerCase());
+                  return perm.active && isMatch;
+                });
+
+                // Dynamically sort based on Pinned, Unread, Recent Message activity, and Old
+                const sortedUsers = [...communityUsers].sort((a, b) => {
+                  // 1. Pin priority
+                  const pinA = pinnedConversations.includes(a.id) ? 1 : 0;
+                  const pinB = pinnedConversations.includes(b.id) ? 1 : 0;
+                  if (pinA !== pinB) return pinB - pinA;
+
+                  // 2. Unread message priority
+                  const getUnreadCount = (uId: string) => {
+                    return messages.filter(m => 
+                      m.recipientId === currentUser.id && 
+                      m.sender.id === uId && 
+                      m.timestamp > (currentUser.lastReadChatTimestamp || 0)
+                    ).length;
+                  };
+                  const unreadA = getUnreadCount(a.id) > 0 ? 1 : 0;
+                  const unreadB = getUnreadCount(b.id) > 0 ? 1 : 0;
+                  if (unreadA !== unreadB) return unreadB - unreadA;
+
+                  // 3 & 4. Recent activity (timestamp of last message)
+                  const getLastMsgTime = (uId: string) => {
+                    const userMsgs = messages.filter(m => 
+                      (m.recipientId === currentUser.id && m.sender.id === uId) ||
+                      (m.recipientId === uId && m.sender.id === currentUser.id)
+                    );
+                    return userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].timestamp : 0;
+                  };
+                  return getLastMsgTime(b.id) - getLastMsgTime(a.id);
+                });
+
+                if (sortedUsers.length === 0) {
+                  return (
+                    <div className="text-center py-8 px-4 text-gray-500 font-sans text-xs">
+                      <p className="font-bold uppercase tracking-wider mb-1">Nenhum utilizador disponível</p>
+                      <p className="text-[10px]">Envie um pedido de conversa na área social ou aguarde permissão.</p>
                     </div>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-orbitron font-extrabold text-[11px] tracking-wider uppercase leading-none text-[var(--theme-text-main)]">CONVERSA DO GRUPO</p>
-                    <p className="text-[10px] text-gray-400 font-bold tracking-tight mt-1 truncate max-w-[120px]">Interação de comunidade</p>
-                  </div>
-                </div>
-                <span className="text-[9px] px-2 py-0.5 bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/20 text-[var(--theme-accent)] rounded-full uppercase font-bold tracking-wider shrink-0">Público</span>
-              </button>
+                  );
+                }
 
-              <div className="border-t border-[var(--theme-border)] my-2" />
-              <p className="text-[10px] text-[var(--theme-accent)]/70 font-bold tracking-widest font-orbitron uppercase px-2 mb-1.5">Direct Messages</p>
-
-              {/* Direct message items */}
-              {filteredUsers.length === 0 ? (
-                <div className="text-center py-6 text-xs text-gray-500 uppercase font-bold tracking-wider">Nenhum utilizador encontrado</div>
-              ) : (
-                filteredUsers.map((u) => {
-                  const isFriend = isSocialFriend(u.id);
-                  const chatPerm = hasChatPermission(u.id);
+                return sortedUsers.map((u) => {
                   const isSelected = selectedChatId === u.id;
+                  const perm = getChatPermissionWith(u.id);
+                  const isPinned = pinnedConversations.includes(u.id);
+                  const isMuted = mutedConversations.includes(u.id);
+
+                  // Retrieve last message
+                  const userMsgs = messages.filter(m => 
+                    (m.recipientId === currentUser.id && m.sender.id === u.id) ||
+                    (m.recipientId === u.id && m.sender.id === currentUser.id)
+                  );
+                  const lastMsg = userMsgs[userMsgs.length - 1];
+                  const lastMsgText = lastMsg 
+                    ? (lastMsg.isDeleted ? '🚫 Mensagem apagada' : lastMsg.text)
+                    : 'Nenhuma mensagem';
+                  const lastMsgTime = lastMsg 
+                    ? new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '';
+
+                  // Unread messages count
+                  const unreadCount = userMsgs.filter(m => 
+                    m.recipientId === currentUser.id && 
+                    m.sender.id === u.id && 
+                    m.timestamp > (currentUser.lastReadChatTimestamp || 0)
+                  ).length;
 
                   return (
-                    <button
+                    <div
                       key={u.id}
-                      onClick={() => {
-                        setSelectedChatId(u.id);
-                        setIsMobileChatActive(true);
-                      }}
-                      className={`w-full flex items-center justify-between p-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
-                        isSelected
-                          ? 'bg-[var(--theme-bg-hover)] border-[var(--theme-accent)] text-[var(--theme-accent)] shadow-sm'
-                          : 'bg-black/10 border-white/5 hover:border-[var(--theme-accent)]/20 text-gray-300'
+                      className={`p-2.5 rounded-2xl border transition-all relative flex flex-col gap-1 hover:bg-[var(--theme-bg-hover)] group ${
+                        isSelected 
+                          ? 'bg-[var(--theme-bg-hover)] border-neon-cyan/40 shadow-lg shadow-neon-cyan/5' 
+                          : 'bg-black/10 border-white/5'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <UserAvatar 
-                          src={u.avatar} 
-                          status={isUserOnline(u)} 
-                          nickname={u.nickname} 
-                          className="w-9 h-9" 
-                        />
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold leading-tight text-[var(--theme-text-main)]">{u.nickname}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {/* Friendship Badge */}
-                            {isFriend ? (
-                              <span className="text-[8px] text-[var(--theme-accent)] font-bold flex items-center gap-0.5 uppercase tracking-tight">
-                                <Check className="w-2 h-2 text-[var(--theme-accent)]" /> Amigo Social
-                              </span>
-                            ) : (
-                              <span className="text-[8px] text-gray-500 font-bold uppercase tracking-tight">Não amigo</span>
+                      <div className="flex items-center justify-between gap-2.5">
+                        <div 
+                          className="flex items-center gap-2.5 min-w-0 cursor-pointer flex-grow"
+                          onClick={() => {
+                            setSelectedChatId(u.id);
+                            setIsMobileChatActive(true);
+                          }}
+                        >
+                          <div className="relative">
+                            <UserAvatar 
+                              src={u.avatar} 
+                              status={isUserOnline(u)} 
+                              nickname={u.nickname} 
+                              className="w-9 h-9" 
+                            />
+                            {isPinned && (
+                              <div className="absolute -top-1 -left-1 bg-neon-cyan text-black p-0.5 rounded-full border border-black shadow">
+                                <Pin className="w-2.5 h-2.5 rotate-45" />
+                              </div>
                             )}
                           </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className="text-xs font-bold text-white truncate group-hover:text-neon-cyan transition-colors">{u.nickname}</p>
+                              <span className="text-[9px] text-gray-500 font-medium whitespace-nowrap">{lastMsgTime}</span>
+                            </div>
+
+                            <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5 leading-relaxed">
+                              {lastMsgText}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Actions Quick Menu (Pin, Mute) */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => togglePinConversation(u.id)}
+                            className={`p-1 rounded hover:bg-white/10 cursor-pointer transition-colors ${isPinned ? 'text-neon-cyan' : 'text-gray-500'}`}
+                            title={isPinned ? 'Desafixar conversa' : 'Fixar conversa'}
+                          >
+                            <Pin className="w-3 h-3 rotate-45" />
+                          </button>
+                          <button
+                            onClick={() => toggleMuteConversation(u.id)}
+                            className={`p-1 rounded hover:bg-white/10 cursor-pointer transition-colors ${isMuted ? 'text-red-400' : 'text-gray-500'}`}
+                            title={isMuted ? 'Ativar notificações' : 'Silenciar notificações'}
+                          >
+                            {isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                          </button>
                         </div>
                       </div>
 
-                      {/* Conversation Permissions indicator badge */}
-                      <div className="flex flex-col items-end shrink-0">
-                        {chatPerm.active && chatPerm.perm ? (
-                          <span className={`text-[8px] px-1.5 py-0.5 border rounded-full font-bold uppercase tracking-wide ${getConnectionLayerColor(chatPerm.perm.level)}`}>
-                            {chatPerm.perm.level === 'conhecido' ? '🟢 Conhecido' : chatPerm.perm.level === 'amigo' ? '🔵 Amigo' : chatPerm.perm.level === 'parceiro' ? '🟣 Parceiro' : chatPerm.perm.level === 'familia' ? '🟠 Família' : chatPerm.perm.level === 'equipe' ? '🟡 Equipe' : '⭐ VIP'}
-                          </span>
-                        ) : chatPerm.expired ? (
-                          <span className="text-[8px] px-1.5 py-0.5 border border-red-500/30 bg-red-500/10 text-red-400 rounded-full font-bold uppercase tracking-wide flex items-center gap-0.5">
-                            <Lock className="w-2 h-2" /> Expirado
-                          </span>
-                        ) : (
-                          <span className="text-[8px] px-1.5 py-0.5 border border-white/10 bg-white/5 text-gray-400 rounded-full font-bold uppercase tracking-wide flex items-center gap-0.5">
-                            <Lock className="w-2 h-2" /> Bloqueado
+                      {/* Connection level capsule & Unread badge */}
+                      <div className="flex items-center justify-between border-t border-white/5 pt-1.5 mt-1 select-none">
+                        <span className={`text-[8px] px-1.5 py-0.5 border rounded-full font-bold uppercase tracking-wider ${getConnectionLayerColor(perm?.level || 'conhecido')}`}>
+                          Nível: {getConnectionLayerLabel(perm?.level || 'conhecido')}
+                        </span>
+                        
+                        {unreadCount > 0 && (
+                          <span className="bg-red-500 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-full animate-bounce">
+                            {unreadCount} novas
                           </span>
                         )}
                       </div>
-                    </button>
+                    </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
           </div>
         )}
@@ -995,6 +1300,225 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
             </div>
           </div>
         )}
+
+        {/* Tab 3 content: Grupos */}
+        {activeTab === 'grupos' && (
+          <div className="flex-grow flex flex-col overflow-hidden">
+            {/* Search and Action Header */}
+            <div className="p-3 border-b border-[var(--theme-border)] bg-black/10 shrink-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Pesquisar grupos..."
+                  value={groupSearchQuery}
+                  onChange={(e) => setGroupSearchQuery(e.target.value)}
+                  className="flex-grow bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-2xl px-3.5 py-1.5 text-xs text-white outline-none focus:border-purple-500 font-semibold transition-all shadow-inner"
+                />
+                <button
+                  onClick={() => setShowCreateGroup(!showCreateGroup)}
+                  className="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Criar
+                </button>
+              </div>
+
+              {/* Collapsible Create Group Form */}
+              {showCreateGroup && (
+                <div className="bg-black/30 border border-purple-500/20 rounded-2xl p-3 space-y-2.5 animate-fade-in text-left">
+                  <p className="text-[10px] font-orbitron font-extrabold text-purple-400 uppercase tracking-widest">Novo Canal Temático</p>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-gray-400 font-bold uppercase">Nome do Grupo:</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Estudo de Álgebra Linear"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      className="w-full bg-[var(--theme-bg-card)] border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white outline-none focus:border-purple-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-gray-400 font-bold uppercase">Descrição:</label>
+                    <textarea
+                      placeholder="Indique o objetivo académico ou foco do grupo..."
+                      value={newGroupDesc}
+                      onChange={(e) => setNewGroupDesc(e.target.value)}
+                      className="w-full bg-[var(--theme-bg-card)] border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white outline-none focus:border-purple-500 font-medium h-14 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-gray-400 font-bold uppercase">Nível Mínimo:</label>
+                      <select
+                        value={newGroupMinLevel}
+                        onChange={(e: any) => setNewGroupMinLevel(e.target.value)}
+                        className="w-full bg-[var(--theme-bg-card)] border border-white/10 rounded-xl px-2 py-1 text-xs text-white outline-none focus:border-purple-500"
+                      >
+                        <option value="conhecido">🟢 Conhecido</option>
+                        <option value="amigo">🔵 Amigo</option>
+                        <option value="parceiro">🟣 Parceiro</option>
+                        <option value="familia">🟠 Família</option>
+                        <option value="equipe">🟡 Equipe</option>
+                        <option value="vip">⭐ VIP</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-gray-400 font-bold uppercase">Foto de Capa (URL):</label>
+                      <input
+                        type="text"
+                        placeholder="URL da imagem..."
+                        value={newGroupPhoto}
+                        onChange={(e) => setNewGroupPhoto(e.target.value)}
+                        className="w-full bg-[var(--theme-bg-card)] border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white outline-none focus:border-purple-500 font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-1.5 pt-1">
+                    <button
+                      onClick={() => {
+                        setShowCreateGroup(false);
+                        setNewGroupName('');
+                        setNewGroupDesc('');
+                      }}
+                      className="px-2.5 py-1 text-[9px] text-gray-400 hover:text-white uppercase font-bold cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!newGroupName.trim()) {
+                          alert("Por favor indique um nome para o grupo!");
+                          return;
+                        }
+                        const newGroup = {
+                          id: 'group_' + Math.random().toString(36).substring(2, 9),
+                          name: newGroupName,
+                          photo: newGroupPhoto,
+                          description: newGroupDesc || 'Grupo temático sem descrição definida.',
+                          minLevel: newGroupMinLevel,
+                          admins: [currentUser.nickname],
+                          mods: [],
+                          participants: [currentUser.nickname],
+                          rules: [
+                            'Respeitar todos os membros e debater de forma saudável.',
+                            'Não partilhar conteúdos ofensivos ou fora do âmbito.'
+                          ],
+                          invites: [],
+                          files: []
+                        };
+                        const updated = [...groups, newGroup];
+                        setGroups(updated);
+                        localStorage.setItem('eo_groups_' + currentUser.id, JSON.stringify(updated));
+                        setShowCreateGroup(false);
+                        setNewGroupName('');
+                        setNewGroupDesc('');
+                        alert(`Grupo "${newGroupName}" criado com sucesso!`);
+                      }}
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[9px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                    >
+                      Gravar Grupo
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* List of Groups */}
+            <div className="flex-grow overflow-y-auto no-scrollbar p-2 space-y-1.5">
+              {(() => {
+                const filteredGroups = groups.filter(g => 
+                  g.name.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
+                  g.description.toLowerCase().includes(groupSearchQuery.toLowerCase())
+                );
+
+                if (filteredGroups.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-gray-500 text-xs">
+                      <p className="font-bold uppercase tracking-wider mb-1">Nenhum grupo encontrado</p>
+                      <p className="text-[10px]">Crie um novo grupo para debater matérias!</p>
+                    </div>
+                  );
+                }
+
+                return filteredGroups.map((g) => {
+                  const isSelected = selectedChatId === g.id;
+                  const isMember = g.participants.includes(currentUser.nickname);
+                  const minLevel = g.minLevel || 'conhecido';
+
+                  return (
+                    <div
+                      key={g.id}
+                      className={`p-2.5 rounded-2xl border transition-all flex flex-col gap-1.5 hover:bg-[var(--theme-bg-hover)] group ${
+                        isSelected 
+                          ? 'bg-[var(--theme-bg-hover)] border-purple-500/40 shadow-lg shadow-purple-500/5' 
+                          : 'bg-black/10 border-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <img 
+                          src={g.photo} 
+                          alt={g.name}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-2xl object-cover border border-white/10"
+                        />
+                        <div className="min-w-0 flex-grow">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-xs font-bold text-white truncate group-hover:text-purple-400 transition-colors">{g.name}</p>
+                            <span className={`text-[8px] px-1.5 py-0.5 border rounded-full font-bold uppercase tracking-wider shrink-0 ${getConnectionLayerColor(minLevel)}`}>
+                              Requer: {getConnectionLayerLabel(minLevel)}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5 leading-relaxed">
+                            {g.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Members info and Join button */}
+                      <div className="flex items-center justify-between border-t border-white/5 pt-1.5 mt-1 text-[9px] font-medium text-gray-500 select-none">
+                        <span>👥 {g.participants.length} membros</span>
+                        
+                        {isMember ? (
+                          <button
+                            onClick={() => {
+                              setSelectedChatId(g.id);
+                              setIsMobileChatActive(true);
+                            }}
+                            className={`px-3 py-1 rounded-lg font-bold uppercase tracking-wider cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                : 'bg-purple-600 hover:bg-purple-500 text-white'
+                            }`}
+                          >
+                            {isSelected ? 'Ativo' : 'Entrar'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const updatedParticipants = [...g.participants, currentUser.nickname];
+                              const updatedGroups = groups.map(item => 
+                                item.id === g.id ? { ...item, participants: updatedParticipants } : item
+                              );
+                              setGroups(updatedGroups);
+                              localStorage.setItem('eo_groups_' + currentUser.id, JSON.stringify(updatedGroups));
+                              alert(`Aderiu com sucesso ao grupo "${g.name}"!`);
+                            }}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                          >
+                            Aderir
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
       </div>
       )}
 
@@ -1093,6 +1617,37 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
               </div>
             )}
 
+            {/* Search in Chat Toggle Button */}
+            {selectedChatId && (
+              <button
+                onClick={() => {
+                  setShowSearchInChat(!showSearchInChat);
+                  if (showSearchInChat) {
+                    setSearchInChatQuery('');
+                  }
+                }}
+                className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-all ${
+                  showSearchInChat 
+                    ? 'bg-neon-cyan/25 border-neon-cyan text-neon-cyan' 
+                    : 'bg-black/40 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+                }`}
+                title="Pesquisar mensagens"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Customize Background Button */}
+            {selectedChatId && (
+              <button
+                onClick={() => setShowBgCustomizer(true)}
+                className="w-8 h-8 rounded-lg bg-black/40 hover:bg-white/10 border border-white/10 flex items-center justify-center cursor-pointer transition-all text-gray-400 hover:text-white"
+                title="Personalizar fundo do chat"
+              >
+                <Palette className="w-4 h-4" />
+              </button>
+            )}
+
             {/* Menu de Ações da Conversa (Three Dots) */}
             <div className="relative">
               <button
@@ -1110,49 +1665,196 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2 w-56 bg-[#0a0a1a] border border-[var(--theme-border)] rounded-2xl p-2.5 shadow-2xl z-50 space-y-1 font-sans text-xs text-left text-white"
+                    className="absolute right-0 mt-2 w-64 bg-[#0a0a1a] border border-[var(--theme-border)] rounded-2xl p-2.5 shadow-2xl z-50 space-y-1 font-sans text-xs text-left text-white max-h-[80vh] overflow-y-auto no-scrollbar"
                   >
                     <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest px-2.5 py-1">Menu de Conversa</p>
                     
-                    {/* Live Option */}
-                    {isInGroupLive ? (
-                      <button
-                        onClick={() => {
-                          handleLeaveLive();
-                          setIsChatActionsMenuOpen(false);
-                        }}
-                        className="w-full text-left px-2.5 py-2 hover:bg-red-500/10 hover:text-red-400 text-red-500 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
-                      >
-                        <VideoOff className="w-4 h-4" /> Sair da Live
-                      </button>
-                    ) : (
-                      <>
+                    {/* Live Option (Only for group chat) */}
+                    {selectedChatId === 'group' && (
+                      isInGroupLive ? (
                         <button
                           onClick={() => {
-                            handleJoinLive();
+                            handleLeaveLive();
                             setIsChatActionsMenuOpen(false);
                           }}
-                          className="w-full text-left px-2.5 py-2 hover:bg-white/5 text-gray-200 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
+                          className="w-full text-left px-2.5 py-2 hover:bg-red-500/10 hover:text-red-400 text-red-500 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
                         >
-                          <Video className="w-4 h-4 text-neon-cyan animate-pulse" /> Iniciar Live
+                          <VideoOff className="w-4 h-4" /> Sair da Live
                         </button>
-                        {groupLives.length > 0 && (
+                      ) : (
+                        <>
                           <button
                             onClick={() => {
+                              handleJoinLive();
                               setIsChatActionsMenuOpen(false);
                             }}
                             className="w-full text-left px-2.5 py-2 hover:bg-white/5 text-gray-200 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
                           >
-                            <Tv className="w-4 h-4 text-neon-magenta" /> Ver Live ({groupLives.length}/4)
+                            <Video className="w-4 h-4 text-neon-cyan animate-pulse" /> Iniciar Live
                           </button>
-                        )}
+                          {groupLives.length > 0 && (
+                            <button
+                              onClick={() => {
+                                setIsChatActionsMenuOpen(false);
+                              }}
+                              className="w-full text-left px-2.5 py-2 hover:bg-white/5 text-gray-200 rounded-xl transition-all font-bold flex items-center gap-2 uppercase tracking-wide cursor-pointer"
+                            >
+                              <Tv className="w-4 h-4 text-neon-magenta" /> Ver Live ({groupLives.length}/4)
+                            </button>
+                          )}
+                        </>
+                      )
+                    )}
+
+                    {selectedChatId !== 'group' && activeChatUser && (
+                      <>
+                        {/* Ver Perfil */}
+                        <button
+                          onClick={() => {
+                            setIsChatActionsMenuOpen(false);
+                            alert(`[EYES OPEN MZ - PERFIL ACADÉMICO]\n\nUtilizador: @${activeChatUser.nickname}\nNome Completo: ${activeChatUser.fullname || 'Não fornecido'}\nEstatuto Escolar: ${activeChatUser.academicStatus || 'Estudante'}\nNível na Comunidade: ${activeChatUser.reputationPoints || 100} pts`);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-200 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          <UserIcon className="w-3.5 h-3.5 text-blue-400" /> Ver Perfil
+                        </button>
+
+                        {/* Silenciar Notificações */}
+                        <button
+                          onClick={() => {
+                            toggleMuteConversation(activeChatUser.id);
+                            setIsChatActionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-200 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          {mutedConversations.includes(activeChatUser.id) ? (
+                            <>
+                              <Volume2 className="w-3.5 h-3.5 text-green-400" /> Ativar Notificações
+                            </>
+                          ) : (
+                            <>
+                              <VolumeX className="w-3.5 h-3.5 text-red-400" /> Silenciar Notificações
+                            </>
+                          )}
+                        </button>
+
+                        {/* Pesquisar Mensagens */}
+                        <button
+                          onClick={() => {
+                            setShowSearchInChat(true);
+                            setIsChatActionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-200 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          <Search className="w-3.5 h-3.5 text-neon-cyan" /> Pesquisar Mensagens
+                        </button>
+
+                        {/* Limpar Conversa */}
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Deseja realmente limpar as mensagens desta conversa temporariamente para libertar cache visual?")) {
+                              setMessages(prev => prev.filter(m => 
+                                !((m.recipientId === currentUser.id && m.sender.id === activeChatUser.id) ||
+                                  (m.recipientId === activeChatUser.id && m.sender.id === currentUser.id))
+                              ));
+                              setIsChatActionsMenuOpen(false);
+                              alert("Mensagens de cache limpas com sucesso!");
+                            }
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-200 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-yellow-400" /> Limpar Conversa
+                        </button>
+
+                        {/* Eliminar Conversa */}
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Deseja eliminar definitivamente todo o histórico de mensagens desta conversa? Esta ação é irreversível.")) {
+                              setMessages(prev => prev.filter(m => 
+                                !((m.recipientId === currentUser.id && m.sender.id === activeChatUser.id) ||
+                                  (m.recipientId === activeChatUser.id && m.sender.id === currentUser.id))
+                              ));
+                              setIsChatActionsMenuOpen(false);
+                              alert("Histórico de mensagens eliminado localmente!");
+                            }
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-200 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" /> Eliminar Conversa
+                        </button>
+
+                        {/* Exportar Conversa */}
+                        <button
+                          onClick={() => {
+                            const chatHistory = currentChatMessages.map(m => {
+                              const date = new Date(m.timestamp).toLocaleString();
+                              return `[${date}] ${m.sender.nickname}: ${m.text}`;
+                            }).join('\n');
+
+                            const blob = new Blob([chatHistory], { type: 'text/plain;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', `conversa_${activeChatUser.nickname}.txt`);
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            setIsChatActionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-200 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-green-500" /> Exportar Conversa
+                        </button>
+
+                        {/* Bloquear Utilizador */}
+                        <button
+                          onClick={() => {
+                            setIsChatActionsMenuOpen(false);
+                            handleBlockUser(activeChatUser.id);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-red-500/10 hover:text-red-400 text-red-500 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-bold cursor-pointer"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" /> Bloquear Utilizador
+                        </button>
+
+                        {/* Denunciar */}
+                        <button
+                          onClick={() => {
+                            const reason = prompt("Indique o motivo pedagógico da denúncia académica:");
+                            if (reason) {
+                              alert("Denúncia enviada à administração da Eyes Open MZ. Obrigado pelo seu contributo para uma comunidade segura.");
+                            }
+                            setIsChatActionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-orange-500/10 hover:text-orange-400 text-orange-500 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" /> Denunciar Utilizador
+                        </button>
+
+                        {/* Encerrar Permissão de Conversa */}
+                        <button
+                          onClick={async () => {
+                            if (window.confirm("Deseja encerrar temporariamente a permissão de conversa com este utilizador? O chat será trancado.")) {
+                              const perm = getChatPermissionWith(activeChatUser.id);
+                              if (perm) {
+                                await dbDeleteChatPermission(perm.id).catch(console.error);
+                              }
+                              setSelectedChatId(null);
+                              setIsChatActionsMenuOpen(false);
+                              alert("Permissão de conversa encerrada.");
+                            }
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-gray-400 border-t border-white/5 rounded-xl transition-all flex items-center gap-2 uppercase tracking-wider text-[10px] font-semibold cursor-pointer mt-1 pt-2"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-gray-500" /> Encerrar Permissão
+                        </button>
                       </>
                     )}
 
                     <div className="border-t border-white/5 my-1" />
 
                     {/* Context Actions / Location */}
-                    <p className="text-[8px] font-bold text-gray-500 uppercase tracking-widest px-2.5 py-1">Ações da Conversa</p>
+                    <p className="text-[8px] font-bold text-gray-500 uppercase tracking-widest px-2.5 py-1">Partilhas Rápidas</p>
                     <button
                       onClick={() => {
                         setIsChatActionsMenuOpen(false);
@@ -1177,6 +1879,38 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
             </div>
           </div>
         </div>
+
+        {/* Inline Message Search Bar */}
+        {showSearchInChat && (
+          <div className="px-4 py-2.5 bg-black/40 border-b border-[var(--theme-border)] flex items-center gap-2 shrink-0 animate-fade-in relative z-10">
+            <Search className="w-3.5 h-3.5 text-neon-cyan shrink-0" />
+            <input
+              type="text"
+              placeholder="Pesquisar nas mensagens desta conversa..."
+              value={searchInChatQuery}
+              onChange={(e) => setSearchInChatQuery(e.target.value)}
+              className="flex-grow bg-transparent border-none outline-none text-xs text-white placeholder-gray-500 font-semibold"
+              autoFocus
+            />
+            {searchInChatQuery && (
+              <button
+                onClick={() => setSearchInChatQuery('')}
+                className="text-[10px] text-neon-cyan hover:text-white font-bold uppercase cursor-pointer"
+              >
+                Limpar
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setShowSearchInChat(false);
+                setSearchInChatQuery('');
+              }}
+              className="text-[10px] text-gray-400 hover:text-white font-bold uppercase cursor-pointer pl-2 border-l border-white/10"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
 
         {/* GROUP VIDEO LIVE GRID (Up to 4 participants, random real-time online live) */}
         {selectedChatId === 'group' && groupLives.length > 0 && (
