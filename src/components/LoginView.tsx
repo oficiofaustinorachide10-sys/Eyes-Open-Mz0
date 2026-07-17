@@ -11,7 +11,7 @@ import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
-import { authLogin, authRecover, authResetPassword, authGoogleLogin } from '../lib/authService';
+import { authLogin, authRecover, authResetPassword, authGoogleLogin, authCreateGuestUser } from '../lib/authService';
 
 interface LoginViewProps {
   users: UserType[];
@@ -35,6 +35,12 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
   const [sentCode, setSentCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+
+  // Guest Account States
+  const [showGuestSetup, setShowGuestSetup] = useState(false);
+  const [guestDisplayName, setGuestDisplayName] = useState('');
+  const [guestExpirationHours, setGuestExpirationHours] = useState<number>(24);
+  const [isCreatingGuest, setIsCreatingGuest] = useState(false);
 
   const handleInitiateRecovery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +143,30 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
       }, 1200);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro de ligação ao servidor de autenticação.');
+    }
+  };
+
+  const handleCreateGuestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!guestDisplayName.trim()) {
+      setErrorMsg('Por favor, introduza um Nome de Exibição.');
+      return;
+    }
+
+    setIsCreatingGuest(true);
+    try {
+      const result = await authCreateGuestUser(guestDisplayName.trim(), guestExpirationHours);
+      setSuccessMsg('Sessão de Convidado criada com sucesso! A entrar...');
+      setTimeout(() => {
+        onLoginSuccess(result.user, result.token, false);
+      }, 1000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao criar conta de convidado.');
+    } finally {
+      setIsCreatingGuest(false);
     }
   };
 
@@ -365,6 +395,127 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                 </button>
               </div>
             </div>
+          ) : showGuestSetup ? (
+            <div className="space-y-5">
+              {/* Header with back button */}
+              <div className="flex items-center gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                    setShowGuestSetup(false);
+                  }}
+                  className="p-2 bg-white/5 border border-white/10 hover:border-neon-cyan/50 hover:bg-white/10 rounded-xl text-[#a0a0c0] hover:text-white transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="text-left">
+                  <h2 className="text-sm font-orbitron font-extrabold text-neon-cyan tracking-wider uppercase">
+                    Entrar como Convidado
+                  </h2>
+                  <p className="text-[9px] text-[#a0a0c0] font-rajdhani font-bold uppercase tracking-wider">
+                    Sessão Temporária Exclusiva
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateGuestSubmit} className="space-y-5">
+                <p className="text-xs text-[#a0a0c0] font-rajdhani font-semibold leading-relaxed text-left">
+                  Insira o seu nome de exibição abaixo e selecione a validade da conta. Suas permissões serão limitadas apenas à visualização do feed.
+                </p>
+
+                {/* Display Name Input */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-rajdhani font-bold uppercase tracking-wider text-[#a0a0c0] text-left">
+                    Nome de Exibição
+                  </label>
+                  <input
+                    type="text"
+                    value={guestDisplayName}
+                    onChange={(e) => setGuestDisplayName(e.target.value)}
+                    placeholder="Ex: Visitante Imperial"
+                    maxLength={25}
+                    required
+                    className="w-full bg-[#121235]/60 border border-neon-cyan/30 focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/50 rounded-xl py-3 px-4 text-white text-sm outline-none transition-all placeholder:text-gray-500 font-rajdhani font-semibold text-base text-left"
+                  />
+                </div>
+
+                {/* Expiration Options */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-rajdhani font-bold uppercase tracking-wider text-[#a0a0c0] text-left">
+                    Tempo de Expiração
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setGuestExpirationHours(1)}
+                      className={`py-3 rounded-xl font-orbitron font-bold text-[10px] tracking-wider uppercase border transition-all ${
+                        guestExpirationHours === 1
+                          ? 'bg-neon-cyan/20 border-neon-cyan text-white shadow-lg shadow-neon-cyan/10'
+                          : 'bg-black/30 border-white/10 text-gray-400 hover:border-white/20 hover:text-white'
+                      }`}
+                    >
+                      1 Hora
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGuestExpirationHours(24)}
+                      className={`py-3 rounded-xl font-orbitron font-bold text-[10px] tracking-wider uppercase border transition-all ${
+                        guestExpirationHours === 24
+                          ? 'bg-neon-cyan/20 border-neon-cyan text-white shadow-lg shadow-neon-cyan/10'
+                          : 'bg-black/30 border-white/10 text-gray-400 hover:border-white/20 hover:text-white'
+                      }`}
+                    >
+                      24 Horas
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isCreatingGuest}
+                  className="w-full bg-gradient-to-r from-neon-cyan to-neon-magenta hover:brightness-110 active:scale-98 disabled:opacity-50 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-xs tracking-widest cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
+                >
+                  {isCreatingGuest ? 'A Criar Sessão...' : 'Confirmar & Entrar'}
+                </button>
+              </form>
+
+              {/* Feedback Messages */}
+              {errorMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-400 text-xs text-center font-rajdhani font-bold"
+                >
+                  {errorMsg}
+                </motion.div>
+              )}
+
+              {successMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-xl bg-green-950/40 border border-green-500/30 text-green-400 text-xs text-center font-rajdhani font-bold"
+                >
+                  {successMsg}
+                </motion.div>
+              )}
+
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                    setShowGuestSetup(false);
+                  }}
+                  className="text-xs font-rajdhani font-bold text-neon-cyan hover:text-white transition-colors underline underline-offset-4 decoration-neon-cyan/50 uppercase tracking-wider cursor-pointer"
+                >
+                  Voltar ao Login
+                </button>
+              </div>
+            </div>
           ) : (
             <>
               <h2 className="text-xl font-orbitron font-semibold text-center mb-6 tracking-wide text-white/90">
@@ -503,26 +654,11 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                 <button
                   type="button"
                   onClick={() => {
-                    const guestUser: UserType = {
-                      id: 'guest',
-                      fullname: 'Convidado Eyes Open',
-                      firstname: 'Convidado',
-                      surname: 'Eyes Open',
-                      nickname: 'Convidado 🇲🇿',
-                      email: 'guest@openmz.com',
-                      phone: '000000000',
-                      province: 'Maputo',
-                      password: 'guest',
-                      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
-                      created: new Date().toISOString(),
-                      stats: {
-                        likes: 0,
-                        posts: 0,
-                        friends: 0
-                      },
-                      nameEditDate: null
-                    };
-                    onLoginSuccess(guestUser, 'guest_token', false);
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                    setGuestDisplayName('');
+                    setGuestExpirationHours(24);
+                    setShowGuestSetup(true);
                   }}
                   className="w-full py-3 bg-black/40 hover:bg-[#121235]/60 border border-white/10 hover:border-neon-cyan/60 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-gray-300 hover:text-white cursor-pointer uppercase transition-all"
                 >

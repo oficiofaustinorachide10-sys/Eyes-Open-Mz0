@@ -61,7 +61,9 @@ import {
   dbUpdateChatPermission,
   dbDeleteChatPermission,
   dbCheckUserVote,
-  dbCreateUserVote
+  dbCreateUserVote,
+  dbDeleteExpiredGuests,
+  dbDeleteGuestUser
 } from './lib/db';
 
 export default function App() {
@@ -74,7 +76,20 @@ export default function App() {
     if (typeof window === 'undefined') return [];
     const saved = localStorage.getItem('eo_saved_accounts');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { return []; }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const uniqueMap = new Map<string, SavedAccount>();
+          for (const acc of parsed) {
+            if (acc && acc.id && acc.id !== 'guest' && !acc.id.startsWith('guest_')) {
+              uniqueMap.set(acc.id, acc);
+            }
+          }
+          return Array.from(uniqueMap.values());
+        }
+      } catch (e) {
+        return [];
+      }
     }
     return [];
   });
@@ -121,11 +136,43 @@ export default function App() {
     }
   }, [currentUser]);
 
+  // Dynamic Guest Session Expiration & Automatic Cleanup
+  useEffect(() => {
+    if (!currentUser || !currentUser.isGuest || !currentUser.expiresAt) return;
+
+    const checkExpiration = async () => {
+      if (Date.now() >= (currentUser.expiresAt || 0)) {
+        clearInterval(timer);
+        // Expire guest session
+        await dbDeleteGuestUser(currentUser.id).catch(console.error);
+        handleLogout();
+        alert('A sua sessão de Convidado expirou. Crie uma nova sessão ou registe uma conta para continuar!');
+      }
+    };
+
+    // Run immediately
+    checkExpiration();
+
+    // Check every 30 seconds
+    const timer = setInterval(checkExpiration, 30 * 1000);
+
+    return () => clearInterval(timer);
+  }, [currentUser]);
+
   // Eyes Max Special Theme & Virtual Assistant "Pay" states
   const [eyesMaxDownloaded, setEyesMaxDownloaded] = useState<boolean>(() => {
     return localStorage.getItem('eyesMaxDownloaded') === 'true';
   });
   const [showEyesMaxDownloadModal, setShowEyesMaxDownloadModal] = useState<boolean>(false);
+  const [showGuestRestrictionModal, setShowGuestRestrictionModal] = useState<boolean>(false);
+
+  const checkGuestRestriction = (): boolean => {
+    if (currentUser?.isGuest || currentUser?.id === 'guest') {
+      setShowGuestRestrictionModal(true);
+      return true;
+    }
+    return false;
+  };
   const [isDownloadingEyesMax, setIsDownloadingEyesMax] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
@@ -135,7 +182,7 @@ export default function App() {
 
   const [showPayAssistant, setShowPayAssistant] = useState<boolean>(false);
   const [assistantMessages, setAssistantMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
-    { role: 'assistant', content: 'Olá! Sou o Pay, o assistente virtual oficial do site "Eyes Open MZ", criado e treinado pelo meu mentor, Ofício Faustino Rachide. Seja muito bem-vindo ao luxuoso ecossistema do tema EYES MAX! Como posso ajudar-te hoje? podes perguntar-me sobre o site, o tema EYES MAX ou qualquer outra dúvida!' }
+    { role: 'assistant', content: 'Olá! Sou o Pay, o assistente virtual oficial do site "Eyes Open MZ". Seja muito bem-vindo ao luxuoso ecossistema do tema EYES MAX! Como posso ajudar-te hoje? podes perguntar-me sobre o site, o tema EYES MAX ou qualquer outra dúvida!' }
   ]);
   const [assistantInput, setAssistantInput] = useState<string>('');
   const [isAssistantTyping, setIsAssistantTyping] = useState<boolean>(false);
@@ -555,6 +602,9 @@ export default function App() {
   useEffect(() => {
     // 1. First trigger seeding of the database if collections are completely blank
     seedDatabaseIfEmpty();
+    
+    // Cleanup expired guest accounts on startup
+    dbDeleteExpiredGuests().catch(console.error);
 
     // 2. Load cached current user session (including JWT validation against server)
     const token = localStorage.getItem('eo_jwt_token');
@@ -787,23 +837,35 @@ export default function App() {
     localStorage.setItem('eo_jwt_token', token);
     
     // Save account to local device-saved accounts lists (always saved to enable fast switching/saved accounts on device)
-    const savedListRaw = localStorage.getItem('eo_saved_accounts');
-    let savedList: SavedAccount[] = [];
-    if (savedListRaw) {
-      try { savedList = JSON.parse(savedListRaw); } catch(e){}
+    if (!user.isGuest && user.id !== 'guest' && !user.id.startsWith('guest_')) {
+      const savedListRaw = localStorage.getItem('eo_saved_accounts');
+      let savedList: SavedAccount[] = [];
+      if (savedListRaw) {
+        try { savedList = JSON.parse(savedListRaw); } catch(e){}
+      }
+      
+      const hasPin = localStorage.getItem(`eo_pin_hash_${user.id}`) !== null;
+      const newAcc: SavedAccount = {
+        id: user.id,
+        nickname: user.nickname,
+        fullname: user.fullname || user.nickname,
+        avatar: user.avatar || "https://i.pravatar.cc/100?img=1",
+        email: user.email,
+        hasPin
+      };
+
+      const uniqueMap = new Map<string, SavedAccount>();
+      uniqueMap.set(user.id, newAcc);
+      for (const acc of savedList) {
+        if (acc && acc.id && acc.id !== user.id && acc.id !== 'guest' && !acc.id.startsWith('guest_')) {
+          uniqueMap.set(acc.id, acc);
+        }
+      }
+
+      const finalSavedList = Array.from(uniqueMap.values());
+      localStorage.setItem('eo_saved_accounts', JSON.stringify(finalSavedList));
+      setSavedAccounts(finalSavedList);
     }
-    savedList = savedList.filter(acc => acc.id !== user.id);
-    const hasPin = localStorage.getItem(`eo_pin_hash_${user.id}`) !== null;
-    savedList.unshift({
-      id: user.id,
-      nickname: user.nickname,
-      fullname: user.fullname || user.nickname,
-      avatar: user.avatar || "https://i.pravatar.cc/100?img=1",
-      email: user.email,
-      hasPin
-    });
-    localStorage.setItem('eo_saved_accounts', JSON.stringify(savedList));
-    setSavedAccounts(savedList);
 
     if (rememberMe) {
       try {
@@ -869,15 +931,14 @@ export default function App() {
     triggerToast(`Registo completo! Bem-vindo, ${newUser.nickname}`);
   };
 
+  const logoutSeguro = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.reload();
+  };
+
   const handleLogout = () => {
-    setCurrentUser(null);
-    setThemeState('noite');
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('eo_jwt_token');
-    localStorage.removeItem('eo_secure_keychain_token');
-    setShowAccountSelector(true);
-    setActiveView('feed');
-    triggerToast('Terminou a sessão com sucesso!');
+    logoutSeguro();
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
@@ -908,11 +969,7 @@ export default function App() {
 
   // 3. Post interactions (Like, View, Post, Delete, Comment)
   const handleLikePost = async (postId: string) => {
-    if (currentUser?.id === 'guest') {
-      alert('Como convidado, precisa de uma conta para interagir com publicações. Vamos direcioná-lo para criar uma conta!');
-      handleRedirectToRegister();
-      return;
-    }
+    if (checkGuestRestriction()) return;
     const p = posts.find(x => x.id === postId);
     if (!p) return;
 
@@ -953,13 +1010,11 @@ export default function App() {
   };
 
   const handleRatePost = async (postId: string, ratingValue: number) => {
-    if (!currentUser || currentUser.id === 'guest') {
-      alert('Como convidado, precisa de uma conta para avaliar publicações.');
-      return;
-    }
+    if (!currentUser) return;
+    if (checkGuestRestriction()) return;
 
     try {
-      // 1. Verify unique vote in Firestore
+      // 1. Verify unique vote in Firestore using combined ID
       const alreadyVoted = await dbCheckUserVote(currentUser.id, postId);
       if (alreadyVoted) {
         alert('Você já avaliou esta publicação.');
@@ -971,7 +1026,10 @@ export default function App() {
       const locationVal = p?.location || '';
 
       // 3. Create vote document in Firestore without any undefined fields
-      await dbCreateUserVote(currentUser.id, postId, locationVal, ratingValue);
+      const success = await dbCreateUserVote(currentUser.id, postId, locationVal, ratingValue);
+      if (!success) {
+        return;
+      }
 
       // 4. Update the Post's ratings object map in Firestore
       if (p) {
@@ -1060,6 +1118,7 @@ export default function App() {
 
   const handleConnectUser = async (targetUserId: string, level: 'amigo' | 'familia' | 'conhecido' = 'amigo') => {
     if (!currentUser) return;
+    if (checkGuestRestriction()) return;
     const targetUser = users.find(u => u.id === targetUserId);
     if (!targetUser) return;
 
@@ -1234,10 +1293,7 @@ export default function App() {
     extraData?: any
   ) => {
     if (!currentUser) return;
-    if (currentUser.id === 'guest') {
-      alert('Convidados não possuem permissão para criar publicações.');
-      return;
-    }
+    if (checkGuestRestriction()) return;
 
     const newPost: Post = {
       id: 'post_' + Math.random().toString(36).substring(2, 9),
@@ -1264,7 +1320,8 @@ export default function App() {
   };
 
   const handleAddComment = async (postId: string, text: string, audioUrl?: string, audioDuration?: number) => {
-    if (!currentUser || currentUser.id === 'guest') return;
+    if (!currentUser) return;
+    if (checkGuestRestriction()) return;
     const p = posts.find(x => x.id === postId);
     if (!p) return;
 
@@ -1383,11 +1440,7 @@ export default function App() {
 
   // 4. Story interactions (Like, View, Post)
   const handleLikeStory = async (storyId: string) => {
-    if (currentUser?.id === 'guest') {
-      alert('Como convidado, precisa de uma conta para interagir. Vamos direcioná-lo para criar uma conta!');
-      handleRedirectToRegister();
-      return;
-    }
+    if (checkGuestRestriction()) return;
     const s = stories.find(x => x.id === storyId);
     if (!s) return;
 
@@ -1460,10 +1513,7 @@ export default function App() {
 
   const handlePublishStory = async (storySrc: string, text: string | null, font: string, color: string, musicName?: string) => {
     if (!currentUser) return;
-    if (currentUser.id === 'guest') {
-      alert('Convidados não possuem permissão para criar histórias.');
-      return;
-    }
+    if (checkGuestRestriction()) return;
 
     const newStory: Story = {
       id: 'story_' + Math.random().toString(36).substring(2, 9),
@@ -1592,7 +1642,13 @@ export default function App() {
           />
         );
       case 'conversas':
-        return <ChatView currentUser={currentUser} initialSelectedChatId={initialSelectedChatId} />;
+        return (
+          <ChatView 
+            currentUser={currentUser} 
+            initialSelectedChatId={initialSelectedChatId} 
+            onGuestActionAttempt={() => setShowGuestRestrictionModal(true)}
+          />
+        );
       case 'notificacoes':
         return (
           <NotificationsView
@@ -2454,6 +2510,61 @@ export default function App() {
       )}
 
       {/* ========================================== */}
+      {/* GUEST RESTRICTION MODAL */}
+      {/* ========================================== */}
+      <AnimatePresence>
+        {showGuestRestrictionModal && (
+          <div className="fixed inset-0 bg-[#07050f]/90 backdrop-blur-md z-[50000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93, y: 15 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+              className="bg-[#0f0f26] border-2 border-neon-cyan/40 rounded-3xl p-6 md:p-8 max-w-md w-full text-center relative shadow-[0_16px_40px_rgba(0,0,0,0.6)] space-y-6"
+            >
+              <button
+                onClick={() => setShowGuestRestrictionModal(false)}
+                className="absolute top-4 right-4 p-2 text-neon-cyan/50 hover:text-neon-cyan rounded-full hover:bg-white/5 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-neon-cyan to-blue-600 flex items-center justify-center shadow-md">
+                <Users className="w-8 h-8 text-black" />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-lg font-orbitron font-extrabold text-neon-cyan uppercase tracking-wider">
+                  Funcionalidade Exclusiva
+                </h2>
+                <p className="text-sm text-gray-300 font-rajdhani font-semibold leading-relaxed">
+                  Esta funcionalidade é exclusiva para usuários registrados. Deseja criar uma conta agora?
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <button
+                  onClick={() => setShowGuestRestrictionModal(false)}
+                  className="py-3 bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 rounded-xl text-gray-300 font-orbitron font-bold text-xs uppercase tracking-wider cursor-pointer transition-all"
+                >
+                  Talvez Depois
+                </button>
+                <button
+                  onClick={() => {
+                    setShowGuestRestrictionModal(false);
+                    handleRedirectToRegister();
+                  }}
+                  className="py-3 bg-gradient-to-r from-neon-cyan to-neon-magenta hover:brightness-110 active:scale-95 rounded-xl text-black font-orbitron font-extrabold text-xs uppercase tracking-wider cursor-pointer transition-all shadow-lg shadow-neon-cyan/20"
+                >
+                  Sim, Criar Conta
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================== */}
       {/* 1. EYES MAX SPECIAL THEME DOWNLOAD MODAL */}
       {/* ========================================== */}
       <AnimatePresence>
@@ -2748,7 +2859,7 @@ export default function App() {
               </div>
 
               <p className="text-amber-100/90 text-xs leading-relaxed">
-                "Olá! Eu sou o <span className="text-[#fbbf24] font-bold">Pay</span>, o assistente oficial do Eyes Open MZ. Estou muito feliz em apresentar este novo ecossistema de requinte imperial criado pelo meu mentor <span className="text-[#fbbf24] font-bold">Ofício Faustino Rachide</span>. O site agora apresenta publicações dispostas em grelha dupla horizontal, acabamentos premium sem neons e animações táteis customizadas. Conte comigo para qualquer ajuda!"
+                "Olá! Eu sou o <span className="text-[#fbbf24] font-bold">Pay</span>, o assistente oficial do Eyes Open MZ. Estou muito feliz em apresentar este novo ecossistema de requinte imperial. O site agora apresenta publicações dispostas em grelha dupla horizontal, acabamentos premium sem neons e animações táteis customizadas. Conte comigo para qualquer ajuda!"
               </p>
 
               <button

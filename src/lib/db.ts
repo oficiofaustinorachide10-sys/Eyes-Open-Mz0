@@ -9,9 +9,10 @@ import {
   deleteDoc, 
   query, 
   orderBy,
-  getDoc
+  getDoc,
+  where
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { User, Post, Story, Notification, Friendship, ChatPermission } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES } from '../utils';
 
@@ -52,6 +53,21 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
+}
+
+// Utility to clean undefined values recursively from objects before writing to Firestore
+export function sanitizeDoc<T extends object>(obj: T): T {
+  const clean = { ...obj } as any;
+  Object.keys(clean).forEach(key => {
+    if (clean[key] === undefined) {
+      delete clean[key];
+    } else if (clean[key] !== null && typeof clean[key] === 'object') {
+      if (Object.prototype.toString.call(clean[key]) === '[object Object]') {
+        clean[key] = sanitizeDoc(clean[key]);
+      }
+    }
+  });
+  return clean;
 }
 
 // Helper to check if database has collections and seed them if empty
@@ -174,7 +190,8 @@ export async function seedDatabaseIfEmpty() {
 // Subscribe to real-time collections
 export function subscribeUsers(callback: (users: User[]) => void) {
   const usersCol = collection(db, 'users');
-  return onSnapshot(usersCol, (snapshot) => {
+  const q = query(usersCol, where("userId", "==", auth.currentUser?.uid || ''));
+  return onSnapshot(q, (snapshot) => {
     const list: User[] = [];
     snapshot.forEach((docSnap) => {
       list.push(docSnap.data() as User);
@@ -188,7 +205,7 @@ export function subscribeUsers(callback: (users: User[]) => void) {
 export function subscribePosts(callback: (posts: Post[]) => void) {
   const postsCol = collection(db, 'posts');
   // Order by timestamp desc
-  const q = query(postsCol, orderBy('timestamp', 'desc'));
+  const q = query(postsCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const list: Post[] = [];
     snapshot.forEach((docSnap) => {
@@ -206,7 +223,7 @@ export function subscribePosts(callback: (posts: Post[]) => void) {
 
 export function subscribeStories(callback: (stories: Story[]) => void) {
   const storiesCol = collection(db, 'stories');
-  const q = query(storiesCol, orderBy('timestamp', 'desc'));
+  const q = query(storiesCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const list: Story[] = [];
     snapshot.forEach((docSnap) => {
@@ -224,7 +241,7 @@ export function subscribeStories(callback: (stories: Story[]) => void) {
 
 export function subscribeChats(callback: (messages: any[]) => void) {
   const chatsCol = collection(db, 'chats');
-  const q = query(chatsCol, orderBy('timestamp', 'asc'));
+  const q = query(chatsCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'asc'));
   return onSnapshot(q, (snapshot) => {
     const list: any[] = [];
     snapshot.forEach((docSnap) => {
@@ -259,9 +276,10 @@ export async function dbDeleteUser(userId: string) {
 // Post Actions
 export async function dbCreatePost(post: Post) {
   try {
-    await setDoc(doc(db, 'posts', post.id), {
-      ...post,
-      comments: post.comments || []
+    const cleanPost = sanitizeDoc(post);
+    await setDoc(doc(db, 'posts', cleanPost.id), {
+      ...cleanPost,
+      comments: cleanPost.comments || []
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `posts/${post.id}`);
@@ -278,7 +296,8 @@ export async function dbDeletePost(postId: string) {
 
 export async function dbUpdatePost(post: Post) {
   try {
-    await setDoc(doc(db, 'posts', post.id), post, { merge: true });
+    const cleanPost = sanitizeDoc(post);
+    await setDoc(doc(db, 'posts', cleanPost.id), cleanPost, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}`);
   }
@@ -296,18 +315,28 @@ export async function dbCheckUserVote(userId: string, postId: string): Promise<b
   }
 }
 
-export async function dbCreateUserVote(userId: string, postId: string, location: string | undefined, ratingValue: number) {
+export async function dbCreateUserVote(userId: string, postId: string, location: string | undefined, ratingValue: number): Promise<boolean> {
   try {
     const voteRef = doc(db, 'votes', `${userId}_${postId}`);
-    await setDoc(voteRef, {
+    const voteSnap = await getDoc(voteRef);
+    if (voteSnap.exists()) {
+      alert('Você já avaliou esta publicação.');
+      return false;
+    }
+
+    const voteData = sanitizeDoc({
       userId: userId || '',
       postId: postId || '',
       location: location || '',
       rating: ratingValue || 0,
       timestamp: Date.now()
     });
+
+    await setDoc(voteRef, voteData);
+    return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `votes/${userId}_${postId}`);
+    return false;
   }
 }
 
@@ -364,7 +393,7 @@ export async function dbDeleteMessage(messageId: string) {
 // Notification Actions
 export function subscribeNotifications(recipientId: string, callback: (notifications: Notification[]) => void) {
   const notificationsCol = collection(db, 'notifications');
-  const q = query(notificationsCol, orderBy('timestamp', 'desc'));
+  const q = query(notificationsCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const list: Notification[] = [];
     snapshot.forEach((docSnap) => {
@@ -427,7 +456,8 @@ export async function dbClearAllNotifications(recipientId: string) {
 // Friendship Subscriptions and Actions
 export function subscribeFriendships(callback: (friendships: Friendship[]) => void) {
   const friendshipsCol = collection(db, 'friendships');
-  return onSnapshot(friendshipsCol, (snapshot) => {
+  const q = query(friendshipsCol, where("userId", "==", auth.currentUser?.uid || ''));
+  return onSnapshot(q, (snapshot) => {
     const list: Friendship[] = [];
     snapshot.forEach((docSnap) => {
       list.push({
@@ -439,6 +469,78 @@ export function subscribeFriendships(callback: (friendships: Friendship[]) => vo
   }, (err) => {
     handleFirestoreError(err, OperationType.LIST, 'friendships');
   });
+}
+
+export async function enviarPedidoAmizade(targetUserId: string) {
+  const currentUid = auth.currentUser?.uid;
+  if (!currentUid) {
+    alert("Precisa de estar autenticado para enviar pedidos de amizade.");
+    return;
+  }
+
+  // 1. Bloqueio de Auto-Interação
+  if (currentUid === targetUserId) {
+    alert("Não é permitido enviar um pedido de amizade para si mesmo.");
+    return;
+  }
+
+  try {
+    // 2. Prevenção de Duplicidade
+    const docId1 = `${currentUid}_${targetUserId}`;
+    const docId2 = `${targetUserId}_${currentUid}`;
+
+    const docRef1 = doc(db, 'friendships', docId1);
+    const docRef2 = doc(db, 'friendships', docId2);
+
+    const [snap1, snap2] = await Promise.all([getDoc(docRef1), getDoc(docRef2)]);
+
+    if (snap1.exists() || snap2.exists()) {
+      alert("Já existe um pedido de amizade ou vínculo entre vocês!");
+      return;
+    }
+
+    // Criar o novo documento de amizade
+    const userDoc = await getDoc(doc(db, 'users', currentUid));
+    const userData = userDoc.exists() ? userDoc.data() : null;
+    const senderName = userData?.nickname || auth.currentUser?.displayName || 'Utilizador';
+    const senderAvatar = userData?.avatar || auth.currentUser?.photoURL || 'https://i.pravatar.cc/100?img=1';
+
+    const newFriendship: Friendship = {
+      id: docId1,
+      senderId: currentUid,
+      receiverId: targetUserId,
+      status: 'pending',
+      level: 'conhecido',
+      timestamp: Date.now()
+    };
+
+    // Usando setDoc com ID composto
+    await setDoc(doc(db, 'friendships', docId1), newFriendship);
+    alert("Pedido de amizade enviado com sucesso!");
+
+    // Criar uma notificação
+    const notifId = 'notif_friend_' + currentUid + '_' + Math.random().toString(36).substring(2, 9);
+    const newNotif: Notification = {
+      id: notifId,
+      recipientId: targetUserId,
+      title: 'Pedido de Amizade Social 👥',
+      text: `${senderName} enviou-lhe um pedido de amizade social no Feed.`,
+      type: 'friend_request',
+      sender: {
+        id: currentUid,
+        name: senderName,
+        avatar: senderAvatar
+      },
+      read: false,
+      timestamp: Date.now(),
+      targetView: 'notificacoes'
+    };
+    await setDoc(doc(db, 'notifications', notifId), newNotif);
+
+  } catch (err) {
+    console.error("Erro ao enviar pedido de amizade:", err);
+    handleFirestoreError(err, OperationType.CREATE, `friendships/${currentUid}_${targetUserId}`);
+  }
 }
 
 export async function dbCreateFriendship(friendship: Friendship) {
@@ -468,7 +570,8 @@ export async function dbDeleteFriendship(friendshipId: string) {
 // Chat Permission Subscriptions and Actions
 export function subscribeChatPermissions(callback: (permissions: ChatPermission[]) => void) {
   const permissionsCol = collection(db, 'chat_permissions');
-  return onSnapshot(permissionsCol, (snapshot) => {
+  const q = query(permissionsCol, where("userId", "==", auth.currentUser?.uid || ''));
+  return onSnapshot(q, (snapshot) => {
     const list: ChatPermission[] = [];
     snapshot.forEach((docSnap) => {
       list.push({
@@ -509,7 +612,8 @@ export async function dbDeleteChatPermission(permissionId: string) {
 // Group Live Video Actions
 export function subscribeGroupLives(callback: (participants: any[]) => void) {
   const livesCol = collection(db, 'group_lives');
-  return onSnapshot(livesCol, (snapshot) => {
+  const q = query(livesCol, where("userId", "==", auth.currentUser?.uid || ''));
+  return onSnapshot(q, (snapshot) => {
     const list: any[] = [];
     snapshot.forEach((docSnap) => {
       list.push({
@@ -542,5 +646,38 @@ export async function dbLeaveGroupLive(userId: string) {
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `group_lives/${userId}`);
   }
+}
+
+export async function dbDeleteExpiredGuests() {
+  try {
+    const usersCol = collection(db, 'users');
+    const q = query(usersCol, where('isGuest', '==', true));
+    const snap = await getDocs(q);
+    const now = Date.now();
+    for (const d of snap.docs) {
+      const data = d.data();
+      if (data.expiresAt && data.expiresAt < now) {
+        await deleteDoc(doc(db, 'users', d.id));
+        console.log(`[DB] Deleted expired guest account: ${d.id}`);
+      }
+    }
+  } catch (err) {
+    console.error('[DB] Error deleting expired guests:', err);
+  }
+}
+
+export async function dbDeleteGuestUser(guestId: string) {
+  try {
+    await deleteDoc(doc(db, 'users', guestId));
+    console.log(`[DB] Deleted guest account: ${guestId}`);
+  } catch (err) {
+    console.error('[DB] Error deleting guest account:', err);
+  }
+}
+
+export function logoutSeguro() {
+  localStorage.clear();
+  sessionStorage.clear();
+  window.location.reload();
 }
 

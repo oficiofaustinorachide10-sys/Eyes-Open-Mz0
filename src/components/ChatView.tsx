@@ -19,12 +19,13 @@ import {
   subscribeChats, dbSendMessage, dbUpdateMessage, dbDeleteMessage, dbUpdateUser, subscribeUsers,
   subscribeFriendships, dbCreateFriendship, dbUpdateFriendship, dbDeleteFriendship,
   subscribeChatPermissions, dbCreateChatPermission, dbUpdateChatPermission, dbDeleteChatPermission,
-  dbCreateNotification, subscribeGroupLives, dbJoinGroupLive, dbLeaveGroupLive
+  dbCreateNotification, subscribeGroupLives, dbJoinGroupLive, dbLeaveGroupLive, enviarPedidoAmizade
 } from '../lib/db';
 
 interface ChatViewProps {
   currentUser: User;
   initialSelectedChatId?: string;
+  onGuestActionAttempt?: () => void;
 }
 
 interface Message {
@@ -44,9 +45,22 @@ interface Message {
   status?: 'sent' | 'delivered' | 'read';
 }
 
-export default function ChatView({ currentUser, initialSelectedChatId }: ChatViewProps) {
+export default function ChatView({ currentUser, initialSelectedChatId, onGuestActionAttempt }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+
+  const checkChatGuestRestriction = (): boolean => {
+    if (currentUser?.isGuest || currentUser?.id === 'guest') {
+      if (onGuestActionAttempt) {
+        onGuestActionAttempt();
+      } else {
+        alert('Funcionalidade exclusiva para usuários registrados. Deseja criar uma conta agora?');
+      }
+      return true;
+    }
+    return false;
+  };
+
   const [users, setUsers] = useState<User[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [permissions, setPermissions] = useState<ChatPermission[]>([]);
@@ -471,12 +485,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
   const handleJoinLive = async () => {
     if (!currentUser) return;
-    if (currentUser.id === 'guest') {
-      alert('Como convidado, necessita de uma conta para aceder à Live Vídeo. Vamos direcioná-lo para criar uma conta!');
-      localStorage.removeItem('currentUser');
-      window.location.reload();
-      return;
-    }
+    if (checkChatGuestRestriction()) return;
 
     if (groupLives.length >= 4) {
       alert('A live de vídeo já atingiu o limite de 4 participantes. Aguarde um momento por favor!');
@@ -654,35 +663,8 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
   // Trigger friendship request
   const handleSendFriendshipRequest = async (targetUser: User) => {
-    if (currentUser.id === 'guest') return;
-    const docId = `${currentUser.id}_${targetUser.id}`;
-    const newFriendship: Friendship = {
-      id: docId,
-      senderId: currentUser.id,
-      receiverId: targetUser.id,
-      status: 'pending',
-      level: 'conhecido',
-      timestamp: Date.now()
-    };
-    await dbCreateFriendship(newFriendship);
-
-    // Create Notification
-    const notif: Notification = {
-      id: 'notif_friend_' + Math.random().toString(36).substring(2, 9),
-      recipientId: targetUser.id,
-      title: 'Pedido de Amizade Social 👥',
-      text: `${currentUser.nickname} enviou-lhe um pedido de amizade social no Feed.`,
-      type: 'friend_request',
-      sender: {
-        id: currentUser.id,
-        name: currentUser.nickname,
-        avatar: currentUser.avatar
-      },
-      read: false,
-      timestamp: Date.now(),
-      targetView: 'notificacoes'
-    };
-    await dbCreateNotification(notif);
+    if (checkChatGuestRestriction()) return;
+    await enviarPedidoAmizade(targetUser.id);
   };
 
   const handleAcceptFriendship = async (friendship: Friendship) => {
@@ -729,7 +711,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
 
   // Trigger conversation request
   const handleSendChatRequest = async (targetUser: User) => {
-    if (currentUser.id === 'guest') return;
+    if (checkChatGuestRestriction()) return;
     const docId = `${currentUser.id}_${targetUser.id}`;
     const newPerm: ChatPermission = {
       id: docId,
@@ -995,7 +977,7 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
     e.preventDefault();
     const msgText = inputText.trim();
     if (!msgText) return;
-    if (currentUser.id === 'guest') return;
+    if (checkChatGuestRestriction()) return;
 
     // Direct message check
     if (selectedChatId !== 'group') {
@@ -2417,10 +2399,13 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
                       </p>
                     </div>
 
-                    {currentUser.id === 'guest' ? (
-                      <div className="text-[10px] uppercase text-yellow-500 font-bold bg-yellow-500/10 p-2.5 border border-yellow-500/25 rounded-xl w-full">
+                    {currentUser.isGuest || currentUser.id === 'guest' ? (
+                      <button
+                        onClick={() => onGuestActionAttempt?.()}
+                        className="text-[10px] uppercase text-yellow-500 font-bold bg-yellow-500/10 hover:bg-yellow-500/20 p-2.5 border border-yellow-500/25 rounded-xl w-full cursor-pointer transition-colors"
+                      >
                         ⚠️ Convidados não podem enviar pedidos. Registe-se!
-                      </div>
+                      </button>
                     ) : frStatus ? (
                       isWeSender ? (
                         <div className="flex items-center gap-1.5 px-4 py-2 bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-xs font-bold rounded-xl uppercase tracking-wider w-full justify-center">
@@ -2775,10 +2760,13 @@ export default function ChatView({ currentUser, initialSelectedChatId }: ChatVie
             })()
           )}
 
-          {currentUser.id === 'guest' ? (
-            <div className="p-3 bg-yellow-500/10 border border-yellow-500/25 rounded-xl text-center text-xs font-bold text-yellow-500 uppercase tracking-wider shrink-0">
+          {currentUser.isGuest || currentUser.id === 'guest' ? (
+            <button
+              onClick={() => onGuestActionAttempt?.()}
+              className="p-3 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/25 rounded-xl text-center text-xs font-bold text-yellow-500 uppercase tracking-wider shrink-0 cursor-pointer transition-colors w-full"
+            >
               ⚠️ Convidados não podem enviar mensagens no chat. Crie uma conta para participar!
-            </div>
+            </button>
           ) : selectedChatId === 'group' ? (
             /* PUBLIC GROUP CHAT INPUT */
             <form onSubmit={handleSendMessage} className="flex gap-2">

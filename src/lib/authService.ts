@@ -435,3 +435,48 @@ export async function authGoogleLogin(): Promise<{ user: User; token: string }> 
     throw new Error(err.message || 'Erro durante a autenticação com o Google.');
   }
 }
+
+export async function authCreateGuestUser(displayName: string, expirationHours: number): Promise<{ user: User; token: string }> {
+  try {
+    const guestId = 'guest_' + Math.random().toString(36).substring(2, 9);
+    const expiresAt = Date.now() + expirationHours * 60 * 60 * 1000;
+    
+    const newGuest: User = {
+      id: guestId,
+      phone: '000000000',
+      email: `${guestId}@guest.openmz.com`,
+      fullname: displayName,
+      firstname: displayName.split(' ')[0] || displayName,
+      surname: displayName.split(' ').slice(1).join(' ') || 'Convidado',
+      nickname: displayName.replace(/[^a-zA-Z0-9]/g, '') + '_guest',
+      password: 'guest_mode_placeholder',
+      province: 'Maputo',
+      created: new Date().toISOString(),
+      avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150`,
+      stats: { likes: 0, posts: 0, friends: 0 },
+      nameEditDate: null,
+      isVIP: false,
+      isVerified: false,
+      lastReadChatTimestamp: Date.now(),
+      lastReadNotificationsTimestamp: Date.now(),
+      mutedNotifications: false
+    };
+
+    // Use isGuest and expiresAt at top-level on User type
+    const guestUserWithFlags = {
+      ...newGuest,
+      isGuest: true,
+      expiresAt: expiresAt
+    };
+
+    await setDoc(doc(db, 'users', guestId), guestUserWithFlags);
+
+    const tokenPayload = { id: guestId, nickname: newGuest.nickname, isGuest: true };
+    const token = btoa(JSON.stringify(tokenPayload));
+
+    return { user: guestUserWithFlags, token };
+  } catch (err: any) {
+    console.error('[AuthService] Guest account creation failed:', err);
+    throw new Error(err.message || 'Erro durante a criação de conta de convidado.');
+  }
+}

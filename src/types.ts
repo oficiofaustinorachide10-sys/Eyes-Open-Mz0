@@ -44,6 +44,8 @@ export interface User {
     view: 'public' | 'community' | 'friends' | 'family' | 'conhecidos' | 'only_me';
   };
   accountStatus?: 'active' | 'deactivated';
+  isGuest?: boolean;
+  expiresAt?: number;
 }
 
 export interface Notification {
