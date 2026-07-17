@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { 
   collection, 
   getDocs, 
@@ -8,6 +8,10 @@ import {
   setDoc, 
   updateDoc 
 } from 'firebase/firestore';
+import { 
+  GoogleAuthProvider, 
+  signInWithPopup 
+} from 'firebase/auth';
 import { User } from '../types';
 
 // JWT Secret or fallback
@@ -358,5 +362,76 @@ export async function authResetPassword(email: string, newPassword: any): Promis
   } catch (err: any) {
     console.warn('[AuthService] API ResetPassword failed, falling back to client-side Firestore:', err);
     return resetPasswordClientSide(email, newPassword);
+  }
+}
+
+export async function authGoogleLogin(): Promise<{ user: User; token: string }> {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+
+    const result = await signInWithPopup(auth, provider);
+    const googleUser = result.user;
+
+    if (!googleUser.email) {
+      throw new Error('Não foi possível obter o endereço de e-mail da sua conta Google.');
+    }
+
+    const emailClean = googleUser.email.trim().toLowerCase();
+    const usersCol = collection(db, 'users');
+    const q = query(usersCol, where('email', '==', emailClean));
+    const snap = await getDocs(q);
+
+    let finalUser: User;
+
+    if (!snap.empty) {
+      const userDoc = snap.docs[0];
+      finalUser = userDoc.data() as User;
+    } else {
+      const fullname = googleUser.displayName || emailClean.split('@')[0];
+      const nameParts = fullname.split(' ');
+      const firstname = nameParts[0] || 'Utilizador';
+      const surname = nameParts.slice(1).join(' ') || 'Google';
+      const nickname = emailClean.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + '_' + Math.random().toString(36).substring(2, 5);
+
+      const userId = 'google_' + googleUser.uid;
+      const newUser: User = {
+        id: userId,
+        phone: '',
+        email: emailClean,
+        fullname,
+        firstname,
+        surname,
+        nickname,
+        password: 'google_auth_placeholder',
+        province: 'Maputo',
+        district: 'Maputo',
+        created: new Date().toISOString(),
+        avatar: googleUser.photoURL || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150`,
+        stats: { likes: 0, posts: 0, friends: 0 },
+        nameEditDate: null,
+        isVIP: false,
+        isVerified: true,
+        lastReadChatTimestamp: 0,
+        lastReadNotificationsTimestamp: 0,
+        mutedNotifications: false
+      };
+
+      await setDoc(doc(db, 'users', userId), newUser);
+      finalUser = newUser;
+    }
+
+    const tokenPayload = { id: finalUser.id, nickname: finalUser.nickname };
+    const token = btoa(JSON.stringify(tokenPayload));
+
+    const clientUser = { ...finalUser };
+    delete clientUser.password;
+
+    return { user: clientUser, token };
+  } catch (err: any) {
+    console.error('[AuthService] Google Authentication failed:', err);
+    throw new Error(err.message || 'Erro durante a autenticação com o Google.');
   }
 }

@@ -59,7 +59,9 @@ import {
   subscribeChatPermissions,
   dbCreateChatPermission,
   dbUpdateChatPermission,
-  dbDeleteChatPermission
+  dbDeleteChatPermission,
+  dbCheckUserVote,
+  dbCreateUserVote
 } from './lib/db';
 
 export default function App() {
@@ -950,6 +952,74 @@ export default function App() {
     }
   };
 
+  const handleRatePost = async (postId: string, ratingValue: number) => {
+    if (!currentUser || currentUser.id === 'guest') {
+      alert('Como convidado, precisa de uma conta para avaliar publicações.');
+      return;
+    }
+
+    try {
+      // 1. Verify unique vote in Firestore
+      const alreadyVoted = await dbCheckUserVote(currentUser.id, postId);
+      if (alreadyVoted) {
+        alert('Você já avaliou esta publicação.');
+        return;
+      }
+
+      // 2. Find post to extract location securely (default to empty string if undefined)
+      const p = posts.find(x => x.id === postId);
+      const locationVal = p?.location || '';
+
+      // 3. Create vote document in Firestore without any undefined fields
+      await dbCreateUserVote(currentUser.id, postId, locationVal, ratingValue);
+
+      // 4. Update the Post's ratings object map in Firestore
+      if (p) {
+        const updatedRatings = p.ratings ? { ...p.ratings } : {};
+        updatedRatings[currentUser.id] = ratingValue;
+
+        const nextStars = Object.keys(updatedRatings).length;
+
+        const updatedPost: Post = {
+          ...p,
+          ratings: updatedRatings,
+          stars: nextStars,
+          starred: true
+        };
+
+        await dbUpdatePost(updatedPost);
+
+        // Optional sound effect
+        try {
+          playStarSound();
+        } catch (e) {}
+
+        // Send a notification to the author
+        if (p.author.id !== currentUser.id) {
+          const notif: Notification = {
+            id: 'notif_rate_' + Math.random().toString(36).substring(2, 9),
+            recipientId: p.author.id,
+            title: 'Nova Avaliação ⭐',
+            text: `${currentUser.nickname} avaliou a sua publicação com ${ratingValue} estrelas!`,
+            type: 'star',
+            sender: {
+              id: currentUser.id,
+              name: currentUser.nickname,
+              avatar: currentUser.avatar
+            },
+            read: false,
+            targetId: p.id,
+            targetView: 'feed',
+            timestamp: Date.now()
+          };
+          await dbCreateNotification(notif).catch(console.error);
+        }
+      }
+    } catch (err) {
+      console.error('Error in handleRatePost:', err);
+    }
+  };
+
   const handleAddPostView = async (postId: string) => {
     const sessionKey = `viewed_post_${postId}`;
     if (sessionStorage.getItem(sessionKey)) return;
@@ -1474,6 +1544,7 @@ export default function App() {
             onClearAutoOpenPost={() => setAutoOpenPostId(undefined)}
             currentThemeConfig={currentThemeConfig}
             onNavigateToTarget={handleNavigateToTarget}
+            onRatePost={handleRatePost}
           />
         );
       case 'profile':

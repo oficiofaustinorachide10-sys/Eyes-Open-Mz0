@@ -284,6 +284,33 @@ export async function dbUpdatePost(post: Post) {
   }
 }
 
+// User unique votes / ratings functions
+export async function dbCheckUserVote(userId: string, postId: string): Promise<boolean> {
+  try {
+    const voteRef = doc(db, 'votes', `${userId}_${postId}`);
+    const voteSnap = await getDoc(voteRef);
+    return voteSnap.exists();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, `votes/${userId}_${postId}`);
+    return false;
+  }
+}
+
+export async function dbCreateUserVote(userId: string, postId: string, location: string | undefined, ratingValue: number) {
+  try {
+    const voteRef = doc(db, 'votes', `${userId}_${postId}`);
+    await setDoc(voteRef, {
+      userId: userId || '',
+      postId: postId || '',
+      location: location || '',
+      rating: ratingValue || 0,
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `votes/${userId}_${postId}`);
+  }
+}
+
 // Story Actions
 export async function dbCreateStory(story: Story) {
   try {
