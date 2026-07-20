@@ -190,8 +190,7 @@ export async function seedDatabaseIfEmpty() {
 // Subscribe to real-time collections
 export function subscribeUsers(callback: (users: User[]) => void) {
   const usersCol = collection(db, 'users');
-  const q = query(usersCol, where("userId", "==", auth.currentUser?.uid || ''));
-  return onSnapshot(q, (snapshot) => {
+  return onSnapshot(usersCol, (snapshot) => {
     const list: User[] = [];
     snapshot.forEach((docSnap) => {
       list.push(docSnap.data() as User);
@@ -205,7 +204,7 @@ export function subscribeUsers(callback: (users: User[]) => void) {
 export function subscribePosts(callback: (posts: Post[]) => void) {
   const postsCol = collection(db, 'posts');
   // Order by timestamp desc
-  const q = query(postsCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'desc'));
+  const q = query(postsCol, orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const list: Post[] = [];
     snapshot.forEach((docSnap) => {
@@ -223,7 +222,7 @@ export function subscribePosts(callback: (posts: Post[]) => void) {
 
 export function subscribeStories(callback: (stories: Story[]) => void) {
   const storiesCol = collection(db, 'stories');
-  const q = query(storiesCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'desc'));
+  const q = query(storiesCol, orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const list: Story[] = [];
     snapshot.forEach((docSnap) => {
@@ -241,7 +240,7 @@ export function subscribeStories(callback: (stories: Story[]) => void) {
 
 export function subscribeChats(callback: (messages: any[]) => void) {
   const chatsCol = collection(db, 'chats');
-  const q = query(chatsCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'asc'));
+  const q = query(chatsCol, orderBy('timestamp', 'asc'));
   return onSnapshot(q, (snapshot) => {
     const list: any[] = [];
     snapshot.forEach((docSnap) => {
@@ -393,7 +392,7 @@ export async function dbDeleteMessage(messageId: string) {
 // Notification Actions
 export function subscribeNotifications(recipientId: string, callback: (notifications: Notification[]) => void) {
   const notificationsCol = collection(db, 'notifications');
-  const q = query(notificationsCol, where("userId", "==", auth.currentUser?.uid || ''), orderBy('timestamp', 'desc'));
+  const q = query(notificationsCol, orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const list: Notification[] = [];
     snapshot.forEach((docSnap) => {
@@ -456,8 +455,7 @@ export async function dbClearAllNotifications(recipientId: string) {
 // Friendship Subscriptions and Actions
 export function subscribeFriendships(callback: (friendships: Friendship[]) => void) {
   const friendshipsCol = collection(db, 'friendships');
-  const q = query(friendshipsCol, where("userId", "==", auth.currentUser?.uid || ''));
-  return onSnapshot(q, (snapshot) => {
+  return onSnapshot(friendshipsCol, (snapshot) => {
     const list: Friendship[] = [];
     snapshot.forEach((docSnap) => {
       list.push({
@@ -570,8 +568,7 @@ export async function dbDeleteFriendship(friendshipId: string) {
 // Chat Permission Subscriptions and Actions
 export function subscribeChatPermissions(callback: (permissions: ChatPermission[]) => void) {
   const permissionsCol = collection(db, 'chat_permissions');
-  const q = query(permissionsCol, where("userId", "==", auth.currentUser?.uid || ''));
-  return onSnapshot(q, (snapshot) => {
+  return onSnapshot(permissionsCol, (snapshot) => {
     const list: ChatPermission[] = [];
     snapshot.forEach((docSnap) => {
       list.push({
@@ -612,8 +609,7 @@ export async function dbDeleteChatPermission(permissionId: string) {
 // Group Live Video Actions
 export function subscribeGroupLives(callback: (participants: any[]) => void) {
   const livesCol = collection(db, 'group_lives');
-  const q = query(livesCol, where("userId", "==", auth.currentUser?.uid || ''));
-  return onSnapshot(q, (snapshot) => {
+  return onSnapshot(livesCol, (snapshot) => {
     const list: any[] = [];
     snapshot.forEach((docSnap) => {
       list.push({
@@ -679,5 +675,35 @@ export function logoutSeguro() {
   localStorage.clear();
   sessionStorage.clear();
   window.location.reload();
+}
+
+export async function dbWipeAllDataAndAccounts() {
+  const collectionsToWipe = [
+    'users',
+    'posts',
+    'stories',
+    'chats',
+    'friendships',
+    'chat_permissions',
+    'group_lives',
+    'notifications'
+  ];
+
+  for (const colName of collectionsToWipe) {
+    try {
+      const colRef = collection(db, colName);
+      const snapshot = await getDocs(colRef);
+      for (const docSnap of snapshot.docs) {
+        await deleteDoc(doc(db, colName, docSnap.id));
+      }
+      console.log(`[Wipe] Coleção ${colName} limpa com sucesso.`);
+    } catch (e) {
+      console.error(`[Wipe] Erro ao limpar coleção ${colName}:`, e);
+    }
+  }
+
+  // Clear all local states/accounts as well
+  localStorage.clear();
+  sessionStorage.clear();
 }
 

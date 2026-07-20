@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Mail, Lock, ArrowLeft, KeyRound } from 'lucide-react';
+import { Mail, Lock, ArrowLeft, KeyRound, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { simpleHash, validateEmail } from '../utils';
 import { User as UserType } from '../types';

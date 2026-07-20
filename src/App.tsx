@@ -63,7 +63,9 @@ import {
   dbCheckUserVote,
   dbCreateUserVote,
   dbDeleteExpiredGuests,
-  dbDeleteGuestUser
+  dbDeleteGuestUser,
+  dbWipeAllDataAndAccounts,
+  logoutSeguro
 } from './lib/db';
 
 export default function App() {
@@ -73,23 +75,8 @@ export default function App() {
 
   // Saved device sessions / accounts selector states
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => {
-    if (typeof window === 'undefined') return [];
-    const saved = localStorage.getItem('eo_saved_accounts');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const uniqueMap = new Map<string, SavedAccount>();
-          for (const acc of parsed) {
-            if (acc && acc.id && acc.id !== 'guest' && !acc.id.startsWith('guest_')) {
-              uniqueMap.set(acc.id, acc);
-            }
-          }
-          return Array.from(uniqueMap.values());
-        }
-      } catch (e) {
-        return [];
-      }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('eo_saved_accounts');
     }
     return [];
   });
@@ -836,37 +823,6 @@ export default function App() {
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('eo_jwt_token', token);
     
-    // Save account to local device-saved accounts lists (always saved to enable fast switching/saved accounts on device)
-    if (!user.isGuest && user.id !== 'guest' && !user.id.startsWith('guest_')) {
-      const savedListRaw = localStorage.getItem('eo_saved_accounts');
-      let savedList: SavedAccount[] = [];
-      if (savedListRaw) {
-        try { savedList = JSON.parse(savedListRaw); } catch(e){}
-      }
-      
-      const hasPin = localStorage.getItem(`eo_pin_hash_${user.id}`) !== null;
-      const newAcc: SavedAccount = {
-        id: user.id,
-        nickname: user.nickname,
-        fullname: user.fullname || user.nickname,
-        avatar: user.avatar || "https://i.pravatar.cc/100?img=1",
-        email: user.email,
-        hasPin
-      };
-
-      const uniqueMap = new Map<string, SavedAccount>();
-      uniqueMap.set(user.id, newAcc);
-      for (const acc of savedList) {
-        if (acc && acc.id && acc.id !== user.id && acc.id !== 'guest' && !acc.id.startsWith('guest_')) {
-          uniqueMap.set(acc.id, acc);
-        }
-      }
-
-      const finalSavedList = Array.from(uniqueMap.values());
-      localStorage.setItem('eo_saved_accounts', JSON.stringify(finalSavedList));
-      setSavedAccounts(finalSavedList);
-    }
-
     if (rememberMe) {
       try {
         const raw = JSON.stringify(user);
@@ -964,6 +920,23 @@ export default function App() {
       }
 
       handleLogout();
+    }
+  };
+
+  const handleWipeAllData = async () => {
+    try {
+      await dbWipeAllDataAndAccounts();
+      setUsers([]);
+      setSavedAccounts([]);
+      setPosts([]);
+      setStories([]);
+      setCurrentUser(null);
+      triggerToast('Sistema restaurado com sucesso! Todos os dados e contas foram apagados do servidor.');
+      // Full logout and clean reload
+      logoutSeguro();
+    } catch (err) {
+      console.error("Erro ao resetar o sistema:", err);
+      alert("Ocorreu um erro ao resetar o sistema.");
     }
   };
 

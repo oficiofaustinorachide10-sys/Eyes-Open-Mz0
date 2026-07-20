@@ -218,15 +218,21 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Create a local object URL to play directly in standard video players
-    const url = URL.createObjectURL(file);
-    setVideoUrl(url);
+    // Convert file to Base64 (Data URL) so it is stored persistently in Firestore!
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        setVideoUrl(ev.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
 
     // Extract file size in MB
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
     setFileSizeStr(`${sizeMB} MB`);
 
     // Extract duration using HTML5 Video element
+    const url = URL.createObjectURL(file);
     const tempVideo = document.createElement('video');
     tempVideo.preload = 'metadata';
     tempVideo.src = url;
@@ -262,12 +268,19 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
       setMusicArtist('Dispositivo Local');
     }
 
-    const url = URL.createObjectURL(file);
-    setMusicUrl(url);
+    // Convert file to Base64 (Data URL) so it is stored persistently in Firestore!
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        setMusicUrl(ev.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
 
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
     setFileSizeStr(`${sizeMB} MB`);
 
+    const url = URL.createObjectURL(file);
     const tempAudio = document.createElement('audio');
     tempAudio.preload = 'metadata';
     tempAudio.src = url;
@@ -395,7 +408,15 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
       const wavBlob = bufferToWav(trimmedBuffer);
       const trimmedUrl = URL.createObjectURL(wavBlob);
 
-      setMusicUrl(trimmedUrl);
+      // Convert trimmed wavBlob to Base64 (Data URL) so it is stored persistently in Firestore!
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          setMusicUrl(ev.target.result as string);
+        }
+      };
+      reader.readAsDataURL(wavBlob);
+
       setMusicDurationSec(Math.round(trimmedBuffer.duration));
       
       if (previewAudioRef.current) {
