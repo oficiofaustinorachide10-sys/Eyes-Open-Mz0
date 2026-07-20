@@ -111,7 +111,7 @@ function RotationalCard({
                 autoplayTimer.current = setTimeout(() => {
                   setIsAutoplayPlaying(false);
                 }, 5000);
-              }, 1200); // Wait 1.2 seconds (showing cover/thumbnail first) before autoplaying
+              }, 200); // Snappy 200ms cover display before autoplaying
             }
           } else {
             if (hoverTimer.current) clearTimeout(hoverTimer.current);
@@ -157,7 +157,7 @@ function RotationalCard({
       autoplayTimer.current = setTimeout(() => {
         setIsAutoplayPlaying(false);
       }, 5000); // Play video for exactly 5 seconds
-    }, 1200); // If hovering for 1.2 seconds, showing cover first
+    }, 200); // Snappy 200ms cover display before autoplaying
   };
 
   const handleMouseLeave = () => {

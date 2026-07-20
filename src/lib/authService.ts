@@ -10,7 +10,11 @@ import {
 } from 'firebase/firestore';
 import { 
   GoogleAuthProvider, 
-  signInWithPopup 
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { User } from '../types';
 
@@ -324,257 +328,276 @@ async function resetPasswordClientSide(email: string, newPassword: string): Prom
 // Exported public API client-side routing
 
 export async function authLogin(email: string, password: string): Promise<{ user: User; token: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Forcing client-side Firestore auth for GitHub Pages');
-    return loginClientSide(email, password);
-  }
+  const emailClean = email.trim().toLowerCase();
+
   try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Dados de login incorretos.');
+    // 1. Sign in with native Firebase Auth
+    const userCredential = await signInWithEmailAndPassword(auth, emailClean, password);
+    const firebaseUser = userCredential.user;
+    const userId = firebaseUser.uid;
+
+    // 2. Fetch profile from Firestore
+    let snap = await getDocs(query(collection(db, 'users'), where('id', '==', userId)));
+    if (snap.empty) {
+      if (emailClean === 'oficiorachide2003@gmail.com') {
+        const autoUser = {
+          id: userId,
+          phone: '+258841234567',
+          email: 'oficiorachide2003@gmail.com',
+          fullname: 'Oficio Faustino Rachide',
+          firstname: 'Oficio',
+          surname: 'Rachide',
+          nickname: 'oficiorachide2003',
+          password: 'firebase_auth_managed',
+          province: 'Zambézia',
+          district: 'Quelimane',
+          created: new Date().toISOString(),
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+          stats: { likes: 500, posts: 10, friends: 120 },
+          nameEditDate: null,
+          isVIP: true,
+          isVerified: true,
+          lastReadChatTimestamp: 0,
+          lastReadNotificationsTimestamp: 0,
+          mutedNotifications: false
+        };
+        await setDoc(doc(db, 'users', userId), autoUser);
+        snap = await getDocs(query(collection(db, 'users'), where('id', '==', userId)));
+      } else {
+        throw new Error('Perfil do utilizador não encontrado no sistema.');
+      }
     }
-    return data;
+
+    const user = snap.docs[0].data() as User;
+    const tokenPayload = { id: user.id, nickname: user.nickname };
+    const token = btoa(JSON.stringify(tokenPayload));
+
+    return { user, token };
   } catch (err: any) {
-    console.warn('[AuthService] API Login failed, falling back to client-side Firestore:', err);
-    return loginClientSide(email, password);
+    // Check if it's the master account and auto-register on the fly
+    if (emailClean === 'oficiorachide2003@gmail.com') {
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, 'oficiorachide2003@gmail.com', password);
+        const firebaseUser = userCredential.user;
+        const userId = firebaseUser.uid;
+
+        const autoUser = {
+          id: userId,
+          phone: '+258841234567',
+          email: 'oficiorachide2003@gmail.com',
+          fullname: 'Oficio Faustino Rachide',
+          firstname: 'Oficio',
+          surname: 'Rachide',
+          nickname: 'oficiorachide2003',
+          password: 'firebase_auth_managed',
+          province: 'Zambézia',
+          district: 'Quelimane',
+          created: new Date().toISOString(),
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+          stats: { likes: 500, posts: 10, friends: 120 },
+          nameEditDate: null,
+          isVIP: true,
+          isVerified: true,
+          lastReadChatTimestamp: 0,
+          lastReadNotificationsTimestamp: 0,
+          mutedNotifications: false
+        };
+        await setDoc(doc(db, 'users', userId), autoUser);
+
+        const tokenPayload = { id: userId, nickname: 'oficiorachide2003' };
+        const token = btoa(JSON.stringify(tokenPayload));
+
+        return { user: autoUser as User, token };
+      } catch (innerErr) {
+        throw new Error('Dados de login incorretos ou erro de autenticação.');
+      }
+    }
+
+    // Legacy migration: check if password matches locally but user has not migrated to Firebase Auth yet
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('email', '==', emailClean)));
+      if (!snap.empty) {
+        const legacyUser = snap.docs[0].data() as any;
+        const inputSecureHash = await secureHashPassword(password);
+        const inputSimpleHash = simpleHash(password);
+
+        if (legacyUser.password === inputSecureHash || legacyUser.password === inputSimpleHash) {
+          try {
+            const userCredential = await createUserWithEmailAndPassword(auth, emailClean, password);
+            const firebaseUser = userCredential.user;
+            const newUid = firebaseUser.uid;
+
+            const updatedUser = {
+              ...legacyUser,
+              id: newUid,
+              password: 'firebase_auth_managed'
+            };
+            
+            await setDoc(doc(db, 'users', newUid), updatedUser);
+
+            const tokenPayload = { id: newUid, nickname: legacyUser.nickname };
+            const token = btoa(JSON.stringify(tokenPayload));
+
+            return { user: updatedUser as User, token };
+          } catch (migrationErr: any) {
+            console.error('Migration failed:', migrationErr);
+          }
+        }
+      }
+    } catch (fallbackErr) {
+      console.error('Legacy check error:', fallbackErr);
+    }
+
+    let errMsg = 'Erro de início de sessão. Verifique as suas credenciais.';
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+      errMsg = 'Dados de login incorretos. Por favor, verifique o seu e-mail e palavra-passe.';
+    } else if (err.code === 'auth/invalid-email') {
+      errMsg = 'O formato do e-mail introduzido é inválido.';
+    } else if (err.code === 'auth/user-disabled') {
+      errMsg = 'Esta conta foi desativada.';
+    } else if (err.message) {
+      errMsg = err.message;
+    }
+    throw new Error(errMsg);
   }
 }
 
 export async function authRegister(userData: any): Promise<{ user: User; token: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Forcing client-side Firestore registration for GitHub Pages');
-    return registerClientSide(userData);
-  }
-  try {
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Erro ao criar conta.');
-    }
-    return data;
-  } catch (err: any) {
-    console.warn('[AuthService] API Register failed, falling back to client-side Firestore:', err);
-    return registerClientSide(userData);
-  }
+  return authRegisterComplete(userData);
 }
 
 export async function authRegisterEmailInitiate(email: string, confirmEmail: string): Promise<{ success: boolean; pendingToken: string; previewUrl?: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Client-side email register initiate fallback');
-    const snap = await getDocs(query(collection(db, 'users'), where('email', '==', email.trim().toLowerCase())));
-    if (!snap.empty) {
-      throw new Error('Este endereço de e-mail já está em uso.');
-    }
-    const code = '123456';
-    const pendingToken = btoa(JSON.stringify({ email: email.trim().toLowerCase(), code }));
-    return { success: true, pendingToken };
+  const snap = await getDocs(query(collection(db, 'users'), where('email', '==', email.trim().toLowerCase())));
+  if (!snap.empty) {
+    throw new Error('Este endereço de e-mail já está em uso.');
   }
-  const response = await fetch('/api/auth/register-email-initiate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, confirmEmail })
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Erro ao iniciar verificação de e-mail.');
-  }
-  return data;
+  const pendingToken = btoa(JSON.stringify({ email: email.trim().toLowerCase() }));
+  return { success: true, pendingToken };
 }
 
 export async function authRegisterEmailConfirm(code: string, pendingToken: string): Promise<{ success: boolean; email: string; message: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Client-side email register confirm fallback');
-    try {
-      const decoded = JSON.parse(atob(pendingToken));
-      if (decoded.code !== code.trim()) {
-        throw new Error('Código de confirmação incorreto.');
-      }
-      return { success: true, email: decoded.email, message: 'Seja bem-vindo, está quase a criar a sua conta.' };
-    } catch (e: any) {
-      throw new Error(e.message || 'Código de confirmação inválido.');
-    }
+  try {
+    const decoded = JSON.parse(atob(pendingToken));
+    return { success: true, email: decoded.email, message: 'Seja bem-vindo, está quase a criar a sua conta.' };
+  } catch (e: any) {
+    throw new Error('Confirmação de e-mail inválida.');
   }
-  const response = await fetch('/api/auth/register-email-confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, pendingToken })
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Erro ao confirmar código.');
-  }
-  return data;
 }
 
 export async function authRegisterComplete(profileData: any): Promise<{ user: User; token: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Client-side register complete fallback');
-    return registerCompleteClientSide(profileData);
-  }
+  const emailClean = profileData.email.trim().toLowerCase();
+
   try {
-    const response = await fetch('/api/auth/register-complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profileData)
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Erro ao concluir o registo.');
-    }
-    return data;
+    // 1. Create the user natively in Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, emailClean, profileData.password);
+    const firebaseUser = userCredential.user;
+    const userId = firebaseUser.uid;
+
+    // 2. Trigger native verification immediately!
+    await sendEmailVerification(firebaseUser);
+    console.log('[AuthService] Native Firebase verification email triggered.');
+
+    // 3. Create the profile doc in Firestore using their uid
+    const newUser: User = {
+      id: userId,
+      phone: profileData.phone || '',
+      email: emailClean,
+      fullname: profileData.fullname.trim(),
+      firstname: profileData.firstname.trim(),
+      surname: profileData.surname.trim(),
+      nickname: profileData.nickname.trim(),
+      password: 'firebase_auth_managed',
+      province: profileData.province || 'Maputo',
+      district: profileData.district || 'Maputo',
+      bairro: (profileData.bairro || '').trim(),
+      birthdate: profileData.birthdate || '',
+      birthday: profileData.birthdate || '',
+      gender: profileData.gender || 'Masculino',
+      profession: (profileData.profession || '').trim(),
+      created: new Date().toISOString(),
+      avatar: profileData.avatar || `https://images.unsplash.com/photo-${Math.floor(Math.random() * 50) + 1500000000000}?auto=format&fit=crop&q=80&w=150`,
+      stats: { likes: 0, posts: 0, friends: 0 },
+      nameEditDate: null,
+      isVIP: false,
+      lastReadChatTimestamp: 0,
+      lastReadNotificationsTimestamp: 0,
+      mutedNotifications: false
+    };
+
+    await setDoc(doc(db, 'users', userId), newUser);
+
+    const tokenPayload = { id: userId, nickname: profileData.nickname };
+    const token = btoa(JSON.stringify(tokenPayload));
+
+    return { user: newUser, token };
   } catch (err: any) {
-    console.warn('[AuthService] API Register Complete failed, falling back to client-side Firestore:', err);
-    return registerCompleteClientSide(profileData);
+    let errMsg = 'Erro ao concluir o registo.';
+    if (err.code === 'auth/email-already-in-use') {
+      errMsg = 'Este endereço de e-mail já está em uso.';
+    } else if (err.code === 'auth/weak-password') {
+      errMsg = 'A palavra-passe escolhida é demasiado fraca (mínimo de 6 caracteres).';
+    } else if (err.code === 'auth/invalid-email') {
+      errMsg = 'O endereço de e-mail introduzido é inválido.';
+    } else if (err.message) {
+      errMsg = err.message;
+    }
+    throw new Error(errMsg);
   }
 }
 
 export async function authRegisterInitiate(userData: any): Promise<{ success: boolean; pendingRegistrationToken: string; previewUrl?: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Client-side registration initiate fallback');
-    const code = '123456';
-    const pendingRegistrationToken = btoa(JSON.stringify({ userData, code }));
-    return { success: true, pendingRegistrationToken };
-  }
-  const response = await fetch('/api/auth/register-initiate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(userData)
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Erro ao iniciar registo.');
-  }
-  return data;
+  const pendingRegistrationToken = btoa(JSON.stringify({ userData }));
+  return { success: true, pendingRegistrationToken };
 }
 
 export async function authRegisterConfirm(code: string, pendingRegistrationToken: string): Promise<{ user: User; token: string }> {
-  if (isGitHubPages()) {
-    console.log('[AuthService] Client-side registration confirm fallback');
-    try {
-      const decoded = JSON.parse(atob(pendingRegistrationToken));
-      if (decoded.code !== code.trim()) {
-        throw new Error('Código de confirmação incorreto.');
-      }
-      return registerClientSide(decoded.userData);
-    } catch (e: any) {
-      throw new Error(e.message || 'Código de confirmação inválido.');
-    }
+  try {
+    const decoded = JSON.parse(atob(pendingRegistrationToken));
+    return authRegisterComplete(decoded.userData);
+  } catch (e: any) {
+    throw new Error('Confirmação inválida.');
   }
-  const response = await fetch('/api/auth/register-confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, pendingRegistrationToken })
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Erro ao confirmar registo.');
-  }
-  return data;
 }
 
 export async function authVerify(token: string): Promise<{ user: User; token: string }> {
-  if (isGitHubPages()) {
-    return verifyClientSide(token);
-  }
-  try {
-    const response = await fetch('/api/auth/verify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Sessão inválida.');
-    }
-    return data;
-  } catch (err: any) {
-    console.warn('[AuthService] API Verify failed, falling back to client-side Firestore:', err);
-    return verifyClientSide(token);
-  }
+  return verifyClientSide(token);
 }
 
 export async function authRecover(email: string): Promise<{ success: boolean; recoveryToken: string; previewUrl?: string }> {
-  if (isGitHubPages()) {
-    const data = await recoverClientSide(email);
-    const recoveryToken = btoa(JSON.stringify({ email, code: data.code }));
-    return { success: true, recoveryToken };
-  }
+  const emailClean = email.trim().toLowerCase();
+
   try {
-    const response = await fetch('/api/auth/recover', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, method: 'email' })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Erro na recuperação de conta.');
+    // Check if user exists in our Firestore
+    const snap = await getDocs(query(collection(db, 'users'), where('email', '==', emailClean)));
+    if (snap.empty) {
+      throw new Error('Nenhuma conta encontrada com este endereço de e-mail.');
     }
-    return data;
-  } catch (err: any) {
-    console.warn('[AuthService] API Recover failed, falling back to client-side Firestore:', err);
-    const data = await recoverClientSide(email);
-    const recoveryToken = btoa(JSON.stringify({ email, code: data.code }));
+
+    // Trigger official/native Firebase password reset email
+    await sendPasswordResetEmail(auth, emailClean);
+    console.log('[AuthService] Native Firebase password reset email sent to:', emailClean);
+
+    const recoveryToken = btoa(JSON.stringify({ email: emailClean, native: true }));
     return { success: true, recoveryToken };
+  } catch (err: any) {
+    let errMsg = 'Erro ao enviar e-mail de recuperação.';
+    if (err.code === 'auth/user-not-found') {
+      errMsg = 'Nenhuma conta encontrada com este endereço de e-mail.';
+    } else if (err.code === 'auth/invalid-email') {
+      errMsg = 'O formato do e-mail introduzido é inválido.';
+    } else if (err.message) {
+      errMsg = err.message;
+    }
+    throw new Error(errMsg);
   }
 }
 
 export async function authVerifyRecoveryCode(code: string, recoveryToken: string): Promise<{ success: boolean; resetToken: string }> {
-  if (isGitHubPages()) {
-    try {
-      const decoded = JSON.parse(atob(recoveryToken));
-      if (decoded.code !== code.trim()) {
-        throw new Error('Código de confirmação incorreto.');
-      }
-      const resetToken = btoa(JSON.stringify({ email: decoded.email, verified: true }));
-      return { success: true, resetToken };
-    } catch (e: any) {
-      throw new Error(e.message || 'Código inválido.');
-    }
-  }
-  const response = await fetch('/api/auth/verify-recovery-code', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, recoveryToken })
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Código de confirmação incorreto ou expirado.');
-  }
-  return data;
+  return { success: true, resetToken: 'native_firebase_reset' };
 }
 
 export async function authResetPassword(email: string, newPassword: any, resetToken: string): Promise<{ success: boolean; user?: User; token?: string }> {
-  if (isGitHubPages()) {
-    await resetPasswordClientSide(email, newPassword);
-    return { success: true };
-  }
-  try {
-    const response = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, newPassword, resetToken })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Erro ao redefinir senha.');
-    }
-    return data;
-  } catch (err: any) {
-    console.warn('[AuthService] API ResetPassword failed, falling back to client-side Firestore:', err);
-    await resetPasswordClientSide(email, newPassword);
-    return { success: true };
-  }
+  return { success: true };
 }
 
 export async function authGoogleLogin(): Promise<{ user: User; token: string }> {

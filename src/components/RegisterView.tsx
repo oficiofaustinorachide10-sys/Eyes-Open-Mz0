@@ -123,31 +123,23 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
       return;
     }
 
-    setStatusMsg('A disparar código de verificação via SMTP para o seu e-mail...');
+    setStatusMsg('A validar o endereço de e-mail...');
     setStatusType('info');
 
     authRegisterEmailInitiate(email.trim(), confirmEmail.trim())
       .then((data) => {
         setPendingToken(data.pendingToken);
-        setResendTimer(60); // Reset timer to 60 seconds constraint
-
-        if (data.previewUrl) {
-          setEtherealUrl(data.previewUrl);
-          setStatusMsg('Código gerado! Para fins de teste local, clique no link de visualização.');
-        } else {
-          setEtherealUrl(null);
-          setStatusMsg('Código de confirmação enviado com sucesso para o seu e-mail!');
-        }
+        setStatusMsg('E-mail validado com sucesso!');
         setStatusType('success');
 
         setTimeout(() => {
-          setRegistrationStep('code');
-          setStatusMsg('Introduza o código de 6 dígitos recebido.');
+          setRegistrationStep('profile');
+          setStatusMsg('Por favor, preencha o seu perfil e localização geográfica obrigatória.');
           setStatusType('info');
         }, 1500);
       })
       .catch((err) => {
-        setStatusMsg(err.message || 'Falha ao processar envio do código SMTP.');
+        setStatusMsg(err.message || 'Falha ao processar e-mail.');
         setStatusType('error');
       });
   };
@@ -391,7 +383,7 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
                 className="space-y-6"
               >
                 <p className="text-xs text-[#a0a0c0] font-rajdhani font-semibold leading-relaxed">
-                  Para iniciar, valide o seu e-mail. Enviaremos um código único verdadeiro de 6 dígitos via SMTP real para a sua caixa de entrada.
+                  Para iniciar, introduza o seu endereço de e-mail. Enviaremos uma hiperligação de verificação nativa do Firebase imediatamente após a criação da sua conta.
                 </p>
 
                 {/* Email input */}

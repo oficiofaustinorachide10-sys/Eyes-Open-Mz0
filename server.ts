@@ -7,7 +7,6 @@ import dotenv from 'dotenv';
 import { readFileSync } from 'fs';
 import { initializeApp } from 'firebase/app';
 import { GoogleGenAI } from '@google/genai';
-import nodemailer from 'nodemailer';
 import { 
   getFirestore, 
   collection, 
@@ -95,92 +94,10 @@ function secureHashPassword(password: string): string {
   return crypto.pbkdf2Sync(password, JWT_SECRET, 1000, 64, 'sha512').toString('hex');
 }
 
-// Send Real Email with automatic Ethereal fallback for local development (absolutely no simulation!)
+// Stub verification function (SMTP is no longer used; native Firebase Auth is handled client-side)
 async function sendVerificationEmail(to: string, code: string, isRecovery = false) {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER || 'eyesopenmoz@gmail.com';
-  const pass = process.env.SMTP_PASS || 'ybxi sqmw hsoa wcog';
-  const from = process.env.SMTP_FROM || `"Eyes Open MZ" <${user}>`;
-
-  const subject = isRecovery 
-    ? 'Eyes Open MZ - Recuperação de Conta' 
-    : 'Eyes Open MZ - Confirmação de E-mail';
-
-  const typeName = isRecovery ? 'recuperação de conta' : 'confirmação de e-mail';
-  const actionText = isRecovery ? 'redefinir a sua palavra-passe' : 'concluir o seu registo';
-
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0c0c24; color: #ffffff; padding: 40px; border-radius: 24px; border: 1px solid rgba(0, 242, 254, 0.3); box-shadow: 0 20px 40px rgba(0,0,0,0.8);">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #00f2fe; font-size: 28px; margin: 0; font-weight: 800; letter-spacing: 2px;">EYES OPEN MZ</h1>
-        <p style="color: #a0a0c0; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; margin: 5px 0 0 0;">Verificação de Segurança</p>
-      </div>
-      <div style="background-color: rgba(18, 18, 53, 0.6); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 16px; padding: 30px; margin-bottom: 25px;">
-        <p style="font-size: 15px; line-height: 1.6; color: #e2e8f0; margin-top: 0;">Olá,</p>
-        <p style="font-size: 15px; line-height: 1.6; color: #e2e8f0;">Recebemos um pedido de <strong>${typeName}</strong> para este endereço de e-mail. Utilize o código de verificação abaixo para ${actionText}:</p>
-        
-        <div style="text-align: center; margin: 35px 0;">
-          <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #00f2fe; background-color: rgba(0, 242, 254, 0.1); padding: 12px 30px; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.3); display: inline-block;">
-            ${code}
-          </span>
-          <p style="color: #a0a0c0; font-size: 11px; margin: 10px 0 0 0;">Este código expira em 15 minutos.</p>
-        </div>
-        
-        <p style="font-size: 13px; line-height: 1.5; color: #a0a0c0; margin-bottom: 0;">Se não iniciou este pedido, por favor ignore este e-mail. A sua conta permanece totalmente segura.</p>
-      </div>
-      <div style="text-align: center; font-size: 11px; color: #718096; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
-        <p style="margin: 0;">Eyes Open MZ — Plataforma Digital Moçambicana</p>
-        <p style="margin: 5px 0 0 0;">&copy; 2026 Todos os direitos reservados.</p>
-      </div>
-    </div>
-  `;
-
-  const text = `EYES OPEN MZ - VERIFICAÇÃO DE SEGURANÇA\n\nOlá,\n\nUtilize o seguinte código de verificação para ${actionText}:\n\n${code}\n\nEste código expira em 15 minutos.\n\nSe não fez este pedido, ignore este e-mail.\n\nEyes Open MZ`;
-
-  if (host && user && pass) {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    });
-
-    await transporter.sendMail({
-      from,
-      to,
-      subject,
-      text,
-      html,
-    });
-    console.log(`[Email] Real email sent to ${to} using SMTP: ${host}:${port}`);
-    return { success: true, method: 'smtp' };
-  } else {
-    console.warn('[Email] SMTP credentials not fully configured in environment. Creating a real on-the-fly test email account via Ethereal SMTP...');
-    const testAccount = await nodemailer.createTestAccount();
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass
-      }
-    });
-
-    const info = await transporter.sendMail({
-      from: '"Eyes Open MZ" <no-reply@eyesopen.mz>',
-      to,
-      subject,
-      text,
-      html
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log(`[Email TEST/ETHEREAL] Real Ethereal email sent to ${to}`);
-    console.log(`[Email TEST/ETHEREAL] View verification email at: ${previewUrl}`);
-    return { success: true, method: 'ethereal', previewUrl };
-  }
+  console.log(`[SMTP Stub] sendVerificationEmail called for ${to} (SMTP is disabled; native Firebase Auth used on client)`);
+  return { success: true, method: 'stub', previewUrl: null };
 }
 
 async function startServer() {

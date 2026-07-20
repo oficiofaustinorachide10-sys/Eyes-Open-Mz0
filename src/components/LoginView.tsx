@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Mail, Lock, ArrowLeft, KeyRound, Trash2 } from 'lucide-react';
+import { Mail, Lock, ArrowLeft, KeyRound, Trash2, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { simpleHash, validateEmail } from '../utils';
 import { User as UserType } from '../types';
@@ -29,7 +29,7 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
 
   // Password Recovery States
   const [isRecovering, setIsRecovering] = useState(false);
-  const [recoveryStep, setRecoveryStep] = useState<'email' | 'code' | 'new_password'>('email');
+  const [recoveryStep, setRecoveryStep] = useState<'email' | 'code' | 'new_password' | 'success_message'>('email');
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
   const [recoveryToken, setRecoveryToken] = useState('');
@@ -62,19 +62,10 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
     try {
       const data = await authRecover(recoveryEmail.trim().toLowerCase());
       setRecoveryToken(data.recoveryToken);
-      if (data.previewUrl) {
-        setEtherealUrl(data.previewUrl);
-        setSuccessMsg('Código de recuperação enviado! Pode visualizar o e-mail no link de teste abaixo.');
-      } else {
-        setEtherealUrl(null);
-        setSuccessMsg(`Código enviado com sucesso para o seu Gmail!`);
-      }
-      setTimeout(() => {
-        setSuccessMsg('');
-        setRecoveryStep('code');
-      }, 1500);
+      setSuccessMsg('E-mail de recuperação nativo enviado com sucesso!');
+      setRecoveryStep('success_message');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro de ligação ao servidor de recuperação.');
+      setErrorMsg(err.message || 'Erro ao enviar e-mail de recuperação.');
     }
   };
 
@@ -253,8 +244,9 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                   onClick={() => {
                     setErrorMsg('');
                     setSuccessMsg('');
-                    if (recoveryStep === 'email') {
+                    if (recoveryStep === 'email' || recoveryStep === 'success_message') {
                       setIsRecovering(false);
+                      setRecoveryStep('email');
                     } else if (recoveryStep === 'code') {
                       setRecoveryStep('email');
                     } else if (recoveryStep === 'new_password') {
@@ -271,6 +263,7 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                   </h2>
                   <p className="text-[9px] text-[#a0a0c0] font-rajdhani font-bold uppercase tracking-wider">
                     {recoveryStep === 'email' && 'Etapa 1: Endereço de e-mail'}
+                    {recoveryStep === 'success_message' && 'Sucesso'}
                     {recoveryStep === 'code' && 'Etapa 2: Código de confirmação'}
                     {recoveryStep === 'new_password' && 'Etapa 3: Nova senha'}
                   </p>
@@ -280,7 +273,7 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
               {recoveryStep === 'email' && (
                 <form onSubmit={handleInitiateRecovery} className="space-y-5">
                   <p className="text-xs text-[#a0a0c0] font-rajdhani font-semibold leading-relaxed text-left">
-                    Introduza o seu endereço de e-mail registado. Enviaremos um código de verificação para que possa redefinir a sua palavra-passe com toda a segurança.
+                    Introduza o seu endereço de e-mail registado. Enviaremos uma hiperligação oficial de redefinição de palavra-passe diretamente para a sua caixa de entrada através do Firebase Auth.
                   </p>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
@@ -298,9 +291,38 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                     type="submit"
                     className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-xs tracking-widest cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
                   >
-                    Enviar Código de Segurança
+                    Enviar Link de Recuperação
                   </button>
                 </form>
+              )}
+
+              {recoveryStep === 'success_message' && (
+                <div className="space-y-5 text-center py-4">
+                  <div className="mx-auto w-16 h-16 bg-neon-cyan/10 border border-neon-cyan/40 rounded-full flex items-center justify-center text-neon-cyan animate-pulse">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-white font-orbitron font-bold text-sm tracking-wide uppercase">
+                    E-mail Enviado!
+                  </h3>
+                  <div className="p-4 bg-neon-cyan/5 border border-neon-cyan/15 rounded-xl text-xs font-rajdhani text-left leading-relaxed text-[#a0a0c0]">
+                    <p className="mb-2">
+                      Enviamos um link de recuperação oficial do Firebase para o e-mail: <strong className="text-white">{recoveryEmail}</strong>.
+                    </p>
+                    <p>
+                      Por favor, abra o e-mail, clique no link de redefinição de palavra-passe fornecido pelo Firebase e siga as instruções para definir a sua nova palavra-passe de forma 100% segura.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRecovering(false);
+                      setRecoveryStep('email');
+                    }}
+                    className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-xs tracking-widest cursor-pointer shadow-lg"
+                  >
+                    Voltar ao Login
+                  </button>
+                </div>
               )}
 
               {recoveryStep === 'code' && (
