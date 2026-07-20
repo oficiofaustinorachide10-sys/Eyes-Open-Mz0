@@ -9,13 +9,12 @@ import {
   Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Post, Story, Comment, Notification, Friendship, ChatPermission } from './types';
+import { User, Post, Story, Comment, Notification, Friendship, ChatPermission, PublishLog } from './types';
 import { SEED_USERS, SEED_POSTS, SEED_STORIES, simpleHash } from './utils';
 import { authVerify, authLogin } from './lib/authService';
 
 // Import our modular subcomponents
 import LoginView from './components/LoginView';
-import AccountSelectorView, { SavedAccount } from './components/AccountSelectorView';
 import RegisterView from './components/RegisterView';
 import Sidebar, { ViewType } from './components/Sidebar';
 import NotificationsView from './components/NotificationsView';
@@ -64,7 +63,6 @@ import {
   dbCreateUserVote,
   dbDeleteExpiredGuests,
   dbDeleteGuestUser,
-  dbWipeAllDataAndAccounts,
   logoutSeguro
 } from './lib/db';
 
@@ -73,19 +71,59 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  // Saved device sessions / accounts selector states
-  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('eo_saved_accounts');
-    }
-    return [];
-  });
-  const [showAccountSelector, setShowAccountSelector] = useState<boolean>(true);
-
   const currentUserRef = useRef<User | null>(currentUser);
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
+
+  // Publication logs persistent state and handler
+  const [publishLogs, setPublishLogs] = useState<PublishLog[]>(() => {
+    try {
+      const stored = localStorage.getItem('eo_publish_logs');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const addPublishLog = (
+    action: 'POST_PUBLISH' | 'STORY_PUBLISH',
+    status: 'SUCCESS' | 'ERROR' | 'PENDING',
+    author: string,
+    type: string,
+    titleOrText: string,
+    error?: string
+  ) => {
+    const logId = 'log_' + Math.random().toString(36).substring(2, 9);
+    const newLog: PublishLog = {
+      id: logId,
+      timestamp: Date.now(),
+      action,
+      status,
+      author,
+      type,
+      titleOrText,
+      error
+    };
+
+    // Format highly structured console outputs as requested
+    const consoleMsg = `[PUBLISH_LOG] [${newLog.status}] [${newLog.action}] Author: @${newLog.author} | Type: ${newLog.type} | Content: "${newLog.titleOrText.substring(0, 45)}" ${error ? `| Error: ${error}` : ''}`;
+    if (status === 'ERROR') {
+      console.error(consoleMsg);
+    } else if (status === 'SUCCESS') {
+      console.log(consoleMsg);
+    } else {
+      console.info(consoleMsg);
+    }
+
+    setPublishLogs((prev) => {
+      const updated = [newLog, ...prev].slice(0, 50); // Store up to last 50 logs
+      try {
+        localStorage.setItem('eo_publish_logs', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
 
   // Extended theme state: support all themes, persisting the values properly
   const [theme, setThemeState] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max'>(() => {
@@ -533,7 +571,7 @@ export default function App() {
     : 0;
 
   const resolvedPosts = useMemo(() => {
-    return posts.map(post => {
+    const mapped = posts.map(post => {
       const authorUser = users.find(u => u.id === post.author.id);
       const resolvedComments = (post.comments || []).map(comment => {
         const commentAuthor = users.find(u => u.id === comment.author.id);
@@ -554,11 +592,46 @@ export default function App() {
           name: authorUser ? authorUser.fullname : post.author.name,
           avatar: authorUser ? authorUser.avatar : post.author.avatar,
           nickname: authorUser ? authorUser.nickname : (post.author as any).nickname,
+          province: authorUser?.province || '',
         },
         comments: resolvedComments
       };
     });
-  }, [posts, users]);
+
+    if (!currentUser || currentUser.id === 'guest') {
+      return mapped;
+    }
+
+    const userProvince = (currentUser.province || '').trim().toLowerCase();
+    if (!userProvince) {
+      return mapped;
+    }
+
+    // Geographic Prioritization Algorithm
+    // Priority 1: Publications matching user's registered province (post location OR author province)
+    // Priority 2: Other provinces or national publications, ordered chronologically
+    return [...mapped].sort((a, b) => {
+      const aLocationMatch = a.location && a.location.trim().toLowerCase().includes(userProvince);
+      const aAuthorMatch = (a.author as any).province && (a.author as any).province.trim().toLowerCase().includes(userProvince);
+      const isAPriority = !!(aLocationMatch || aAuthorMatch);
+
+      const bLocationMatch = b.location && b.location.trim().toLowerCase().includes(userProvince);
+      const bAuthorMatch = (b.author as any).province && (b.author as any).province.trim().toLowerCase().includes(userProvince);
+      const isBPriority = !!(bLocationMatch || bAuthorMatch);
+
+      if (isAPriority && !isBPriority) {
+        return -1;
+      }
+      if (!isAPriority && isBPriority) {
+        return 1;
+      }
+
+      // Maintain chronological order for same-priority items
+      const timeA = a.timestamp || 0;
+      const timeB = b.timestamp || 0;
+      return timeB - timeA;
+    });
+  }, [posts, users, currentUser]);
 
   const resolvedStories = useMemo(() => {
     return stories.map(story => {
@@ -710,114 +783,6 @@ export default function App() {
   };
 
   // 2. Authentication handlers
-  // Symmetric lightweight encryption helper for local credentials using security PIN
-  const encryptToken = (token: string, pin: string): string => {
-    let result = '';
-    const key = pin + '_eyesopen_mz_secure_key';
-    for (let i = 0; i < token.length; i++) {
-      const charCode = token.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-      result += String.fromCharCode(charCode);
-    }
-    return btoa(unescape(encodeURIComponent(result)));
-  };
-
-  const decryptToken = (encrypted: string, pin: string): string => {
-    try {
-      const decoded = decodeURIComponent(escape(atob(encrypted)));
-      let result = '';
-      const key = pin + '_eyesopen_mz_secure_key';
-      for (let i = 0; i < decoded.length; i++) {
-        const charCode = decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-        result += String.fromCharCode(charCode);
-      }
-      return result;
-    } catch (e) {
-      return '';
-    }
-  };
-
-  const handleSelectSavedAccount = async (
-    accountId: string, 
-    method: 'pin' | 'password', 
-    credential: string
-  ): Promise<{ success: boolean; error?: string }> => {
-    const acc = savedAccounts.find(a => a.id === accountId);
-    if (!acc) return { success: false, error: 'Conta não encontrada.' };
-
-    if (method === 'password') {
-      try {
-        const data = await authLogin(acc.email, credential);
-        handleLoginSuccess(data.user, data.token, true);
-        return { success: true };
-      } catch (e: any) {
-        return { success: false, error: e.message || 'Palavra-passe incorreta.' };
-      }
-    } else {
-      const pinHash = localStorage.getItem(`eo_pin_hash_${accountId}`);
-      if (!pinHash) return { success: false, error: 'PIN não configurado para esta conta.' };
-
-      if (simpleHash(credential) !== pinHash) {
-        return { success: false, error: 'PIN incorreto.' };
-      }
-
-      const encryptedToken = acc.encryptedToken || localStorage.getItem(`eo_enc_token_${accountId}`);
-      if (encryptedToken) {
-        const decryptedToken = decryptToken(encryptedToken, credential);
-        if (decryptedToken) {
-          try {
-            const data = await authVerify(decryptedToken);
-            if (data.user) {
-              handleLoginSuccess(data.user, decryptedToken, true);
-              return { success: true };
-            } else {
-              return { success: false, error: 'A sua sessão expirou no servidor. Por favor, utilize Palavra-passe.' };
-            }
-          } catch (err) {
-            // Offline fallback
-            const masterUser = users.find(u => u.id === accountId);
-            if (masterUser) {
-              handleLoginSuccess(masterUser, decryptedToken, true);
-              return { success: true };
-            }
-            return { success: false, error: 'Servidor offline e sem cache local.' };
-          }
-        }
-      }
-      return { success: false, error: 'Sessão cifrada local expirou ou está corrompida. Use Palavra-passe.' };
-    }
-  };
-
-  const handleRemoveSavedAccount = (accountId: string) => {
-    const updated = savedAccounts.filter(acc => acc.id !== accountId);
-    localStorage.setItem('eo_saved_accounts', JSON.stringify(updated));
-    setSavedAccounts(updated);
-    
-    // Also clear keys/PIN hashes for this user
-    localStorage.removeItem(`eo_pin_hash_${accountId}`);
-    localStorage.removeItem(`eo_enc_token_${accountId}`);
-    triggerToast('Conta removida deste dispositivo com sucesso.');
-  };
-
-  const handleRegisterSavedPin = async (accountId: string, pin: string) => {
-    const hash = simpleHash(pin);
-    localStorage.setItem(`eo_pin_hash_${accountId}`, hash);
-
-    const token = localStorage.getItem('eo_jwt_token');
-    if (token) {
-      const encrypted = encryptToken(token, pin);
-      localStorage.setItem(`eo_enc_token_${accountId}`, encrypted);
-
-      const updated = savedAccounts.map(acc => {
-        if (acc.id === accountId) {
-          return { ...acc, hasPin: true, encryptedToken: encrypted };
-        }
-        return acc;
-      });
-      localStorage.setItem('eo_saved_accounts', JSON.stringify(updated));
-      setSavedAccounts(updated);
-    }
-  };
-
   const handleLoginSuccess = (user: User, token: string, rememberMe?: boolean) => {
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
@@ -920,23 +885,6 @@ export default function App() {
       }
 
       handleLogout();
-    }
-  };
-
-  const handleWipeAllData = async () => {
-    try {
-      await dbWipeAllDataAndAccounts();
-      setUsers([]);
-      setSavedAccounts([]);
-      setPosts([]);
-      setStories([]);
-      setCurrentUser(null);
-      triggerToast('Sistema restaurado com sucesso! Todos os dados e contas foram apagados do servidor.');
-      // Full logout and clean reload
-      logoutSeguro();
-    } catch (err) {
-      console.error("Erro ao resetar o sistema:", err);
-      alert("Ocorreu um erro ao resetar o sistema.");
     }
   };
 
@@ -1287,9 +1235,44 @@ export default function App() {
       ...extraData
     };
 
-    await dbCreatePost(newPost);
-    setActiveView('feed');
-    triggerToast('Publicação criada com sucesso!');
+    // Log the initial attempt
+    addPublishLog(
+      'POST_PUBLISH',
+      'PENDING',
+      currentUser.nickname,
+      type || 'text',
+      text || (imgSrc ? 'Publicação com imagem' : 'Sem conteúdo de texto')
+    );
+
+    try {
+      await dbCreatePost(newPost);
+      
+      // Log successful publication
+      addPublishLog(
+        'POST_PUBLISH',
+        'SUCCESS',
+        currentUser.nickname,
+        type || 'text',
+        text || (imgSrc ? 'Publicação com imagem' : 'Sem conteúdo de texto')
+      );
+
+      setActiveView('feed');
+      triggerToast('Publicação criada com sucesso!');
+    } catch (err: any) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      
+      // Log failed publication with detailed error message
+      addPublishLog(
+        'POST_PUBLISH',
+        'ERROR',
+        currentUser.nickname,
+        type || 'text',
+        text || (imgSrc ? 'Publicação com imagem' : 'Sem conteúdo de texto'),
+        errMsg
+      );
+
+      triggerToast('Falha ao criar publicação!');
+    }
   };
 
   const handleAddComment = async (postId: string, text: string, audioUrl?: string, audioDuration?: number) => {
@@ -1505,9 +1488,44 @@ export default function App() {
       timestamp: Date.now()
     };
 
-    await dbCreateStory(newStory);
-    setActiveView('feed');
-    triggerToast('História publicada com sucesso no Eyes 42h!');
+    // Log the story publication attempt
+    addPublishLog(
+      'STORY_PUBLISH',
+      'PENDING',
+      currentUser.nickname,
+      'photo',
+      text || 'Sem texto (apenas imagem)'
+    );
+
+    try {
+      await dbCreateStory(newStory);
+
+      // Log successful story publication
+      addPublishLog(
+        'STORY_PUBLISH',
+        'SUCCESS',
+        currentUser.nickname,
+        'photo',
+        text || 'Sem texto (apenas imagem)'
+      );
+
+      setActiveView('feed');
+      triggerToast('História publicada com sucesso no Eyes 42h!');
+    } catch (err: any) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // Log failed story publication with error
+      addPublishLog(
+        'STORY_PUBLISH',
+        'ERROR',
+        currentUser.nickname,
+        'photo',
+        text || 'Sem texto (apenas imagem)',
+        errMsg
+      );
+
+      triggerToast('Falha ao publicar história!');
+    }
   };
 
   const handleRedirectToRegister = () => {
@@ -2139,6 +2157,82 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Painel de Registo de Publicações */}
+              <div className="border-t border-[var(--theme-border)] pt-5">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)]">
+                    PAINEL DE MONITORIZAÇÃO / REGISTO DE PUBLICAÇÕES
+                  </h4>
+                  {publishLogs.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setPublishLogs([]);
+                        localStorage.removeItem('eo_publish_logs');
+                        triggerToast('Registo de publicações limpo!');
+                      }}
+                      className="text-[9px] font-orbitron font-extrabold tracking-widest text-red-400 hover:text-red-300 border border-red-500/20 bg-red-950/20 px-2 py-1 rounded-lg uppercase transition-colors"
+                    >
+                      Limpar Registo
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[10px] text-[var(--theme-text-muted)] mb-3 leading-relaxed">
+                  Monitorize em tempo real todas as tentativas de publicação de posts e histórias no Eyes Open. Útil para identificar erros de comunicação ou falhas de segurança.
+                </p>
+
+                {publishLogs.length === 0 ? (
+                  <div className="p-5 border border-dashed border-[var(--theme-border)]/50 rounded-2xl text-center">
+                    <span className="text-[9px] font-mono text-[var(--theme-text-muted)] uppercase tracking-widest font-bold">Sem atividades de publicação registadas nesta sessão.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1 no-scrollbar">
+                    {publishLogs.map((log) => (
+                      <div 
+                        key={log.id} 
+                        className={`p-3 rounded-2xl border text-[10px] font-mono space-y-1.5 transition-all ${
+                          log.status === 'ERROR'
+                            ? 'bg-red-950/20 border-red-900/45 text-red-200'
+                            : log.status === 'SUCCESS'
+                              ? 'bg-green-950/25 border-green-900/40 text-green-200'
+                              : 'bg-yellow-950/20 border-yellow-900/40 text-yellow-200 animate-pulse'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <span className={`px-2 py-0.5 rounded text-[8px] uppercase font-black ${
+                              log.status === 'ERROR' ? 'bg-red-600/30 text-red-400' : log.status === 'SUCCESS' ? 'bg-green-600/35 text-green-400' : 'bg-yellow-500/20 text-yellow-500'
+                            }`}>
+                              [{log.status}]
+                            </span>
+                            <span className="text-white">
+                              {log.action === 'POST_PUBLISH' ? 'POST' : 'STORY'}
+                            </span>
+                            <span className="text-gray-400 font-normal">by</span>
+                            <span className="text-[var(--theme-accent)]">@{log.author}</span>
+                          </div>
+                          <span className="text-[8px] text-gray-500 font-bold">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+
+                        <div className="text-[9px] text-gray-300 leading-normal pl-1">
+                          <span className="text-gray-500 select-none mr-1">&gt;</span>
+                          <span className="font-semibold">Tipo:</span> <span className="text-amber-300 uppercase font-bold text-[8px]">{log.type}</span> | 
+                          <span className="font-semibold ml-1.5">Conteúdo:</span> "{log.titleOrText}"
+                        </div>
+
+                        {log.error && (
+                          <div className="mt-1 p-2 bg-black/40 rounded-xl border border-red-500/10 text-[8px] text-red-400 break-words leading-relaxed font-bold">
+                            <span className="text-red-500 font-black mr-1">[ERRO DETALHADO]:</span> {log.error}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         );
@@ -2163,23 +2257,13 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-[var(--theme-bg-main)] text-[var(--theme-text-main)] flex theme-${theme} transition-colors duration-500`}>
       {!currentUser ? (
-        /* If session is not authenticated, render Saved Accounts list or Login/Register views */
+        /* If session is not authenticated, render Login/Register views */
         <div className="flex-1">
-          {showAccountSelector && savedAccounts.length > 0 ? (
-            <AccountSelectorView
-              savedAccounts={savedAccounts}
-              onSelectAccount={handleSelectSavedAccount}
-              onUseAnotherAccount={() => setShowAccountSelector(false)}
-              onRemoveAccount={handleRemoveSavedAccount}
-              onRegisterPin={handleRegisterSavedPin}
-              theme={theme}
-            />
-          ) : activeView === 'register' ? (
+          {activeView === 'register' ? (
             <RegisterView
               users={users}
               onRegisterSuccess={handleRegisterSuccess}
               onGoToLogin={() => {
-                setShowAccountSelector(true);
                 setActiveView('feed');
               }}
             />
@@ -2188,7 +2272,6 @@ export default function App() {
               users={users}
               onLoginSuccess={handleLoginSuccess}
               onGoToRegister={() => setActiveView('register')}
-              onGoToSavedAccounts={() => setShowAccountSelector(true)}
             />
           )}
         </div>

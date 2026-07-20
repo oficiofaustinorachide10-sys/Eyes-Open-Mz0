@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { readFileSync } from 'fs';
 import { initializeApp } from 'firebase/app';
 import { GoogleGenAI } from '@google/genai';
+import nodemailer from 'nodemailer';
 import { 
   getFirestore, 
   collection, 
@@ -94,6 +95,94 @@ function secureHashPassword(password: string): string {
   return crypto.pbkdf2Sync(password, JWT_SECRET, 1000, 64, 'sha512').toString('hex');
 }
 
+// Send Real Email with automatic Ethereal fallback for local development (absolutely no simulation!)
+async function sendVerificationEmail(to: string, code: string, isRecovery = false) {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER || 'eyesopenmoz@gmail.com';
+  const pass = process.env.SMTP_PASS || 'ybxi sqmw hsoa wcog';
+  const from = process.env.SMTP_FROM || `"Eyes Open MZ" <${user}>`;
+
+  const subject = isRecovery 
+    ? 'Eyes Open MZ - Recuperação de Conta' 
+    : 'Eyes Open MZ - Confirmação de E-mail';
+
+  const typeName = isRecovery ? 'recuperação de conta' : 'confirmação de e-mail';
+  const actionText = isRecovery ? 'redefinir a sua palavra-passe' : 'concluir o seu registo';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0c0c24; color: #ffffff; padding: 40px; border-radius: 24px; border: 1px solid rgba(0, 242, 254, 0.3); box-shadow: 0 20px 40px rgba(0,0,0,0.8);">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #00f2fe; font-size: 28px; margin: 0; font-weight: 800; letter-spacing: 2px;">EYES OPEN MZ</h1>
+        <p style="color: #a0a0c0; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; margin: 5px 0 0 0;">Verificação de Segurança</p>
+      </div>
+      <div style="background-color: rgba(18, 18, 53, 0.6); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 16px; padding: 30px; margin-bottom: 25px;">
+        <p style="font-size: 15px; line-height: 1.6; color: #e2e8f0; margin-top: 0;">Olá,</p>
+        <p style="font-size: 15px; line-height: 1.6; color: #e2e8f0;">Recebemos um pedido de <strong>${typeName}</strong> para este endereço de e-mail. Utilize o código de verificação abaixo para ${actionText}:</p>
+        
+        <div style="text-align: center; margin: 35px 0;">
+          <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #00f2fe; background-color: rgba(0, 242, 254, 0.1); padding: 12px 30px; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.3); display: inline-block;">
+            ${code}
+          </span>
+          <p style="color: #a0a0c0; font-size: 11px; margin: 10px 0 0 0;">Este código expira em 15 minutos.</p>
+        </div>
+        
+        <p style="font-size: 13px; line-height: 1.5; color: #a0a0c0; margin-bottom: 0;">Se não iniciou este pedido, por favor ignore este e-mail. A sua conta permanece totalmente segura.</p>
+      </div>
+      <div style="text-align: center; font-size: 11px; color: #718096; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+        <p style="margin: 0;">Eyes Open MZ — Plataforma Digital Moçambicana</p>
+        <p style="margin: 5px 0 0 0;">&copy; 2026 Todos os direitos reservados.</p>
+      </div>
+    </div>
+  `;
+
+  const text = `EYES OPEN MZ - VERIFICAÇÃO DE SEGURANÇA\n\nOlá,\n\nUtilize o seguinte código de verificação para ${actionText}:\n\n${code}\n\nEste código expira em 15 minutos.\n\nSe não fez este pedido, ignore este e-mail.\n\nEyes Open MZ`;
+
+  if (host && user && pass) {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html,
+    });
+    console.log(`[Email] Real email sent to ${to} using SMTP: ${host}:${port}`);
+    return { success: true, method: 'smtp' };
+  } else {
+    console.warn('[Email] SMTP credentials not fully configured in environment. Creating a real on-the-fly test email account via Ethereal SMTP...');
+    const testAccount = await nodemailer.createTestAccount();
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: '"Eyes Open MZ" <no-reply@eyesopen.mz>',
+      to,
+      subject,
+      text,
+      html
+    });
+
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    console.log(`[Email TEST/ETHEREAL] Real Ethereal email sent to ${to}`);
+    console.log(`[Email TEST/ETHEREAL] View verification email at: ${previewUrl}`);
+    return { success: true, method: 'ethereal', previewUrl };
+  }
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -127,7 +216,7 @@ async function startServer() {
     }
   });
 
-  // 2. User registration
+  // 2. User registration (Google/fallback backward compatibility)
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { 
@@ -197,6 +286,295 @@ async function startServer() {
     } catch (err: any) {
       console.error('Registration error:', err);
       res.status(500).json({ error: 'Erro ao registar utilizador: ' + err.message });
+    }
+  });
+
+  // 2aa. Registration Step 1: Initiate email verification only
+  app.post('/api/auth/register-email-initiate', async (req, res) => {
+    try {
+      const { email, confirmEmail } = req.body;
+
+      if (!email || !confirmEmail) {
+        return res.status(400).json({ error: 'Por favor, insira o e-mail e a confirmação do mesmo.' });
+      }
+
+      if (email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
+        return res.status(400).json({ error: 'Os endereços de e-mail informados não coincidem.' });
+      }
+
+      // Check if email already exists
+      const usersCol = db.collection('users');
+      const emailSnap = await usersCol.where('email', '==', email.trim().toLowerCase()).get();
+      if (!emailSnap.empty) {
+        return res.status(400).json({ error: 'Este endereço de e-mail já está em uso.' });
+      }
+
+      // Generate verification code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Send real SMTP email with verification code
+      const emailResult = await sendVerificationEmail(email.trim().toLowerCase(), code, false);
+
+      // Sign payload with 15 minutes expiration
+      const pendingToken = jwt.sign(
+        { email: email.trim().toLowerCase(), code },
+        JWT_SECRET,
+        { expiresIn: '15m' }
+      );
+
+      res.status(200).json({
+        success: true,
+        pendingToken,
+        previewUrl: (emailResult as any).previewUrl || null
+      });
+    } catch (err: any) {
+      console.error('Email register initiate error:', err);
+      res.status(500).json({ error: 'Erro ao iniciar verificação de e-mail: ' + err.message });
+    }
+  });
+
+  // 2ab. Registration Step 1: Confirm email verification code
+  app.post('/api/auth/register-email-confirm', async (req, res) => {
+    try {
+      const { code, pendingToken } = req.body;
+
+      if (!code || !pendingToken) {
+        return res.status(400).json({ error: 'Código de confirmação e token de registo pendente são obrigatórios.' });
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(pendingToken, JWT_SECRET);
+      } catch (jwtErr) {
+        return res.status(400).json({ error: 'O tempo de verificação expirou ou o token é inválido.' });
+      }
+
+      if (decoded.code !== code.trim()) {
+        return res.status(400).json({ error: 'Código de confirmação incorreto. Verifique o seu e-mail.' });
+      }
+
+      res.status(200).json({
+        success: true,
+        email: decoded.email,
+        message: 'Seja bem-vindo, está quase a criar a sua conta.'
+      });
+    } catch (err: any) {
+      console.error('Email register confirm error:', err);
+      res.status(500).json({ error: 'Erro ao confirmar código de verificação: ' + err.message });
+    }
+  });
+
+  // 2ac. Registration Step 2: Complete registration with profile & geo details
+  app.post('/api/auth/register-complete', async (req, res) => {
+    try {
+      const {
+        email, phone, fullname, firstname, surname, nickname, password,
+        province, district, bairro, birthdate, gender, profession, avatar
+      } = req.body;
+
+      if (!email || !phone || !fullname || !firstname || !surname || !nickname || !password || !province || !district || !bairro || !birthdate || !gender || !profession) {
+        return res.status(400).json({ error: 'Por favor, preencha todos os campos obrigatórios do perfil e localização.' });
+      }
+
+      const usersCol = db.collection('users');
+
+      // Double check email uniqueness
+      const emailSnap = await usersCol.where('email', '==', email.trim().toLowerCase()).get();
+      if (!emailSnap.empty) {
+        return res.status(400).json({ error: 'Este e-mail já foi registado.' });
+      }
+
+      // Check phone uniqueness limit (max 3)
+      const phoneSnap = await usersCol.where('phone', '==', phone.trim()).get();
+      if (phoneSnap.size >= 3) {
+        return res.status(400).json({ error: 'Este número de telefone já possui o limite máximo de 3 contas.' });
+      }
+
+      // Check nickname uniqueness
+      const nickSnap = await usersCol.where('nickname', '==', nickname.trim()).get();
+      if (!nickSnap.empty) {
+        return res.status(400).json({ error: 'Este nickname já está em uso por outro utilizador.' });
+      }
+
+      const hashedPassword = secureHashPassword(password);
+      const userId = 'user_' + Math.random().toString(36).substring(2, 11);
+
+      const newUser = {
+        id: userId,
+        phone: phone.trim(),
+        email: email.trim().toLowerCase(),
+        fullname: fullname.trim(),
+        firstname: firstname.trim(),
+        surname: surname.trim(),
+        nickname: nickname.trim(),
+        password: hashedPassword,
+        province,
+        district,
+        bairro: bairro.trim(),
+        birthdate,
+        birthday: birthdate, // backup/compat
+        gender,
+        profession: profession.trim(),
+        created: new Date().toISOString(),
+        avatar: avatar || `https://images.unsplash.com/photo-${Math.floor(Math.random() * 50) + 1500000000000}?auto=format&fit=crop&q=80&w=150`,
+        stats: { likes: 0, posts: 0, friends: 0 },
+        nameEditDate: null,
+        isVIP: false,
+        lastReadChatTimestamp: 0,
+        lastReadNotificationsTimestamp: 0,
+        mutedNotifications: false
+      };
+
+      await usersCol.doc(userId).set(newUser);
+
+      // Create JWT session
+      const token = jwt.sign({ id: userId, nickname: newUser.nickname }, JWT_SECRET, { expiresIn: '7d' });
+
+      const clientUser = { ...newUser };
+      delete clientUser.password;
+
+      res.status(201).json({ user: clientUser, token });
+    } catch (err: any) {
+      console.error('Complete registration error:', err);
+      res.status(500).json({ error: 'Erro ao concluir o registo do seu perfil: ' + err.message });
+    }
+  });
+
+  // 2a. User registration initiation (sends verification email)
+  app.post('/api/auth/register-initiate', async (req, res) => {
+    try {
+      const { 
+        id, phone, email, fullname, firstname, surname, nickname, password, province, district, avatar
+      } = req.body;
+
+      if (!phone || !email || !fullname || !firstname || !surname || !nickname || !password) {
+        return res.status(400).json({ error: 'Preencha todos os campos obrigatórios para prosseguir' });
+      }
+
+      const usersCol = db.collection('users');
+      
+      // Check email uniqueness
+      const emailSnap = await usersCol.where('email', '==', email.trim().toLowerCase()).get();
+      if (!emailSnap.empty) {
+        return res.status(400).json({ error: 'Este endereço de e-mail já está em uso.' });
+      }
+
+      // Check phone uniqueness
+      const phoneSnap = await usersCol.where('phone', '==', phone).get();
+      if (phoneSnap.size >= 3) {
+        return res.status(400).json({ error: 'Este número de telefone já possui o limite de 3 contas.' });
+      }
+
+      // Check nickname uniqueness
+      const nickSnap = await usersCol.where('nickname', '==', nickname.trim()).get();
+      if (!nickSnap.empty) {
+        return res.status(400).json({ error: 'Este nickname já está em uso por outro utilizador.' });
+      }
+
+      // Generate verification code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Send real email!
+      const emailResult = await sendVerificationEmail(email.trim().toLowerCase(), code, false);
+
+      // Sign verification payload into JWT
+      const pendingRegistrationToken = jwt.sign(
+        { 
+          userData: {
+            id, phone, email: email.trim().toLowerCase(), fullname, firstname, surname, nickname, password, province, district, avatar
+          }, 
+          code 
+        }, 
+        JWT_SECRET, 
+        { expiresIn: '15m' }
+      );
+
+      res.status(200).json({ 
+        success: true, 
+        pendingRegistrationToken, 
+        previewUrl: (emailResult as any).previewUrl || null 
+      });
+    } catch (err: any) {
+      console.error('Registration initiate error:', err);
+      res.status(500).json({ error: 'Erro ao iniciar registo: ' + err.message });
+    }
+  });
+
+  // 2b. User registration confirmation (checks code and creates user)
+  app.post('/api/auth/register-confirm', async (req, res) => {
+    try {
+      const { code, pendingRegistrationToken } = req.body;
+
+      if (!code || !pendingRegistrationToken) {
+        return res.status(400).json({ error: 'Código e token de registo pendente são obrigatórios.' });
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(pendingRegistrationToken, JWT_SECRET);
+      } catch (jwtErr) {
+        return res.status(400).json({ error: 'O token ou tempo de verificação expirou ou é inválido.' });
+      }
+
+      if (decoded.code !== code.trim()) {
+        return res.status(400).json({ error: 'Código de confirmação incorreto. Verifique o seu e-mail.' });
+      }
+
+      const { id, phone, email, fullname, firstname, surname, nickname, password, province, district, avatar } = decoded.userData;
+
+      const usersCol = db.collection('users');
+
+      // Re-verify uniqueness
+      const emailSnap = await usersCol.where('email', '==', email).get();
+      if (!emailSnap.empty) {
+        return res.status(400).json({ error: 'Este endereço de e-mail já foi registado por outro utilizador.' });
+      }
+
+      const phoneSnap = await usersCol.where('phone', '==', phone).get();
+      if (phoneSnap.size >= 3) {
+        return res.status(400).json({ error: 'Este número de telefone atingiu o limite de contas.' });
+      }
+
+      const nickSnap = await usersCol.where('nickname', '==', nickname).get();
+      if (!nickSnap.empty) {
+        return res.status(400).json({ error: 'Este nickname já está em uso.' });
+      }
+
+      const hashedPassword = secureHashPassword(password);
+      const userId = id || 'user_' + Math.random().toString(36).substring(2, 11);
+
+      const newUser = {
+        id: userId,
+        phone,
+        email,
+        fullname: fullname.trim(),
+        firstname: firstname.trim(),
+        surname: surname.trim(),
+        nickname: nickname.trim(),
+        password: hashedPassword,
+        province,
+        district,
+        created: new Date().toISOString(),
+        avatar: avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
+        stats: { likes: 0, posts: 0, friends: 0 },
+        nameEditDate: null,
+        isVIP: false,
+        lastReadChatTimestamp: 0,
+        lastReadNotificationsTimestamp: 0,
+        mutedNotifications: false
+      };
+
+      await usersCol.doc(userId).set(newUser);
+
+      const token = jwt.sign({ id: userId, nickname }, JWT_SECRET, { expiresIn: '7d' });
+      
+      const clientUser = { ...newUser };
+      delete clientUser.password;
+
+      res.status(201).json({ user: clientUser, token });
+    } catch (err: any) {
+      console.error('Registration confirm error:', err);
+      res.status(500).json({ error: 'Erro ao concluir registo: ' + err.message });
     }
   });
 
@@ -281,12 +659,12 @@ async function startServer() {
     }
   });
 
-  // 4. Account Recovery Initiation
+  // 4. Account Recovery Initiation (sends code via real email)
   app.post('/api/auth/recover', async (req, res) => {
     try {
-      const { email, method } = req.body;
+      const { email } = req.body;
       if (!email) {
-        return res.status(400).json({ error: 'E-mail é obrigatório para recuperação.' });
+        return res.status(400).json({ error: 'O endereço de e-mail é obrigatório para recuperação.' });
       }
 
       const usersCol = db.collection('users');
@@ -297,25 +675,79 @@ async function startServer() {
       }
 
       const user = querySnap.docs[0].data();
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-      if (method === 'email') {
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        return res.json({ success: true, code, userId: user.id });
-      } else {
-        return res.json({ success: true, oauth: true, userId: user.id });
-      }
+      // Send the real email with code
+      const emailResult = await sendVerificationEmail(email.trim().toLowerCase(), code, true);
+
+      // Sign the verification state into a secure short-lived recoveryToken
+      const recoveryToken = jwt.sign(
+        { email: email.trim().toLowerCase(), code }, 
+        JWT_SECRET, 
+        { expiresIn: '15m' }
+      );
+
+      return res.json({ 
+        success: true, 
+        recoveryToken, 
+        previewUrl: (emailResult as any).previewUrl || null 
+      });
     } catch (err: any) {
-      console.error('Recovery error:', err);
+      console.error('Recovery initiate error:', err);
       res.status(500).json({ error: 'Erro ao iniciar recuperação: ' + err.message });
+    }
+  });
+
+  // 4b. Verify Recovery Code (returns secure resetToken)
+  app.post('/api/auth/verify-recovery-code', async (req, res) => {
+    try {
+      const { code, recoveryToken } = req.body;
+      if (!code || !recoveryToken) {
+        return res.status(400).json({ error: 'Código de confirmação e token de recuperação são obrigatórios.' });
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(recoveryToken, JWT_SECRET);
+      } catch (jwtErr) {
+        return res.status(400).json({ error: 'O token ou tempo de recuperação expirou ou é inválido.' });
+      }
+
+      if (decoded.code !== code.trim()) {
+        return res.status(400).json({ error: 'Código de confirmação incorreto. Verifique o seu e-mail.' });
+      }
+
+      // Generate a short-lived resetToken to authorize the final password reset
+      const resetToken = jwt.sign(
+        { email: decoded.email, verified: true }, 
+        JWT_SECRET, 
+        { expiresIn: '10m' }
+      );
+
+      res.json({ success: true, resetToken });
+    } catch (err: any) {
+      console.error('Verify recovery code error:', err);
+      res.status(500).json({ error: 'Erro ao verificar código: ' + err.message });
     }
   });
 
   // 5. Account Recovery Reset Password
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
-      const { email, newPassword } = req.body;
-      if (!email || !newPassword) {
-        return res.status(400).json({ error: 'Preencha todos os campos para redefinir a senha.' });
+      const { email, newPassword, resetToken } = req.body;
+      if (!email || !newPassword || !resetToken) {
+        return res.status(400).json({ error: 'Dados em falta para redefinir a palavra-passe.' });
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(resetToken, JWT_SECRET);
+      } catch (jwtErr) {
+        return res.status(400).json({ error: 'O token de autorização expirou ou é inválido. Repita o processo de recuperação.' });
+      }
+
+      if (decoded.email !== email.trim().toLowerCase() || decoded.verified !== true) {
+        return res.status(401).json({ error: 'Operação de recuperação não autorizada ou inválida.' });
       }
 
       const usersCol = db.collection('users');

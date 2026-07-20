@@ -133,6 +133,73 @@ async function registerClientSide(userData: any): Promise<{ user: User; token: s
   return { user: clientUser, token };
 }
 
+// Direct Firestore complete registration with personal and geographic fields
+async function registerCompleteClientSide(profileData: any): Promise<{ user: User; token: string }> {
+  const usersCol = collection(db, 'users');
+  const emailClean = profileData.email.trim().toLowerCase();
+
+  // Validate email uniqueness
+  const qEmail = query(usersCol, where('email', '==', emailClean));
+  const snapEmail = await getDocs(qEmail);
+  if (!snapEmail.empty) {
+    throw new Error('Este endereço de e-mail já está em uso.');
+  }
+
+  // Validate phone
+  const qPhone = query(usersCol, where('phone', '==', profileData.phone.trim()));
+  const snapPhone = await getDocs(qPhone);
+  if (snapPhone.size >= 3) {
+    throw new Error('Este número de telefone já possui o limite de 3 contas.');
+  }
+
+  // Validate nickname uniqueness
+  const qNick = query(usersCol, where('nickname', '==', profileData.nickname.trim()));
+  const snapNick = await getDocs(qNick);
+  if (!snapNick.empty) {
+    throw new Error('Este nickname já está em uso por outro utilizador.');
+  }
+
+  // Hash password
+  const hashedPassword = await secureHashPassword(profileData.password);
+  const userId = 'user_' + Math.random().toString(36).substring(2, 11);
+
+  const newUser: any = {
+    id: userId,
+    phone: profileData.phone.trim(),
+    email: emailClean,
+    fullname: profileData.fullname.trim(),
+    firstname: profileData.firstname.trim(),
+    surname: profileData.surname.trim(),
+    nickname: profileData.nickname.trim(),
+    password: hashedPassword,
+    province: profileData.province,
+    district: profileData.district,
+    bairro: profileData.bairro.trim(),
+    birthdate: profileData.birthdate,
+    birthday: profileData.birthdate,
+    gender: profileData.gender,
+    profession: profileData.profession.trim(),
+    created: new Date().toISOString(),
+    avatar: profileData.avatar || `https://images.unsplash.com/photo-${Math.floor(Math.random() * 50) + 1500000000000}?auto=format&fit=crop&q=80&w=150`,
+    stats: { likes: 0, posts: 0, friends: 0 },
+    nameEditDate: null,
+    isVIP: false,
+    lastReadChatTimestamp: 0,
+    lastReadNotificationsTimestamp: 0,
+    mutedNotifications: false
+  };
+
+  await setDoc(doc(db, 'users', userId), newUser);
+
+  const tokenPayload = { id: userId, nickname: profileData.nickname };
+  const token = btoa(JSON.stringify(tokenPayload));
+
+  const clientUser = { ...newUser };
+  delete clientUser.password;
+
+  return { user: clientUser, token };
+}
+
 // Direct Firestore User Login
 async function loginClientSide(email: string, password: string): Promise<{ user: User; token: string }> {
   const usersCol = collection(db, 'users');
@@ -300,6 +367,120 @@ export async function authRegister(userData: any): Promise<{ user: User; token: 
   }
 }
 
+export async function authRegisterEmailInitiate(email: string, confirmEmail: string): Promise<{ success: boolean; pendingToken: string; previewUrl?: string }> {
+  if (isGitHubPages()) {
+    console.log('[AuthService] Client-side email register initiate fallback');
+    const snap = await getDocs(query(collection(db, 'users'), where('email', '==', email.trim().toLowerCase())));
+    if (!snap.empty) {
+      throw new Error('Este endereço de e-mail já está em uso.');
+    }
+    const code = '123456';
+    const pendingToken = btoa(JSON.stringify({ email: email.trim().toLowerCase(), code }));
+    return { success: true, pendingToken };
+  }
+  const response = await fetch('/api/auth/register-email-initiate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, confirmEmail })
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro ao iniciar verificação de e-mail.');
+  }
+  return data;
+}
+
+export async function authRegisterEmailConfirm(code: string, pendingToken: string): Promise<{ success: boolean; email: string; message: string }> {
+  if (isGitHubPages()) {
+    console.log('[AuthService] Client-side email register confirm fallback');
+    try {
+      const decoded = JSON.parse(atob(pendingToken));
+      if (decoded.code !== code.trim()) {
+        throw new Error('Código de confirmação incorreto.');
+      }
+      return { success: true, email: decoded.email, message: 'Seja bem-vindo, está quase a criar a sua conta.' };
+    } catch (e: any) {
+      throw new Error(e.message || 'Código de confirmação inválido.');
+    }
+  }
+  const response = await fetch('/api/auth/register-email-confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, pendingToken })
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro ao confirmar código.');
+  }
+  return data;
+}
+
+export async function authRegisterComplete(profileData: any): Promise<{ user: User; token: string }> {
+  if (isGitHubPages()) {
+    console.log('[AuthService] Client-side register complete fallback');
+    return registerCompleteClientSide(profileData);
+  }
+  try {
+    const response = await fetch('/api/auth/register-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Erro ao concluir o registo.');
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('[AuthService] API Register Complete failed, falling back to client-side Firestore:', err);
+    return registerCompleteClientSide(profileData);
+  }
+}
+
+export async function authRegisterInitiate(userData: any): Promise<{ success: boolean; pendingRegistrationToken: string; previewUrl?: string }> {
+  if (isGitHubPages()) {
+    console.log('[AuthService] Client-side registration initiate fallback');
+    const code = '123456';
+    const pendingRegistrationToken = btoa(JSON.stringify({ userData, code }));
+    return { success: true, pendingRegistrationToken };
+  }
+  const response = await fetch('/api/auth/register-initiate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro ao iniciar registo.');
+  }
+  return data;
+}
+
+export async function authRegisterConfirm(code: string, pendingRegistrationToken: string): Promise<{ user: User; token: string }> {
+  if (isGitHubPages()) {
+    console.log('[AuthService] Client-side registration confirm fallback');
+    try {
+      const decoded = JSON.parse(atob(pendingRegistrationToken));
+      if (decoded.code !== code.trim()) {
+        throw new Error('Código de confirmação incorreto.');
+      }
+      return registerClientSide(decoded.userData);
+    } catch (e: any) {
+      throw new Error(e.message || 'Código de confirmação inválido.');
+    }
+  }
+  const response = await fetch('/api/auth/register-confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, pendingRegistrationToken })
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro ao confirmar registo.');
+  }
+  return data;
+}
+
 export async function authVerify(token: string): Promise<{ user: User; token: string }> {
   if (isGitHubPages()) {
     return verifyClientSide(token);
@@ -323,9 +504,11 @@ export async function authVerify(token: string): Promise<{ user: User; token: st
   }
 }
 
-export async function authRecover(email: string): Promise<{ code: string }> {
+export async function authRecover(email: string): Promise<{ success: boolean; recoveryToken: string; previewUrl?: string }> {
   if (isGitHubPages()) {
-    return recoverClientSide(email);
+    const data = await recoverClientSide(email);
+    const recoveryToken = btoa(JSON.stringify({ email, code: data.code }));
+    return { success: true, recoveryToken };
   }
   try {
     const response = await fetch('/api/auth/recover', {
@@ -340,28 +523,57 @@ export async function authRecover(email: string): Promise<{ code: string }> {
     return data;
   } catch (err: any) {
     console.warn('[AuthService] API Recover failed, falling back to client-side Firestore:', err);
-    return recoverClientSide(email);
+    const data = await recoverClientSide(email);
+    const recoveryToken = btoa(JSON.stringify({ email, code: data.code }));
+    return { success: true, recoveryToken };
   }
 }
 
-export async function authResetPassword(email: string, newPassword: any): Promise<{ success: boolean }> {
+export async function authVerifyRecoveryCode(code: string, recoveryToken: string): Promise<{ success: boolean; resetToken: string }> {
   if (isGitHubPages()) {
-    return resetPasswordClientSide(email, newPassword);
+    try {
+      const decoded = JSON.parse(atob(recoveryToken));
+      if (decoded.code !== code.trim()) {
+        throw new Error('Código de confirmação incorreto.');
+      }
+      const resetToken = btoa(JSON.stringify({ email: decoded.email, verified: true }));
+      return { success: true, resetToken };
+    } catch (e: any) {
+      throw new Error(e.message || 'Código inválido.');
+    }
+  }
+  const response = await fetch('/api/auth/verify-recovery-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, recoveryToken })
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Código de confirmação incorreto ou expirado.');
+  }
+  return data;
+}
+
+export async function authResetPassword(email: string, newPassword: any, resetToken: string): Promise<{ success: boolean; user?: User; token?: string }> {
+  if (isGitHubPages()) {
+    await resetPasswordClientSide(email, newPassword);
+    return { success: true };
   }
   try {
     const response = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, newPassword })
+      body: JSON.stringify({ email, newPassword, resetToken })
     });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || 'Erro ao redefinir senha.');
     }
-    return { success: true };
+    return data;
   } catch (err: any) {
     console.warn('[AuthService] API ResetPassword failed, falling back to client-side Firestore:', err);
-    return resetPasswordClientSide(email, newPassword);
+    await resetPasswordClientSide(email, newPassword);
+    return { success: true };
   }
 }
 

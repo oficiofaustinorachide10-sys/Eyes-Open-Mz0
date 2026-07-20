@@ -11,7 +11,7 @@ import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
-import { authLogin, authRecover, authResetPassword, authGoogleLogin, authCreateGuestUser } from '../lib/authService';
+import { authLogin, authRecover, authResetPassword, authGoogleLogin, authCreateGuestUser, authVerifyRecoveryCode } from '../lib/authService';
 
 interface LoginViewProps {
   users: UserType[];
@@ -32,7 +32,9 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
   const [recoveryStep, setRecoveryStep] = useState<'email' | 'code' | 'new_password'>('email');
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
-  const [sentCode, setSentCode] = useState('');
+  const [recoveryToken, setRecoveryToken] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [etherealUrl, setEtherealUrl] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
@@ -59,31 +61,44 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
 
     try {
       const data = await authRecover(recoveryEmail.trim().toLowerCase());
-      setSentCode(data.code);
-      setSuccessMsg(`Código gerado com sucesso!`);
+      setRecoveryToken(data.recoveryToken);
+      if (data.previewUrl) {
+        setEtherealUrl(data.previewUrl);
+        setSuccessMsg('Código de recuperação enviado! Pode visualizar o e-mail no link de teste abaixo.');
+      } else {
+        setEtherealUrl(null);
+        setSuccessMsg(`Código enviado com sucesso para o seu Gmail!`);
+      }
       setTimeout(() => {
         setSuccessMsg('');
         setRecoveryStep('code');
-      }, 1000);
+      }, 1500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro de ligação ao servidor de recuperação.');
     }
   };
 
-  const handleVerifyCode = (e: React.FormEvent) => {
+  const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
-    if (recoveryCodeInput.trim() !== sentCode) {
-      setErrorMsg('Código de confirmação incorreto. Verifique e tente novamente.');
+    if (!recoveryCodeInput || recoveryCodeInput.trim().length !== 6) {
+      setErrorMsg('Por favor, introduza o código de verificação de 6 dígitos.');
       return;
     }
 
-    setSuccessMsg('Código validado com sucesso!');
-    setTimeout(() => {
-      setSuccessMsg('');
-      setRecoveryStep('new_password');
-    }, 1000);
+    try {
+      const data = await authVerifyRecoveryCode(recoveryCodeInput.trim(), recoveryToken);
+      setResetToken(data.resetToken);
+      setSuccessMsg('Código validado com sucesso!');
+      setTimeout(() => {
+        setSuccessMsg('');
+        setRecoveryStep('new_password');
+      }, 1000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Código de confirmação incorreto ou expirado. Verifique e tente novamente.');
+    }
   };
 
   const handleResetPasswordSubmit = async (e: React.FormEvent) => {
@@ -107,14 +122,21 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
     }
 
     try {
-      await authResetPassword(recoveryEmail.trim().toLowerCase(), newPassword);
-      setSuccessMsg('Sua palavra-passe foi atualizada! Acedendo...');
+      const data = await authResetPassword(recoveryEmail.trim().toLowerCase(), newPassword, resetToken);
+      setSuccessMsg('Sua palavra-passe foi atualizada com sucesso!');
       
-      // Perform automated login with the new password
-      const data = await authLogin(recoveryEmail.trim().toLowerCase(), newPassword);
-      setTimeout(() => {
-        onLoginSuccess(data.user, data.token, false);
-      }, 1500);
+      // Perform automated login with the new password if backend returned a user
+      if (data.user && data.token) {
+        setTimeout(() => {
+          onLoginSuccess(data.user!, data.token!, false);
+        }, 1500);
+      } else {
+        // Fallback to standard login
+        const loginData = await authLogin(recoveryEmail.trim().toLowerCase(), newPassword);
+        setTimeout(() => {
+          onLoginSuccess(loginData.user, loginData.token, false);
+        }, 1500);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro de ligação ao servidor ao redefinir palavra-passe.');
     }
@@ -284,16 +306,26 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
               {recoveryStep === 'code' && (
                 <form onSubmit={handleVerifyCode} className="space-y-5">
                   <div className="p-3.5 bg-neon-cyan/5 border border-neon-cyan/25 rounded-2xl text-xs text-center font-rajdhani">
-                    <p className="text-[#a0a0c0] font-semibold">
-                      O código de recuperação foi gerado!
-                    </p>
-                    <p className="text-white font-orbitron font-black text-sm tracking-widest mt-1 bg-black/40 py-1.5 rounded-xl border border-white/5 select-all">
-                      {sentCode}
-                    </p>
-                    <p className="text-[9px] text-gray-500 uppercase font-bold tracking-wider mt-1.5">
-                      Copie o código acima e insira-o abaixo para prosseguir.
+                    <p className="text-[#a0a0c0] font-semibold leading-relaxed">
+                      Enviamos um código de segurança de 6 dígitos para o e-mail: <strong className="text-neon-cyan">{recoveryEmail}</strong>. Verifique a sua caixa de entrada.
                     </p>
                   </div>
+
+                  {etherealUrl && (
+                    <div className="p-3 bg-neon-cyan/10 border border-neon-cyan/30 rounded-xl text-center">
+                      <p className="text-xs text-neon-cyan font-rajdhani font-semibold">
+                        Servidor em ambiente de testes:
+                      </p>
+                      <a
+                        href={etherealUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-white hover:text-neon-magenta underline font-rajdhani font-bold transition-all block mt-1"
+                      >
+                        Clique aqui para ver a caixa de entrada de testes ↗
+                      </a>
+                    </div>
+                  )}
 
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan">
@@ -664,16 +696,6 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                 >
                   Entrar como Convidado
                 </button>
-
-                {onGoToSavedAccounts && localStorage.getItem('eo_saved_accounts') && (
-                  <button
-                    type="button"
-                    onClick={onGoToSavedAccounts}
-                    className="w-full mt-2.5 py-3 bg-blue-950/30 hover:bg-blue-900/40 border border-blue-500/10 hover:border-blue-400/50 rounded-xl text-[10px] font-orbitron font-extrabold tracking-widest text-blue-400 hover:text-white cursor-pointer uppercase transition-all"
-                  >
-                    Ver Contas Guardadas
-                  </button>
-                )}
               </div>
             </>
           )}

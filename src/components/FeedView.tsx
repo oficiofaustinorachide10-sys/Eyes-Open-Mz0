@@ -17,6 +17,7 @@ import {
 import { ThemeConfig } from '../utils/themeEngine';
 import { playClickFeedback, playCommentSound, playPublishPostSound, playStarSound, playNotificationSound } from '../utils/audioSystem';
 import { translate } from '../utils/translations';
+import { getMediaSrc } from '../utils';
 import ShimmeringBackground from './ShimmeringBackground';
 
 interface FeedViewProps {
@@ -109,8 +110,8 @@ function RotationalCard({
                 isPlayedOnce = true;
                 autoplayTimer.current = setTimeout(() => {
                   setIsAutoplayPlaying(false);
-                }, 4000);
-              }, 2000); // Wait 2 seconds before starting autoplay
+                }, 5000);
+              }, 1200); // Wait 1.2 seconds (showing cover/thumbnail first) before autoplaying
             }
           } else {
             if (hoverTimer.current) clearTimeout(hoverTimer.current);
@@ -155,8 +156,8 @@ function RotationalCard({
       setIsAutoplayPlaying(true);
       autoplayTimer.current = setTimeout(() => {
         setIsAutoplayPlaying(false);
-      }, 4000); // Play video for exactly 4 seconds
-    }, 2000); // If hovering for 2 seconds
+      }, 5000); // Play video for exactly 5 seconds
+    }, 1200); // If hovering for 1.2 seconds, showing cover first
   };
 
   const handleMouseLeave = () => {
@@ -295,7 +296,7 @@ function RotationalCard({
           {isAutoplayPlaying && post.mediaUrl && (
             <video
               ref={videoElementRef}
-              src={post.mediaUrl}
+              src={getMediaSrc(post.mediaUrl)}
               muted
               playsInline
               autoPlay
@@ -532,14 +533,33 @@ function RotationalCard({
           </p>
         )}
 
-        {/* Location & Tags row for photography */}
-        {post.type === 'photo' && (post.location || (post.hashtags && post.hashtags.length > 0)) && (
+        {/* Location & Tags row for prioritized regional content */}
+        {(post.location || (post.hashtags && post.hashtags.length > 0) || (post.author as any).province) && (
           <div className="flex flex-wrap gap-1.5 items-center mb-3 text-[9px] font-bold uppercase font-rajdhani">
-            {post.location && (
+            {post.location ? (
               <span className="flex items-center gap-0.5 text-gray-400">
                 <MapPin className="w-3 h-3 text-[var(--theme-accent)]" /> {post.location}
               </span>
-            )}
+            ) : (post.author as any).province ? (
+              <span className="flex items-center gap-0.5 text-gray-400">
+                <MapPin className="w-3 h-3 text-[var(--theme-accent)]" /> {(post.author as any).province}
+              </span>
+            ) : null}
+            {(() => {
+              const uProvince = (currentUser?.province || '').trim().toLowerCase();
+              if (uProvince) {
+                const postLocMatch = post.location && post.location.trim().toLowerCase().includes(uProvince);
+                const authProvMatch = (post.author as any).province && (post.author as any).province.trim().toLowerCase().includes(uProvince);
+                if (postLocMatch || authProvMatch) {
+                  return (
+                    <span className="bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 text-[8px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
+                      <Sparkles className="w-2.5 h-2.5 animate-pulse text-emerald-400" /> Próximo de Si 🇲🇿
+                    </span>
+                  );
+                }
+              }
+              return null;
+            })()}
             {post.hashtags && post.hashtags.slice(0, 2).map(tag => (
               <span key={tag} className="text-blue-400">{tag}</span>
             ))}
@@ -1957,7 +1977,7 @@ export default function FeedView({
                   >
                     <video 
                       ref={videoRef}
-                      src={selectedPost.mediaUrl}
+                      src={getMediaSrc(selectedPost.mediaUrl)}
                       onTimeUpdate={() => setVideoCurrentTime(videoRef.current?.currentTime || 0)}
                       onLoadedMetadata={() => setVideoDuration(videoRef.current?.duration || 0)}
                       className="w-full h-full transition-all duration-300 pointer-events-none"
@@ -2042,7 +2062,7 @@ export default function FeedView({
                   <div className="relative z-10 w-full flex flex-col items-center">
                     <audio 
                       ref={musicAudioRef}
-                      src={selectedPost.mediaUrl}
+                      src={getMediaSrc(selectedPost.mediaUrl)}
                       onTimeUpdate={() => setMusicCurrentTime(musicAudioRef.current?.currentTime || 0)}
                       onLoadedMetadata={() => setMusicDuration(musicAudioRef.current?.duration || 0)}
                       onEnded={() => {
@@ -2145,7 +2165,7 @@ export default function FeedView({
                 <div className="w-full p-4 rounded-2xl bg-black/45 border border-white/5 mb-4 flex flex-col items-center">
                   <audio 
                     ref={voiceAudioRef}
-                    src={selectedPost.mediaUrl}
+                    src={getMediaSrc(selectedPost.mediaUrl)}
                     onTimeUpdate={() => setVoiceCurrentTime(voiceAudioRef.current?.currentTime || 0)}
                     onLoadedMetadata={() => setVoiceDuration(voiceAudioRef.current?.duration || 0)}
                     onEnded={() => {
@@ -3060,7 +3080,7 @@ export default function FeedView({
             >
               <video
                 ref={fsVideoRef}
-                src={selectedPost.mediaUrl}
+                src={getMediaSrc(selectedPost.mediaUrl)}
                 autoPlay
                 loop
                 muted={isFsVideoMuted}

@@ -252,3 +252,40 @@ export const SEED_STORIES: Story[] = [
     timestamp: Date.now() - 1000 * 60 * 90 // 90 mins ago
   }
 ];
+
+export function getMediaSrc(url: string | undefined): string {
+  if (!url) return '';
+  if (typeof window === 'undefined') return url;
+  
+  // 1. If we already have a cached Blob URL for this exact content/url, return it
+  const cache = (window as any).mediaObjectUrls = (window as any).mediaObjectUrls || {};
+  if (cache[url]) {
+    return cache[url];
+  }
+  
+  // 2. If it is a Data URL (Base64), convert it to a Blob Object URL to bypass browser size restrictions and enable seeking
+  if (url.startsWith('data:')) {
+    try {
+      const parts = url.split(',');
+      if (parts.length === 2) {
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : '';
+        const byteCharacters = atob(parts[1]);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        cache[url] = blobUrl;
+        return blobUrl;
+      }
+    } catch (e) {
+      console.error('Failed to convert Data URL to Blob URL:', e);
+    }
+  }
+  
+  return url;
+}
+

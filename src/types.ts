@@ -30,7 +30,10 @@ export interface User {
   lastReadNotificationsTimestamp?: number;
   mutedNotifications?: boolean;
   birthday?: string;
+  birthdate?: string;
   gender?: string;
+  profession?: string;
+  bairro?: string;
   orientation?: string;
   bio?: string;
   hideLocation?: boolean;
@@ -158,4 +161,15 @@ export interface Story {
   starredBy?: Record<string, boolean>;
   viewedBy?: Record<string, boolean>;
   timestamp: number;
+}
+
+export interface PublishLog {
+  id: string;
+  timestamp: number;
+  action: 'POST_PUBLISH' | 'STORY_PUBLISH';
+  status: 'SUCCESS' | 'ERROR' | 'PENDING';
+  author: string;
+  type: string;
+  titleOrText: string;
+  error?: string;
 }

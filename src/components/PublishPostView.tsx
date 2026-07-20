@@ -218,11 +218,18 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const url = URL.createObjectURL(file);
+
     // Convert file to Base64 (Data URL) so it is stored persistently in Firestore!
     const reader = new FileReader();
     reader.onload = (ev) => {
       if (ev.target?.result) {
-        setVideoUrl(ev.target.result as string);
+        const base64 = ev.target.result as string;
+        setVideoUrl(base64);
+        
+        // Cache the local object URL mapped to the base64 string
+        const cache = (window as any).mediaObjectUrls = (window as any).mediaObjectUrls || {};
+        cache[base64] = url;
       }
     };
     reader.readAsDataURL(file);
@@ -232,7 +239,6 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
     setFileSizeStr(`${sizeMB} MB`);
 
     // Extract duration using HTML5 Video element
-    const url = URL.createObjectURL(file);
     const tempVideo = document.createElement('video');
     tempVideo.preload = 'metadata';
     tempVideo.src = url;
@@ -268,11 +274,18 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
       setMusicArtist('Dispositivo Local');
     }
 
+    const url = URL.createObjectURL(file);
+
     // Convert file to Base64 (Data URL) so it is stored persistently in Firestore!
     const reader = new FileReader();
     reader.onload = (ev) => {
       if (ev.target?.result) {
-        setMusicUrl(ev.target.result as string);
+        const base64 = ev.target.result as string;
+        setMusicUrl(base64);
+
+        // Cache the local object URL mapped to the base64 string
+        const cache = (window as any).mediaObjectUrls = (window as any).mediaObjectUrls || {};
+        cache[base64] = url;
       }
     };
     reader.readAsDataURL(file);
@@ -280,7 +293,6 @@ export default function PublishPostView({ onPublish, onCancel, users }: PublishP
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
     setFileSizeStr(`${sizeMB} MB`);
 
-    const url = URL.createObjectURL(file);
     const tempAudio = document.createElement('audio');
     tempAudio.preload = 'metadata';
     tempAudio.src = url;
