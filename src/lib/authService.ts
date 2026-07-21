@@ -488,14 +488,45 @@ export async function authRegisterComplete(profileData: any): Promise<{ user: Us
   const emailClean = profileData.email.trim().toLowerCase();
 
   try {
+    console.log('[AuthService] Initiating native Firebase registration for email:', emailClean);
+
     // 1. Create the user natively in Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, emailClean, profileData.password);
+    let userCredential;
+    try {
+      userCredential = await createUserWithEmailAndPassword(auth, emailClean, profileData.password);
+      console.log('[AuthService DIAGNOSTIC] Native Firebase user created successfully. UID:', userCredential.user.uid);
+    } catch (createErr: any) {
+      console.error('[AuthService DIAGNOSTIC] Failed to create native Firebase user:', {
+        code: createErr?.code,
+        message: createErr?.message,
+        stack: createErr?.stack,
+        details: createErr
+      });
+      throw createErr;
+    }
+
     const firebaseUser = userCredential.user;
     const userId = firebaseUser.uid;
 
     // 2. Trigger native verification immediately!
-    await sendEmailVerification(firebaseUser);
-    console.log('[AuthService] Native Firebase verification email triggered.');
+    try {
+      // Explicitly check for auth.currentUser and trigger verification immediately
+      if (auth.currentUser) {
+        await sendEmailVerification(auth.currentUser);
+        console.log('[AuthService DIAGNOSTIC] sendEmailVerification(auth.currentUser) dispatched successfully.');
+      } else {
+        await sendEmailVerification(firebaseUser);
+        console.log('[AuthService DIAGNOSTIC] sendEmailVerification(firebaseUser) dispatched successfully.');
+      }
+    } catch (verifyErr: any) {
+      console.error('[AuthService DIAGNOSTIC] sendEmailVerification failed (verify domain restrictions, limits, or SDK configs):', {
+        code: verifyErr?.code,
+        message: verifyErr?.message,
+        stack: verifyErr?.stack,
+        details: verifyErr
+      });
+      // We don't block registration completely if only email delivery fails, but we definitely log it
+    }
 
     // 3. Create the profile doc in Firestore using their uid
     const newUser: User = {
@@ -524,13 +555,25 @@ export async function authRegisterComplete(profileData: any): Promise<{ user: Us
       mutedNotifications: false
     };
 
-    await setDoc(doc(db, 'users', userId), newUser);
+    try {
+      await setDoc(doc(db, 'users', userId), newUser);
+      console.log('[AuthService DIAGNOSTIC] User profile document successfully saved to Firestore with UID:', userId);
+    } catch (dbErr: any) {
+      console.error('[AuthService DIAGNOSTIC] Failed to save user profile document to Firestore:', {
+        code: dbErr?.code,
+        message: dbErr?.message,
+        stack: dbErr?.stack,
+        details: dbErr
+      });
+      throw dbErr;
+    }
 
     const tokenPayload = { id: userId, nickname: profileData.nickname };
     const token = btoa(JSON.stringify(tokenPayload));
 
     return { user: newUser, token };
   } catch (err: any) {
+    console.error('[AuthService DIAGNOSTIC] authRegisterComplete master try/catch caught:', err);
     let errMsg = 'Erro ao concluir o registo.';
     if (err.code === 'auth/email-already-in-use') {
       errMsg = 'Este endereço de e-mail já está em uso.';
@@ -567,24 +610,51 @@ export async function authRecover(email: string): Promise<{ success: boolean; re
   const emailClean = email.trim().toLowerCase();
 
   try {
-    // Check if user exists in our Firestore
-    const snap = await getDocs(query(collection(db, 'users'), where('email', '==', emailClean)));
-    if (snap.empty) {
-      throw new Error('Nenhuma conta encontrada com este endereço de e-mail.');
+    console.log('[AuthService] Initiating native Firebase password reset email for:', emailClean);
+
+    // Check if user exists in our Firestore (Non-blocking warning)
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('email', '==', emailClean)));
+      if (snap.empty) {
+        console.warn('[AuthService DIAGNOSTIC] User not found in Firestore "users" collection, but proceeding with native Firebase password reset anyway.');
+      } else {
+        console.log('[AuthService DIAGNOSTIC] User found in Firestore "users" collection.');
+      }
+    } catch (dbErr: any) {
+      console.warn('[AuthService DIAGNOSTIC] Failed to query users collection in Firestore (non-blocking):', {
+        code: dbErr?.code,
+        message: dbErr?.message,
+        details: dbErr
+      });
     }
 
     // Trigger official/native Firebase password reset email
-    await sendPasswordResetEmail(auth, emailClean);
-    console.log('[AuthService] Native Firebase password reset email sent to:', emailClean);
+    try {
+      await sendPasswordResetEmail(auth, emailClean);
+      console.log('[AuthService DIAGNOSTIC] sendPasswordResetEmail completed successfully for:', emailClean);
+    } catch (resetErr: any) {
+      console.error('[AuthService DIAGNOSTIC] sendPasswordResetEmail failed:', {
+        code: resetErr?.code,
+        message: resetErr?.message,
+        stack: resetErr?.stack,
+        details: resetErr
+      });
+      throw resetErr;
+    }
 
     const recoveryToken = btoa(JSON.stringify({ email: emailClean, native: true }));
     return { success: true, recoveryToken };
   } catch (err: any) {
+    console.error('[AuthService DIAGNOSTIC] Recovery flow error:', err);
     let errMsg = 'Erro ao enviar e-mail de recuperação.';
+    
     if (err.code === 'auth/user-not-found') {
-      errMsg = 'Nenhuma conta encontrada com este endereço de e-mail.';
+      errMsg = 'Nenhuma conta encontrada com este endereço de e-mail no Firebase Authentication.';
     } else if (err.code === 'auth/invalid-email') {
       errMsg = 'O formato do e-mail introduzido é inválido.';
+    } else if (err.code === 'auth/unauthorized-domain') {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'este domínio';
+      errMsg = `Erro do Firebase: Domínio Não Autorizado. Por favor, aceda à consola do Firebase -> Autenticação -> Configurações -> Domínios Autorizados e adicione "${currentHost}" à lista.`;
     } else if (err.message) {
       errMsg = err.message;
     }

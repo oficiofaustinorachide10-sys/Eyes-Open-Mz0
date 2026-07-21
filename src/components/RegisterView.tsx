@@ -254,7 +254,7 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
       return;
     }
 
-    setStatusMsg('A registar perfil e encriptar dados...');
+    setStatusMsg('A registar o perfil e a enviar e-mail de verificação oficial do Firebase...');
     setStatusType('info');
 
     const profileData = {
@@ -276,7 +276,7 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
 
     authRegisterComplete(profileData)
       .then((data) => {
-        setStatusMsg('Registo concluído e conta criada com sucesso!');
+        setStatusMsg('Registo concluído! E-mail de verificação enviado com sucesso para a sua caixa de entrada.');
         setStatusType('success');
         setCreatedUser(data.user);
         setCreatedToken(data.token);
@@ -923,8 +923,14 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
               </p>
               
               <p className="mt-2 text-gray-400 font-rajdhani font-semibold text-sm">
-                Seja bem-vindo ao Eyes Open MZ, @{createdUser?.nickname}. O seu perfil foi georreferenciado com sucesso na província de {createdUser?.province}. Prepare-se para ver e interagir de forma totalmente imersiva.
+                Seja bem-vindo ao Eyes Open MZ, @{createdUser?.nickname}. O seu perfil foi georreferenciado com sucesso na província de {createdUser?.province}.
               </p>
+              
+              <div className="mt-4 p-4 bg-neon-cyan/10 border border-neon-cyan/30 rounded-2xl text-left">
+                <p className="text-xs font-semibold font-rajdhani text-neon-cyan leading-relaxed">
+                  📧 <strong className="text-white">VERIFICAÇÃO DE E-MAIL DISPARADA:</strong> Enviámos um link de confirmação oficial do Firebase para <span className="text-white">{email}</span>. Por favor, aceda à sua caixa de entrada e ative a sua conta para poder usufruir de todas as funcionalidades!
+                </p>
+              </div>
 
               <button
                 onClick={handleFinishWelcome}
