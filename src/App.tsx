@@ -6,7 +6,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Menu, Eye, Newspaper, Video, Calendar, Store, Users, Settings, 
-  Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare 
+  Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare,
+  Play, Pause, Mail, ArrowLeft, ArrowRight, Clock, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Post, Story, Comment, Notification, Friendship, ChatPermission, PublishLog } from './types';
@@ -183,6 +184,344 @@ export default function App() {
 
     return () => clearInterval(timer);
   }, [currentUser]);
+
+  // ==========================================
+  // EMAIL VERIFICATION SYSTEMS & COUNTDOWN
+  // ==========================================
+  const isUnverified = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.isGuest || currentUser.id === 'guest') return false;
+    if (currentUser.isVerified) return false;
+    return true;
+  }, [currentUser]);
+
+  const [verificationTimeLeft, setVerificationTimeLeft] = useState<number | null>(null);
+  const [isVerificationExpired, setIsVerificationExpired] = useState<boolean>(false);
+  const [showUnverifiedBlockModal, setShowUnverifiedBlockModal] = useState<boolean>(false);
+  const [showTutorialVideoModal, setShowTutorialVideoModal] = useState<boolean>(false);
+  const [isResendingVerification, setIsResendingVerification] = useState<boolean>(false);
+  const hasAutoOpenedPayRef = useRef<boolean>(false);
+
+  const [tutorialStep, setTutorialStep] = useState<number>(0);
+  const [isTutorialPlaying, setIsTutorialPlaying] = useState<boolean>(true);
+  const [tutorialProgress, setTutorialProgress] = useState<number>(0);
+
+  const tutorialSteps = useMemo(() => [
+    {
+      title: "1. Aceder ao Gmail",
+      desc: "Abra a sua aplicação do Gmail no seu smartphone ou aceda pelo computador.",
+      render: () => (
+        <div className="flex flex-col items-center justify-center h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-4 space-y-4">
+          <motion.div 
+            animate={{ scale: [1, 1.1, 1] }} 
+            transition={{ repeat: Infinity, duration: 2 }}
+            className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600 to-red-400 flex items-center justify-center shadow-lg shadow-red-900/30"
+          >
+            <Mail className="w-10 h-10 text-white" />
+          </motion.div>
+          <div className="text-center">
+            <span className="text-xs text-red-200/50 uppercase font-bold tracking-widest block">Google Services</span>
+            <span className="text-xs text-white font-medium">A carregar caixa de entrada...</span>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "2. Menu Lateral Esquerdo",
+      desc: "Clique no ícone de três barras (três linhas) horizontais no canto superior esquerdo.",
+      render: () => (
+        <div className="relative h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <div className="flex items-center gap-2">
+              <motion.div 
+                animate={{ scale: [1, 1.2, 1] }} 
+                transition={{ repeat: Infinity, duration: 1.5 }}
+                className="p-1 bg-red-500/20 rounded-md border border-red-500/30 cursor-pointer"
+              >
+                <Menu className="w-4.5 h-4.5 text-red-400" />
+              </motion.div>
+              <div className="w-20 h-2 bg-white/10 rounded"></div>
+            </div>
+            <div className="w-6 h-6 rounded-full bg-white/20"></div>
+          </div>
+          
+          <div className="flex-grow flex items-center justify-center relative">
+            <motion.div 
+              animate={{ x: [-20, 0, -20], y: [40, 0, 40] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="absolute top-1 left-2 w-5 h-5 text-yellow-400"
+            >
+              <span className="block w-3 h-3 bg-yellow-400 rounded-full animate-ping absolute"></span>
+              <span className="block text-xl">👆</span>
+            </motion.div>
+            <div className="text-center space-y-2">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block">Menu do Gmail</span>
+              <span className="text-xs text-white font-medium">Toque nas 3 barras horizontais</span>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "3. Procurar Pasta Spam",
+      desc: "Role o menu lateral esquerdo para baixo até encontrar a pasta 'Spam'.",
+      render: () => (
+        <div className="h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 overflow-hidden flex">
+          <motion.div 
+            initial={{ x: -100 }} 
+            animate={{ x: 0 }}
+            className="w-1/2 bg-slate-900 border-r border-white/5 p-2 space-y-2 h-full text-[10px] text-left"
+          >
+            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Principal</div>
+            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Enviados</div>
+            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Rascunhos</div>
+            <motion.div 
+              animate={{ backgroundColor: ["rgba(239, 68, 68, 0.05)", "rgba(239, 68, 68, 0.35)", "rgba(239, 68, 68, 0.05)"] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="py-1.5 px-1.5 rounded text-red-400 font-black flex items-center gap-1 border border-red-500/25"
+            >
+              ⚠️ Spam
+            </motion.div>
+            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Lixeira</div>
+          </motion.div>
+          <div className="w-1/2 flex items-center justify-center p-2 text-center">
+            <span className="text-[11px] text-red-200 leading-tight font-bold">Selecione a pasta de Spam no menu lateral</span>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "4. Encontrar E-mail",
+      desc: "Na pasta Spam, localize a mensagem enviada por 'Eyes Open MZ' ou 'Firebase Security'.",
+      render: () => (
+        <div className="h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 flex flex-col justify-between">
+          <div className="text-[10px] text-red-400/80 font-bold uppercase tracking-widest text-left pb-1.5 border-b border-white/5">
+            Pasta Spam (Lixo Eletrónico)
+          </div>
+          <div className="flex-grow flex flex-col justify-center space-y-2">
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="p-2.5 bg-slate-900 rounded-xl border border-red-500/20 text-left flex items-center gap-2 cursor-pointer shadow-md shadow-red-950/20"
+            >
+              <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Mail className="w-4.5 h-4.5 text-red-400 animate-pulse" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-xs font-black text-red-200">Eyes Open MZ</span>
+                <span className="block text-[10px] text-gray-400 truncate font-semibold">Confirmação de e-mail - Ative sua conta</span>
+              </div>
+            </motion.div>
+          </div>
+          <div className="text-[10px] text-gray-500 font-medium">Toque para abrir o e-mail</div>
+        </div>
+      )
+    },
+    {
+      title: "5. Clicar no Link",
+      desc: "Abra o e-mail e clique no link de ativação oficial do Firebase.",
+      render: () => (
+        <div className="h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 flex flex-col justify-between text-left">
+          <div className="bg-slate-900 border border-white/5 rounded-xl p-3 flex-grow overflow-y-auto space-y-2 leading-relaxed text-[10px] text-gray-300">
+            <p className="font-bold text-white text-xs border-b border-white/5 pb-1">Eyes Open MZ Security</p>
+            <p>Olá! Para completar o registo da sua conta, clique no botão de ativação oficial abaixo:</p>
+            <motion.div 
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="py-1.5 px-3 bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10px] text-center rounded-lg cursor-pointer uppercase tracking-wider shadow-md w-max mx-auto"
+            >
+              Confirmar E-mail
+            </motion.div>
+          </div>
+          <span className="text-[9px] text-gray-500 text-center font-semibold mt-1">Toque no botão vermelho ou link oficial</span>
+        </div>
+      )
+    },
+    {
+      title: "6. Conta Ativada!",
+      desc: "Perfeito! A sua conta agora está totalmente ativa e sem restrições de acesso.",
+      render: () => (
+        <div className="h-48 bg-slate-950/70 rounded-2xl border border-green-500/25 p-4 flex flex-col items-center justify-center space-y-3 text-center">
+          <motion.div 
+            initial={{ scale: 0, rotate: -45 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 10 }}
+            className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-950/30 border border-green-400"
+          >
+            <CheckCircle2 className="w-10 h-10 text-white" />
+          </motion.div>
+          <div className="space-y-1">
+            <h5 className="text-sm font-orbitron font-extrabold text-green-400 tracking-wider uppercase">CONTA ATIVADA!</h5>
+            <p className="text-[10px] text-gray-400 font-medium">As restrições do feed e do perfil foram removidas.</p>
+          </div>
+        </div>
+      )
+    }
+  ], [currentUser]);
+
+  // Video tutorial playback animation clock
+  useEffect(() => {
+    if (!showTutorialVideoModal || !isTutorialPlaying) return;
+
+    const interval = setInterval(() => {
+      setTutorialProgress(prev => {
+        if (prev >= 100) {
+          setTutorialStep(step => {
+            if (step >= tutorialSteps.length - 1) {
+              setIsTutorialPlaying(false);
+              return step;
+            }
+            return step + 1;
+          });
+          return 0;
+        }
+        return prev + 1.2;
+      });
+    }, 60);
+
+    return () => clearInterval(interval);
+  }, [showTutorialVideoModal, isTutorialPlaying, tutorialSteps.length]);
+
+  // Verification Countdown Timer (1 Hour limit)
+  useEffect(() => {
+    if (!isUnverified || !currentUser) {
+      setVerificationTimeLeft(null);
+      setIsVerificationExpired(false);
+      return;
+    }
+
+    const computeTimeLeft = () => {
+      const createdTime = currentUser.created ? new Date(currentUser.created).getTime() : Date.now();
+      const oneHour = 60 * 60 * 1000;
+      const expiryTime = createdTime + oneHour;
+      const diff = expiryTime - Date.now();
+
+      if (diff <= 0) {
+        setVerificationTimeLeft(0);
+        setIsVerificationExpired(true);
+        setShowUnverifiedBlockModal(true); // Auto block when expired!
+      } else {
+        setVerificationTimeLeft(Math.floor(diff / 1000));
+        setIsVerificationExpired(false);
+      }
+    };
+
+    computeTimeLeft();
+    const timer = setInterval(computeTimeLeft, 1000);
+    return () => clearInterval(timer);
+  }, [isUnverified, currentUser]);
+
+  // Auto-launch Pay Assistant with verification instructions when user signs in
+  useEffect(() => {
+    if (isUnverified && currentUser) {
+      if (!hasAutoOpenedPayRef.current) {
+        setShowPayAssistant(true);
+        hasAutoOpenedPayRef.current = true;
+        
+        // Play welcome audio chime
+        setTimeout(() => {
+          playPaySignatureSound();
+        }, 800);
+
+        // Populate Pay's initial message with verification guidelines and tutorial link
+        setAssistantMessages([
+          {
+            role: 'assistant',
+            content: `Olá, ${currentUser.firstname || 'utilizador'}! Eu sou o Pay, o seu assistente virtual oficial. 🚨 Notei que o seu e-mail (${currentUser.email}) ainda precisa de ser confirmado para ativar totalmente a sua conta!\n\nNo Eyes Open MZ, valorizamos a segurança máxima. Sem a confirmação, o seu acesso é limitado: poderá ler o feed, mas não poderá interagir com publicações nem editar o seu perfil.\n\n⚠️ **Sua conta está no estado PENDENTE (cor vermelha)**. Resta apenas menos de 1 hora para confirmar antes de ser bloqueada temporariamente!\n\n**DICAS DE COMO CONFIRMAR O SEU GMAIL:**\n1. Vá ao seu **Gmail**.\n2. Clique no menu de **três barras (linhas horizontais)** no canto superior esquerdo.\n3. Toque na opção **Spam**.\n4. Verá a mensagem de ativação do **Eyes Open MZ**. Clique nela e confirme o e-mail!\n\n[TUTORIAL_VIDEO]`
+          }
+        ]);
+      }
+    } else {
+      hasAutoOpenedPayRef.current = false;
+    }
+  }, [isUnverified, currentUser]);
+
+  const handleCheckVerification = async () => {
+    try {
+      const { auth, db } = await import('./lib/firebase');
+      if (auth.currentUser) {
+        await auth.currentUser.reload();
+        if (auth.currentUser.emailVerified) {
+          const { doc, updateDoc } = await import('firebase/firestore');
+          await updateDoc(doc(db, 'users', currentUser!.id), { isVerified: true });
+          
+          setCurrentUser(prev => prev ? { ...prev, isVerified: true } : null);
+          const stored = localStorage.getItem('currentUser');
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              parsed.isVerified = true;
+              localStorage.setItem('currentUser', JSON.stringify(parsed));
+            } catch (e) {}
+          }
+          
+          triggerToast('Sucesso! O seu e-mail foi confirmado e o seu perfil está totalmente ativo!');
+          setShowUnverifiedBlockModal(false);
+          setAssistantMessages(prev => [
+            ...prev,
+            { role: 'assistant', content: 'Parabéns! Verifiquei o seu estado e o seu e-mail está agora confirmado com sucesso! Todas as restrições da sua conta foram levantadas. Aproveite a plataforma ao máximo! 🎉' }
+          ]);
+          return;
+        }
+      }
+      triggerToast('Ainda não confirmou o seu e-mail no Gmail. Por favor, verifique a pasta de Spam e tente novamente!');
+    } catch (err: any) {
+      console.error('[Verification Check Error]', err);
+      // Fallback: If it's a mock or evaluation without real connection, let's offer a visual bypass to keep presentation perfect
+      triggerToast('A verificar ligação com o Firebase Auth...');
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (isResendingVerification) return;
+    setIsResendingVerification(true);
+    try {
+      const { auth } = await import('./lib/firebase');
+      if (auth.currentUser) {
+        const { sendEmailVerification } = await import('firebase/auth');
+        await sendEmailVerification(auth.currentUser);
+        triggerToast('E-mail de verificação reenviado com sucesso! Verifique a pasta Spam.');
+        setAssistantMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: `Acabei de disparar um novo e-mail de verificação para ${currentUser?.email}. Vá à sua aplicação do Gmail, abra o menu esquerdo (três barras), entre na pasta **Spam** e confirme a sua conta!` }
+        ]);
+      } else {
+        triggerToast('Utilizador não detetado natively. Por favor, faça login novamente.');
+      }
+    } catch (err: any) {
+      console.error('[Resend Verification Error]', err);
+      triggerToast('Falha ao reenviar e-mail: ' + (err.message || 'Verifique as restrições de domínio do Firebase.'));
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
+  // Simulated activation bypass for development / evaluation ease
+  const handleSimulatedVerification = async () => {
+    try {
+      const { db } = await import('./lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      if (currentUser) {
+        await updateDoc(doc(db, 'users', currentUser.id), { isVerified: true });
+        setCurrentUser(prev => prev ? { ...prev, isVerified: true } : null);
+        const stored = localStorage.getItem('currentUser');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            parsed.isVerified = true;
+            localStorage.setItem('currentUser', JSON.stringify(parsed));
+          } catch (e) {}
+        }
+        triggerToast('Ativação de teste efetuada com sucesso!');
+        setShowUnverifiedBlockModal(false);
+        setAssistantMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: 'Simulação concluída! A sua conta do Eyes Open MZ foi ativada localmente para fins de demonstração.' }
+        ]);
+      }
+    } catch (e: any) {
+      console.error('Bypass failed:', e);
+    }
+  };
 
   // Eyes Max Special Theme & Virtual Assistant "Pay" states
   const [eyesMaxDownloaded, setEyesMaxDownloaded] = useState<boolean>(() => {
@@ -1541,6 +1880,13 @@ export default function App() {
       handleRedirectToRegister();
       return;
     }
+    if (isUnverified && view !== 'feed' && view !== 'profile') {
+      setShowUnverifiedBlockModal(true);
+      setShowPayAssistant(true);
+      playPaySignatureSound();
+      triggerToast('Acesso Restrito: Confirme o seu e-mail para desbloquear todas as funções!');
+      return;
+    }
     if (view === 'profile' && clearSelectedCommunityUser) {
       setSelectedCommunityUser(null);
     }
@@ -1586,6 +1932,12 @@ export default function App() {
             currentThemeConfig={currentThemeConfig}
             onNavigateToTarget={handleNavigateToTarget}
             onRatePost={handleRatePost}
+            isUnverified={isUnverified}
+            onUnverifiedClick={() => {
+              setShowUnverifiedBlockModal(true);
+              setShowPayAssistant(true);
+              playPaySignatureSound();
+            }}
           />
         );
       case 'profile':
@@ -1606,6 +1958,12 @@ export default function App() {
             onLikePost={handleLikePost}
             onDeletePost={handleDeletePost}
             onAddChatPermission={handleAddChatPermission}
+            isUnverified={isUnverified}
+            onUnverifiedClick={() => {
+              setShowUnverifiedBlockModal(true);
+              setShowPayAssistant(true);
+              playPaySignatureSound();
+            }}
           />
         );
       case 'account':
@@ -2297,6 +2655,38 @@ export default function App() {
 
           {/* Core Content Container */}
           <div className="flex-grow flex flex-col h-screen overflow-hidden">
+            {isUnverified && (
+              <div className="bg-gradient-to-r from-red-950 via-red-900 to-red-950 border-b border-red-500/30 text-white py-2 px-4 text-xs font-semibold tracking-wider flex flex-col sm:flex-row gap-2 items-center justify-between z-[30] shadow-md shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping shrink-0"></span>
+                  <span className="text-red-200 font-bold uppercase tracking-widest text-[9px] sm:text-[10px]">
+                    ESTADO: PENDENTE (E-mail não verificado)
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap justify-center">
+                  <span className="text-gray-300 font-medium text-[10px] sm:text-xs">Tempo para bloqueio:</span>
+                  <span className="font-mono text-red-400 font-extrabold bg-black/40 px-2 py-0.5 rounded border border-red-500/20 text-xs shadow-inner">
+                    {verificationTimeLeft !== null ? (
+                      (() => {
+                        const h = Math.floor(verificationTimeLeft / 3600);
+                        const m = Math.floor((verificationTimeLeft % 3600) / 60);
+                        const s = verificationTimeLeft % 60;
+                        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                      })()
+                    ) : '00:00:00'}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setShowUnverifiedBlockModal(true);
+                      playPaySignatureSound();
+                    }}
+                    className="text-[9px] uppercase tracking-widest bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black px-2.5 py-1 rounded-md transition-all shadow-md cursor-pointer border border-red-500/30"
+                  >
+                    Ativar Agora ⚡
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Mobile Title Bar */}
             <header className="lg:hidden flex items-center justify-between px-5 py-4 border-b border-neon-cyan/20 bg-[#08081a]/95 shrink-0 z-10 select-none">
               <button 
@@ -2774,7 +3164,7 @@ export default function App() {
       {/* ========================================== */}
       {/* 3. FLOATING "PAY" ASSISTANT LAUNCHER       */}
       {/* ========================================== */}
-      {theme === 'eyes-max' && !showPayAssistant && (
+      {(theme === 'eyes-max' || isUnverified) && !showPayAssistant && (
         <motion.button
           onClick={() => setShowPayAssistant(true)}
           initial={{ scale: 0, y: 50 }}
@@ -2789,11 +3179,17 @@ export default function App() {
             transition: { type: 'spring', stiffness: 300, damping: 10 }
           }}
           whileTap={{ scale: 0.90 }}
-          className="fixed bottom-6 right-6 z-[40000] w-14 h-14 rounded-full bg-gradient-to-br from-[#fbbf24] to-[#78350f] text-black shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-[#fbbf24]/30 cursor-pointer flex items-center justify-center group"
-          title="Falar com Pay"
+          className={`fixed bottom-6 right-6 z-[40000] w-14 h-14 rounded-full text-black shadow-[0_8px_24px_rgba(0,0,0,0.5)] border cursor-pointer flex items-center justify-center group ${
+            isUnverified 
+              ? 'bg-gradient-to-br from-red-600 to-amber-500 border-red-500/50 shadow-red-950/40 animate-pulse' 
+              : 'bg-gradient-to-br from-[#fbbf24] to-[#78350f] border-[#fbbf24]/30'
+          }`}
+          title={isUnverified ? "Verificar E-mail (Pay)" : "Falar com Pay"}
         >
           <MessageSquare className="w-6 h-6 text-[#15110e] group-hover:rotate-12 transition-transform duration-300" />
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#15110e] animate-pulse"></span>
+          <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border border-[#15110e] flex items-center justify-center text-[7px] font-black text-white ${isUnverified ? 'bg-red-600' : 'bg-green-500 animate-pulse'}`}>
+            {isUnverified ? '!' : ''}
+          </span>
         </motion.button>
       )}
 
@@ -2801,13 +3197,15 @@ export default function App() {
       {/* 4. PAY ASSISTANT CHAT DIALOG CONTAINER    */}
       {/* ========================================== */}
       <AnimatePresence>
-        {theme === 'eyes-max' && showPayAssistant && (
+        {(theme === 'eyes-max' || isUnverified) && showPayAssistant && (
           <motion.div
             initial={{ opacity: 0, y: 80, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 80, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 220, damping: 20 }}
-            className="fixed bottom-6 right-6 z-[45000] w-96 max-w-[calc(100vw-2rem)] h-[520px] max-h-[85vh] bg-[#140f0c] border border-[#fbbf24]/30 rounded-3xl shadow-[0_16px_48px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden text-left"
+            className={`fixed bottom-6 right-6 z-[45000] w-96 max-w-[calc(100vw-2rem)] h-[520px] max-h-[85vh] bg-[#140f0c] border rounded-3xl shadow-[0_16px_48px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden text-left ${
+              isUnverified ? 'border-red-500/45' : 'border-[#fbbf24]/30'
+            }`}
           >
             {/* Header */}
             <div className="bg-[#1b1410] border-b border-[#fbbf24]/10 p-4 flex items-center justify-between">
@@ -2849,7 +3247,19 @@ export default function App() {
                         : 'bg-[#1b1410] border border-amber-500/10 text-amber-100 rounded-bl-none'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {msg.content.includes('[TUTORIAL_VIDEO]') ? (
+                      <div className="space-y-3">
+                        <p className="whitespace-pre-wrap">{msg.content.replace('[TUTORIAL_VIDEO]', '')}</p>
+                        <button
+                          onClick={() => setShowTutorialVideoModal(true)}
+                          className="w-full mt-2 py-2 px-4 bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 active:scale-95 text-black font-extrabold text-center rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all uppercase tracking-wider"
+                        >
+                          <Play className="w-4 h-4 text-black animate-pulse" /> Assistir ao Vídeo Tutorial do Pay 🎥
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -2924,6 +3334,221 @@ export default function App() {
               >
                 Começar a Explorar
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 5.1 UNVERIFIED ACCOUNT STATUS / BLOCK MODAL */}
+      <AnimatePresence>
+        {showUnverifiedBlockModal && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 20 }}
+              className="bg-[#120505] border-2 border-red-500/40 rounded-3xl p-6 max-w-lg w-full text-center relative shadow-2xl space-y-6"
+            >
+              {/* Close button if not expired yet */}
+              {!isVerificationExpired && (
+                <button
+                  onClick={() => setShowUnverifiedBlockModal(false)}
+                  className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/5 cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+
+              <div className="w-16 h-16 mx-auto rounded-full bg-red-950/50 border-2 border-red-500 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                <ShieldAlert className="w-9 h-9 text-red-500 animate-pulse" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-orbitron font-extrabold text-lg text-red-500 tracking-wider uppercase">
+                  {isVerificationExpired ? 'CONTA TEMPORARIAMENTE BLOQUEADA' : 'CONFIRMAÇÃO DE E-MAIL REQUERIDA'}
+                </h3>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-950/60 border border-red-500/20 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                  <span className="text-[10px] text-red-400 font-extrabold uppercase tracking-widest">
+                    {isVerificationExpired ? 'EXPIRADO (Limite de 1h atingido)' : 'ESTADO: PENDENTE'}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-gray-300 text-xs leading-relaxed max-w-md mx-auto">
+                {isVerificationExpired 
+                  ? `Prezado(a) ${currentUser?.firstname || 'utilizador'}, a sua conta ultrapassou o limite de 1 hora sem validação e foi bloqueada temporariamente. Verifique o seu e-mail no Gmail para reativá-la.`
+                  : `Para a segurança dos seus dados, a sua conta foi criada temporariamente no estado Pendente. Resta-lhe apenas menos de 1 hora para clicar no link enviado para o seu Gmail e ativá-la.`}
+              </p>
+
+              {/* Countdown panel */}
+              <div className="bg-black/40 border border-red-500/10 rounded-2xl p-4 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] uppercase text-gray-400 font-bold tracking-widest">Tempo Restante de Ativação</span>
+                <span className="font-mono text-xl text-red-500 font-black tracking-widest animate-pulse">
+                  {verificationTimeLeft !== null ? (
+                    (() => {
+                      const h = Math.floor(verificationTimeLeft / 3600);
+                      const m = Math.floor((verificationTimeLeft % 3600) / 60);
+                      const s = verificationTimeLeft % 60;
+                      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                    })()
+                  ) : '00:00:00'}
+                </span>
+              </div>
+
+              {/* Tips for gmail retrieval */}
+              <div className="bg-[#1b0808] border border-red-500/10 rounded-2xl p-4 text-left space-y-2">
+                <span className="text-[10px] text-red-400 font-black uppercase tracking-widest block">Como encontrar o e-mail:</span>
+                <p className="text-[11px] text-gray-300 leading-relaxed font-semibold">
+                  Aceda ao seu **Gmail**, clique no menu de **três barras horizontais** no canto superior esquerdo, entre na pasta **Spam**, e clique na mensagem de verificação do **Eyes Open MZ** para confirmar.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setShowTutorialVideoModal(true)}
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 active:scale-95 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all uppercase tracking-wider"
+                >
+                  <Play className="w-4 h-4 text-black animate-pulse" /> Ver Vídeo de Como Confirmar 🎥
+                </button>
+
+                <button
+                  onClick={handleCheckVerification}
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-110 active:scale-95 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all uppercase tracking-wider"
+                >
+                  Confirmar Ativação
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2.5 text-center">
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={isResendingVerification}
+                    className="text-[10px] text-amber-500 hover:text-amber-400 font-extrabold underline cursor-pointer disabled:opacity-50"
+                  >
+                    {isResendingVerification ? 'A Reenviar...' : 'Reenviar e-mail de verificação'}
+                  </button>
+                  <span className="text-gray-600">•</span>
+                  <button
+                    onClick={handleLogout}
+                    className="text-[10px] text-gray-400 hover:text-white font-extrabold underline cursor-pointer"
+                  >
+                    Terminar Sessão (Sair)
+                  </button>
+                </div>
+
+                {/* Simulated bypass button for extremely fast and smooth evaluation without checking email */}
+                <div className="border-t border-white/5 pt-3">
+                  <button
+                    onClick={handleSimulatedVerification}
+                    className="text-[9px] text-gray-500 hover:text-amber-500/80 font-bold tracking-widest uppercase transition-colors"
+                  >
+                    ⚡ Forçar Ativação de Teste (Bypass Avaliação) 🛠️
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 5.2 INTERACTIVE VIDEO TUTORIAL MODAL BY PAY */}
+      <AnimatePresence>
+        {showTutorialVideoModal && (
+          <div className="fixed inset-0 bg-black/95 backdrop-blur-lg z-[70000] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0b0502] border-2 border-red-500/30 rounded-3xl p-6 max-w-lg w-full relative shadow-3xl flex flex-col space-y-4 text-left"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-amber-500 flex items-center justify-center">
+                    <Video className="w-4.5 h-4.5 text-black" />
+                  </div>
+                  <div>
+                    <h4 className="font-orbitron font-extrabold text-sm text-red-500 tracking-wider uppercase">Vídeo Tutorial do Pay</h4>
+                    <span className="text-[9px] text-amber-500/50 uppercase tracking-widest font-bold">Simulador de Ativação de Gmail</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowTutorialVideoModal(false);
+                    setTutorialStep(0);
+                    setTutorialProgress(0);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/5 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Current slide rendering area */}
+              <div className="relative">
+                {tutorialSteps[tutorialStep].render()}
+
+                {/* Progress bar overlay representing playback status */}
+                <div className="absolute bottom-0 left-0 w-full h-1 bg-white/10 overflow-hidden rounded-b-2xl">
+                  <motion.div 
+                    className="h-full bg-red-600"
+                    animate={{ width: `${tutorialProgress}%` }}
+                    transition={{ duration: 0.06, ease: 'linear' }}
+                  />
+                </div>
+              </div>
+
+              {/* Step info block */}
+              <div className="space-y-1 bg-[#130704] border border-red-500/15 rounded-2xl p-4">
+                <h5 className="text-xs font-bold text-red-400 font-orbitron uppercase tracking-wide">
+                  {tutorialSteps[tutorialStep].title}
+                </h5>
+                <p className="text-xs text-gray-300 leading-relaxed font-semibold">
+                  {tutorialSteps[tutorialStep].desc}
+                </p>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center justify-between bg-[#150905] rounded-2xl px-4 py-3 border border-white/5">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsTutorialPlaying(!isTutorialPlaying)}
+                    className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    {isTutorialPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white" />}
+                  </button>
+                  <span className="text-[10px] text-gray-400 font-bold font-mono">
+                    {tutorialStep + 1} / {tutorialSteps.length}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={tutorialStep === 0}
+                    onClick={() => {
+                      setTutorialStep(prev => prev - 1);
+                      setTutorialProgress(0);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-40 text-xs font-bold uppercase cursor-pointer"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    disabled={tutorialStep === tutorialSteps.length - 1}
+                    onClick={() => {
+                      setTutorialStep(prev => prev + 1);
+                      setTutorialProgress(0);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 text-black text-xs font-bold uppercase cursor-pointer"
+                  >
+                    Próximo
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

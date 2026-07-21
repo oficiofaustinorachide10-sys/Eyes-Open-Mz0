@@ -41,6 +41,8 @@ interface FeedViewProps {
   currentThemeConfig?: ThemeConfig;
   onNavigateToTarget?: (view: any, targetId?: string) => void;
   currentLanguage?: string;
+  isUnverified?: boolean;
+  onUnverifiedClick?: () => void;
 }
 
 export function getAverageRating(post: Post, currentLanguage: string = 'pt'): string {
@@ -863,6 +865,8 @@ export default function FeedView({
   currentThemeConfig,
   onNavigateToTarget,
   currentLanguage = 'pt',
+  isUnverified = false,
+  onUnverifiedClick,
 }: FeedViewProps) {
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -1628,6 +1632,12 @@ export default function FeedView({
                 onLike={() => onLikePost(post.id)}
                 onDelete={() => onDeletePost(post.id)}
                 onClick={() => {
+                  if (isUnverified) {
+                    if (onUnverifiedClick) {
+                      onUnverifiedClick();
+                    }
+                    return;
+                  }
                   setSelectedPost(post);
                   onAddPostView(post.id);
                 }}

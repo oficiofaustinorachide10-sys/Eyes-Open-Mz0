@@ -31,6 +31,8 @@ interface ProfileViewProps {
   onLikePost?: (postId: string) => void;
   onDeletePost?: (postId: string) => void;
   onAddChatPermission?: (targetUserId: string, duration: 7 | 30 | 'permanent') => void;
+  isUnverified?: boolean;
+  onUnverifiedClick?: () => void;
 }
 
 export default function ProfileView({ 
@@ -48,7 +50,9 @@ export default function ProfileView({
   onAddComment,
   onLikePost,
   onDeletePost,
-  onAddChatPermission
+  onAddChatPermission,
+  isUnverified = false,
+  onUnverifiedClick,
 }: ProfileViewProps) {
   
   // 1. Identify which profile is being viewed and what is the relation
@@ -974,7 +978,15 @@ export default function ProfileView({
               {/* Conditional Action buttons based on 3-state relation engine */}
               {isOwner ? (
                 <button 
-                  onClick={() => setIsEditing(true)}
+                  onClick={() => {
+                    if (isUnverified) {
+                      if (onUnverifiedClick) {
+                        onUnverifiedClick();
+                      }
+                      return;
+                    }
+                    setIsEditing(true);
+                  }}
                   className="px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-400 text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer self-center md:self-start shadow-sm"
                 >
                   <Edit3 className="w-3.5 h-3.5" /> Editar Registo
