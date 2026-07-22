@@ -142,13 +142,36 @@ export default function AccountView({
   };
 
   return (
-    <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-8 font-rajdhani select-none text-white overflow-y-auto no-scrollbar pb-16">
+    <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-8 font-rajdhani select-none text-white overflow-y-auto no-scrollbar pb-48">
+      {/* QUICK SESSION TOP BAR & LOGOUT ACTION */}
+      <div className="flex items-center justify-between gap-3 bg-[#0c0c24]/90 border border-neon-cyan/30 p-3.5 rounded-2xl shadow-lg backdrop-blur-md">
+        <div className="flex items-center gap-2 min-w-0">
+          <ShieldAlert className="w-5 h-5 text-neon-cyan shrink-0 animate-pulse" />
+          <div className="min-w-0">
+            <p className="font-orbitron font-extrabold text-xs text-white tracking-wider truncate uppercase">
+              Sessão: <span className="text-neon-cyan">@{currentUser.nickname}</span>
+            </p>
+            <p className="text-[9px] text-gray-400 font-bold truncate">
+              {currentUser.email}
+            </p>
+          </div>
+        </div>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-orbitron font-black text-[11px] tracking-widest transition-all cursor-pointer shadow-md shadow-red-600/30 flex items-center gap-1.5 uppercase active:scale-95 shrink-0"
+          >
+            <ShieldAlert className="w-4 h-4" /> SAIR
+          </button>
+        )}
+      </div>
+
       <div className="text-center">
         <h2 className="font-orbitron font-extrabold text-xl tracking-widest text-neon-cyan glow-text-cyan flex items-center justify-center gap-2">
           <Cpu className="w-5 h-5 stroke-[2]" /> PAINEL DE IDENTIDADE
         </h2>
         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-          Arraste o Cartão para o Lado para Ver o Verso
+          Arraste ou Clique no Cartão para Ver o Verso
         </p>
       </div>
 
@@ -157,7 +180,7 @@ export default function AccountView({
         {/* Flip Card Action Button */}
         <button
           onClick={handleToggleFlip}
-          className="px-6 py-2.5 rounded-full bg-gradient-to-r from-neon-cyan/20 to-neon-magenta/20 border border-neon-cyan/50 hover:border-neon-cyan text-neon-cyan font-orbitron font-extrabold text-xs tracking-wider transition-all cursor-pointer shadow-lg shadow-neon-cyan/10 flex items-center gap-2 uppercase active:scale-95"
+          className="px-6 py-2.5 rounded-full bg-gradient-to-r from-neon-cyan/20 to-neon-magenta/20 border border-neon-cyan/50 hover:border-neon-cyan text-neon-cyan font-orbitron font-extrabold text-xs tracking-wider transition-all cursor-pointer shadow-lg shadow-neon-cyan/10 flex items-center gap-2 uppercase active:scale-95 z-10"
         >
           <RefreshCw className={`w-4 h-4 transition-transform duration-500 ${isFlipped ? 'rotate-180' : ''}`} />
           {isFlipped ? 'Ver Frente do Cartão 💳' : 'Girar Cartão (Ver Verso) 🔄'}
@@ -269,7 +292,8 @@ export default function AccountView({
               {/* Action buttons list */}
               <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/5">
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setActivePopup('phone');
                     setInputVal(currentUser.phone);
                   }}
@@ -278,7 +302,8 @@ export default function AccountView({
                   Número
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setActivePopup('email');
                     setInputVal(currentUser.email);
                   }}
@@ -292,21 +317,117 @@ export default function AccountView({
         </div>
       </div>
 
+      {/* GERIR MINHA CONTA - PERMISSÕES DO PAY */}
+      <div className="bg-[#0e0a1a]/90 border border-amber-500/30 rounded-3xl p-5 shadow-xl space-y-4 relative overflow-hidden backdrop-blur-md">
+        <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#fbbf24] to-[#78350f] p-0.5 flex items-center justify-center">
+              <div className="w-full h-full bg-[#15110e] rounded-[10px] flex items-center justify-center">
+                <Cpu className="w-5 h-5 text-[#fbbf24] animate-pulse" />
+              </div>
+            </div>
+            <div>
+              <h3 className="font-orbitron font-extrabold text-sm text-[#fbbf24] uppercase tracking-wider">
+                Gerir Minha Conta
+              </h3>
+              <p className="text-[10px] text-amber-200/60 font-semibold uppercase tracking-widest">
+                Permissões do Assistente Pay
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-[9px] font-mono text-amber-300 font-bold uppercase">
+            Privacidade Segura
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-300 leading-relaxed">
+          Por padrão, o Pay não acede às suas conversas, publicações ou dados privados. Ative as permissões abaixo se desejar que o Pay possa realizar comandos diretamente na sua conta:
+        </p>
+
+        <div className="space-y-2.5 pt-1">
+          {/* PERMISSION 1 */}
+          <div className="p-3 bg-black/40 border border-amber-500/20 rounded-2xl flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-amber-100">1. Aceder às minhas conversas</p>
+              <p className="text-[10px] text-gray-400">Permite ao Pay pesquisar, resumir ou arquivar mensagens.</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input 
+                type="checkbox"
+                defaultChecked={JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}').accessConversations || false}
+                onChange={(e) => {
+                  const current = JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}');
+                  current.accessConversations = e.target.checked;
+                  localStorage.setItem(`pay_permissions_${currentUser.id}`, JSON.stringify(current));
+                  triggerToast(e.target.checked ? 'Permissão 1 ATIVADA!' : 'Permissão 1 Desativada');
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-5 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#fbbf24]"></div>
+            </label>
+          </div>
+
+          {/* PERMISSION 2 */}
+          <div className="p-3 bg-black/40 border border-amber-500/20 rounded-2xl flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-amber-100">2. Aceder às minhas publicações</p>
+              <p className="text-[10px] text-gray-400">Permite ao Pay procurar posts ou executar pedidos de remoção.</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input 
+                type="checkbox"
+                defaultChecked={JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}').accessPosts || false}
+                onChange={(e) => {
+                  const current = JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}');
+                  current.accessPosts = e.target.checked;
+                  localStorage.setItem(`pay_permissions_${currentUser.id}`, JSON.stringify(current));
+                  triggerToast(e.target.checked ? 'Permissão 2 ATIVADA!' : 'Permissão 2 Desativada');
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-5 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#fbbf24]"></div>
+            </label>
+          </div>
+
+          {/* PERMISSION 3 */}
+          <div className="p-3 bg-black/40 border border-amber-500/20 rounded-2xl flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-amber-100">3. Monitorizar a minha conta</p>
+              <p className="text-[10px] text-gray-400">Permite ao Pay alterar o tema, silenciar alertas e otimizar a conta.</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input 
+                type="checkbox"
+                defaultChecked={JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}').monitorAccount || false}
+                onChange={(e) => {
+                  const current = JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}');
+                  current.monitorAccount = e.target.checked;
+                  localStorage.setItem(`pay_permissions_${currentUser.id}`, JSON.stringify(current));
+                  triggerToast(e.target.checked ? 'Permissão 3 ATIVADA!' : 'Permissão 3 Desativada');
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-5 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#fbbf24]"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
       {/* ACCOUNT ACTION TRIGGERS */}
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6 pb-6">
         {onLogout && (
           <button
             onClick={onLogout}
-            className="w-full sm:w-auto px-6 py-3 rounded-full bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-400 hover:text-red-300 font-orbitron font-extrabold text-xs tracking-widest transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 uppercase"
+            className="w-full sm:flex-1 px-8 py-4 rounded-2xl bg-red-600 hover:bg-red-500 border border-red-400 text-white font-orbitron font-black text-xs tracking-widest transition-all cursor-pointer shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 uppercase active:scale-95"
           >
-            <ShieldAlert className="w-4 h-4" /> SAIR DA CONTA
+            <ShieldAlert className="w-5 h-5 text-white" /> SAIR DA CONTA (LOGOUT)
           </button>
         )}
         <button
           onClick={() => setActivePopup('delete')}
-          className="w-full sm:w-auto px-6 py-3 rounded-full bg-red-600 hover:bg-red-500 text-white font-orbitron font-extrabold text-xs tracking-widest transition-all cursor-pointer shadow-lg shadow-red-500/20 uppercase flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-red-950/70 hover:bg-red-900 border border-red-500/40 text-red-300 font-orbitron font-extrabold text-xs tracking-widest transition-all cursor-pointer shadow-md uppercase flex items-center justify-center gap-2 active:scale-95"
         >
-          <Trash2 className="w-4 h-4" /> ELIMINAR CONTA DEFINITIVAMENTE
+          <Trash2 className="w-4 h-4 text-red-400" /> ELIMINAR CONTA
         </button>
       </div>
 

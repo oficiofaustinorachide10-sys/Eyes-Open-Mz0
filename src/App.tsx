@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Menu, Eye, Newspaper, Video, Calendar, Store, Users, Settings, 
   Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare,
-  Play, Pause, Mail, ArrowLeft, ArrowRight, Clock, ShieldAlert
+  Play, Pause, Mail, ArrowLeft, ArrowRight, Clock, ShieldAlert, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Post, Story, Comment, Notification, Friendship, ChatPermission, PublishLog } from './types';
@@ -29,6 +29,7 @@ import MusicView from './components/MusicView';
 import FontView from './components/FontView';
 import CinemaView from './components/CinemaView';
 import AbraView from './components/AbraView';
+import PayAssistantModal from './components/PayAssistantModal';
 import { FloatingSearch } from './components/FloatingSearch';
 import { UserAvatar } from './components/UserAvatar';
 import { THEME_CONFIGS, injectThemeVariables, ThemeConfig } from './utils/themeEngine';
@@ -636,19 +637,28 @@ export default function App() {
 
   const getLocalAssistantReply = (message: string): string => {
     const msg = message.toLowerCase();
-    if (msg.includes('olá') || msg.includes('oi') || msg.includes('bom dia') || msg.includes('boa tarde')) {
-      return 'Olá! Eu sou o assistente virtual do Eyes Open MZ. Como posso ajudar-te hoje com segurança cibernética ou com a nossa plataforma?';
+    if (msg.includes('olá') || msg.includes('oi') || msg.includes('bom dia') || msg.includes('boa tarde') || msg.includes('boa noite') || msg.includes('hey')) {
+      return 'Olá! Eu sou o Pay, o assistente virtual oficial do Eyes Open MZ! Estou aqui ligado e pronto para te ajudar. O que gostarias de saber sobre o site, os temas ou a tua conta?';
     }
-    if (msg.includes('senha') || msg.includes('password') || msg.includes('palavra-passe')) {
-      return 'Dicas de Segurança para Palavras-passe:\n1. Use pelo menos 12 caracteres.\n2. Misture letras maiúsculas, minúsculas, números e símbolos.\n3. Nunca use a mesma senha em vários sites.\n4. Altere sua senha imediatamente se suspeitar de vazamento.';
+    if (msg.includes('senha') || msg.includes('password') || msg.includes('palavra-passe') || msg.includes('recuperar')) {
+      return 'Para gerir ou alterar a tua palavra-passe:\n1. Podes recuperar a senha no ecrã de Login usando o botão "Esqueceu a Palavra-passe?".\n2. Para alterar estando ligado, vai a "A Minha Conta" -> "Alterar Palavra-passe".\n3. Usa senhas fortes com números, maiúsculas e símbolos para máxima proteção!';
     }
-    if (msg.includes('hack') || msg.includes('segurança') || msg.includes('cyber') || msg.includes('seguro')) {
-      return 'No Eyes Open MZ, a tua segurança é a nossa prioridade número um! Todas as comunicações de chat usam chaves de autorização temporárias e o feed 4D protege a tua privacidade regional.';
+    if (msg.includes('hack') || msg.includes('segurança') || msg.includes('cyber') || msg.includes('seguro') || msg.includes('proteger')) {
+      return 'No Eyes Open MZ, a tua segurança é levada ao mais alto nível! Todas as sessões usam encriptação JWT e tokens seguros. As tuas credenciais de acesso ficam protegidas e as tuas informações regionais mantêm-se estritamente confidenciais.';
     }
-    if (msg.includes('moçambique') || msg.includes('mz') || msg.includes('província') || msg.includes('maputo')) {
-      return 'O Eyes Open MZ foi desenhado especificamente para a comunidade moçambicana, conectando províncias de Maputo a Cabo Delgado com segurança máxima e baixa latência de dados!';
+    if (msg.includes('moçambique') || msg.includes('mz') || msg.includes('província') || msg.includes('maputo') || msg.includes('quelimane') || msg.includes('zambézia')) {
+      return 'O Eyes Open MZ foi desenhado especialmente para Moçambique! Conectamos todas as 11 províncias, de Maputo a Cabo Delgado e Zambézia, com baixa latência, feeds regionais e um ecossistema adaptado à nossa cultura.';
     }
-    return 'Obrigado pela tua mensagem! Estou a correr em modo local/offline seguro. Se precisas de suporte técnico ou queres reportar uma vulnerabilidade, podes fazê-lo diretamente nas definições da tua conta.';
+    if (msg.includes('tema') || msg.includes('eyes max') || msg.includes('cor') || msg.includes('celular') || msg.includes('marca')) {
+      return 'O Eyes Open MZ possui um sistema de temas inovador! Além do tema "EYES MAX" de alto luxo (âmbar e chocolate sem neons), o ecrã de Login reconhece automaticamente a marca do teu celular (Samsung, Apple, Xiaomi, Huawei, Tecno, Motorola, Pixel, OnePlus) e muda de cor para combinar perfeitamente com o teu telemóvel!';
+    }
+    if (msg.includes('publicar') || msg.includes('post') || msg.includes('foto') || msg.includes('vídeo') || msg.includes('publicação')) {
+      return 'Para criar uma nova publicação:\n1. Clica no botão "+" ou "Publicar" na navegação principal.\n2. Escolhe a categoria (Geral, Cultura, Notícias, Eventos).\n3. Adiciona foto ou texto e clica em "Publicar". A tua publicação ficará visível em tempo real no feed!';
+    }
+    if (msg.includes('quem') || msg.includes('criou') || msg.includes('dono') || msg.includes('desenvolvedor') || msg.includes('oficio') || msg.includes('rachide')) {
+      return 'O Eyes Open MZ e eu (Pay) fomos criados e desenvolvidos pelo Engenheiro Ofício Faustino Rachide, concebido para oferecer a melhor experiência digital e segura em Moçambique!';
+    }
+    return `Compreendido! Em relação a "${message}", estou à disposição para ajudar-te. Podes perguntar-me sobre a tua conta, publicação de fotos, troca de temas, verificação de e-mail ou funcionalidades do ecossistema Eyes Open MZ!`;
   };
 
   const handleSendAssistantMessage = async () => {
@@ -1238,14 +1248,34 @@ export default function App() {
     const nextStarred = !hasStarred;
     starredBy[currentUser.id] = nextStarred;
 
-    const nextStars = Object.values(starredBy).filter(Boolean).length;
+    const updatedRatings = p.ratings ? { ...p.ratings } : {};
+    if (nextStarred) {
+      if (!updatedRatings[currentUser.id]) {
+        updatedRatings[currentUser.id] = 5;
+      }
+    } else {
+      delete updatedRatings[currentUser.id];
+    }
+
+    const nextStars = Object.keys(updatedRatings).length || Object.values(starredBy).filter(Boolean).length;
 
     const updated: Post = {
       ...p,
       starredBy,
       starred: nextStarred,
-      stars: nextStars
+      stars: nextStars,
+      ratings: updatedRatings
     };
+
+    // Synchronously update local React state and local storage cache so UI never drops stars
+    setPosts(prev => {
+      const newPosts = prev.map(item => item.id === postId ? updated : item);
+      try {
+        localStorage.setItem('eo_cached_posts', JSON.stringify(newPosts));
+      } catch (e) {}
+      return newPosts;
+    });
+
     await dbUpdatePost(updated);
 
     if (currentUser && nextStarred && p.author.id !== currentUser.id) {
@@ -1274,64 +1304,65 @@ export default function App() {
     if (checkGuestRestriction()) return;
 
     try {
-      // 1. Verify unique vote in Firestore using combined ID
-      const alreadyVoted = await dbCheckUserVote(currentUser.id, postId);
-      if (alreadyVoted) {
-        alert('Você já avaliou esta publicação.');
-        return;
-      }
-
-      // 2. Find post to extract location securely (default to empty string if undefined)
       const p = posts.find(x => x.id === postId);
-      const locationVal = p?.location || '';
+      if (!p) return;
 
-      // 3. Create vote document in Firestore without any undefined fields
-      const success = await dbCreateUserVote(currentUser.id, postId, locationVal, ratingValue);
-      if (!success) {
-        return;
-      }
+      const updatedRatings = p.ratings ? { ...p.ratings } : {};
+      updatedRatings[currentUser.id] = ratingValue;
 
-      // 4. Update the Post's ratings object map in Firestore
-      if (p) {
-        const updatedRatings = p.ratings ? { ...p.ratings } : {};
-        updatedRatings[currentUser.id] = ratingValue;
+      const starredBy = p.starredBy ? { ...p.starredBy } : {};
+      starredBy[currentUser.id] = true;
 
-        const nextStars = Object.keys(updatedRatings).length;
+      const nextStars = Object.keys(updatedRatings).length;
 
-        const updatedPost: Post = {
-          ...p,
-          ratings: updatedRatings,
-          stars: nextStars,
-          starred: true
-        };
+      const updatedPost: Post = {
+        ...p,
+        ratings: updatedRatings,
+        starredBy,
+        stars: nextStars,
+        starred: true
+      };
 
-        await dbUpdatePost(updatedPost);
-
-        // Optional sound effect
+      // 1. Synchronously update local React state and local storage cache so UI keeps stars when exiting detail view
+      setPosts(prev => {
+        const newPosts = prev.map(item => item.id === postId ? updatedPost : item);
         try {
-          playStarSound();
+          localStorage.setItem('eo_cached_posts', JSON.stringify(newPosts));
         } catch (e) {}
+        return newPosts;
+      });
 
-        // Send a notification to the author
-        if (p.author.id !== currentUser.id) {
-          const notif: Notification = {
-            id: 'notif_rate_' + Math.random().toString(36).substring(2, 9),
-            recipientId: p.author.id,
-            title: 'Nova Avaliação ⭐',
-            text: `${currentUser.nickname} avaliou a sua publicação com ${ratingValue} estrelas!`,
-            type: 'star',
-            sender: {
-              id: currentUser.id,
-              name: currentUser.nickname,
-              avatar: currentUser.avatar
-            },
-            read: false,
-            targetId: p.id,
-            targetView: 'feed',
-            timestamp: Date.now()
-          };
-          await dbCreateNotification(notif).catch(console.error);
-        }
+      // 2. Persist vote in Firestore
+      const locationVal = p.location || '';
+      await dbCreateUserVote(currentUser.id, postId, locationVal, ratingValue);
+
+      // 3. Persist post update in Firestore
+      await dbUpdatePost(updatedPost);
+
+      // Optional sound effect
+      try {
+        playStarSound();
+      } catch (e) {}
+
+      // Send a notification to the author
+      if (p.author.id !== currentUser.id) {
+        const notif: Notification = {
+          id: 'notif_rate_' + Math.random().toString(36).substring(2, 9),
+          recipientId: p.author.id,
+          title: 'Nova Avaliação ⭐',
+          text: `${currentUser.nickname} avaliou a sua publicação com ${ratingValue} estrelas!`,
+          type: 'star',
+          sender: {
+            id: currentUser.id,
+            name: currentUser.nickname,
+            avatar: currentUser.avatar
+          },
+          read: false,
+          targetId: p.id,
+          targetView: 'feed',
+          timestamp: Date.now()
+        };
+        await dbCreateNotification(notif).catch(console.error);
       }
     } catch (err) {
       console.error('Error in handleRatePost:', err);
@@ -2017,7 +2048,7 @@ export default function App() {
       case 'cinema':
         return <CinemaView />;
       case 'abra-olhos':
-        return <AbraView />;
+        return <AbraView currentUser={currentUser} posts={posts} onNavigate={setActiveView} />;
       
       // CURATED ARTICLES LIST VIEW
       case 'artigos':
@@ -2340,10 +2371,55 @@ export default function App() {
       // PREFERENCES CONFIGURATION VIEW
       case 'config':
         return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)]">
-            <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center gap-2">
-              <Settings className="w-5 h-5 text-[var(--theme-accent)]" /> CONFIGURAÇÕES DO MOTOR DE ESTILO (THEMING)
+          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)] pb-48">
+            <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-[var(--theme-accent)]" /> CONFIGURAÇÕES DO SISTEMA E CONTA
+              </span>
+              <button
+                onClick={handleLogout}
+                className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-orbitron font-black text-[10px] tracking-widest transition-all cursor-pointer shadow-md shadow-red-600/30 flex items-center gap-1.5 uppercase active:scale-95 shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" /> SAIR DA CONTA
+              </button>
             </h2>
+
+            {/* Quick Session & Account Overview Block */}
+            <div className="bg-red-950/20 border border-red-500/30 rounded-3xl p-5 shadow-lg space-y-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <UserAvatar
+                    src={currentUser.avatar || "https://i.pravatar.cc/80?img=1"}
+                    status={true}
+                    nickname={currentUser.nickname}
+                    className="w-10 h-10 border-2 border-red-500/50"
+                  />
+                  <div>
+                    <h4 className="font-orbitron font-extrabold text-xs text-white uppercase tracking-wider">
+                      @{currentUser.nickname} ({currentUser.firstname || 'Utilizador'})
+                    </h4>
+                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                      {currentUser.email} • {currentUser.phone || 'Sem telefone'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => navigateToView('account')}
+                    className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-white font-orbitron font-extrabold text-[10px] tracking-wider transition-all cursor-pointer uppercase text-center"
+                  >
+                    Gerir Identidade
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="flex-1 sm:flex-none px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-orbitron font-black text-[10px] tracking-widest transition-all cursor-pointer shadow-md shadow-red-600/30 flex items-center justify-center gap-1.5 uppercase active:scale-95"
+                  >
+                    <LogOut className="w-3.5 h-3.5" /> Sair
+                  </button>
+                </div>
+              </div>
+            </div>
             
             <div className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl p-6 shadow-2xl space-y-6 text-left">
               
@@ -3165,7 +3241,7 @@ export default function App() {
       {/* ========================================== */}
       {/* 3. FLOATING "PAY" ASSISTANT LAUNCHER       */}
       {/* ========================================== */}
-      {(theme === 'eyes-max' || isUnverified) && !showPayAssistant && (
+      {!showPayAssistant && (
         <motion.button
           onClick={() => setShowPayAssistant(true)}
           initial={{ scale: 0, y: 50 }}
@@ -3197,108 +3273,33 @@ export default function App() {
       {/* ========================================== */}
       {/* 4. PAY ASSISTANT CHAT DIALOG CONTAINER    */}
       {/* ========================================== */}
-      <AnimatePresence>
-        {(theme === 'eyes-max' || isUnverified) && showPayAssistant && (
-          <motion.div
-            initial={{ opacity: 0, y: 80, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 80, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 20 }}
-            className={`fixed bottom-6 right-6 z-[45000] w-96 max-w-[calc(100vw-2rem)] h-[520px] max-h-[85vh] bg-[#140f0c] border rounded-3xl shadow-[0_16px_48px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden text-left ${
-              isUnverified ? 'border-red-500/45' : 'border-[#fbbf24]/30'
-            }`}
-          >
-            {/* Header */}
-            <div className="bg-[#1b1410] border-b border-[#fbbf24]/10 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#fbbf24] to-[#78350f] flex items-center justify-center border border-[#fbbf24]/20 shadow-md">
-                  <MessageSquare className="w-5 h-5 text-[#15110e]" />
-                </div>
-                <div>
-                  <h4 className="font-orbitron font-extrabold text-sm text-[#fbbf24] tracking-wide uppercase">
-                    Pay Assistant
-                  </h4>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                    <span className="text-[10px] text-amber-200/50 uppercase tracking-widest font-bold">Virtual</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setShowPayAssistant(false)}
-                  className="p-1.5 text-amber-500/50 hover:text-amber-400 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
-                >
-                  <X className="w-4.5 h-4.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Conversation Flow area */}
-            <div className="flex-grow p-4 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-amber-950 no-scrollbar">
-              {assistantMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs font-medium leading-relaxed shadow-sm ${
-                      msg.role === 'user'
-                        ? 'bg-[#fbbf24] text-[#15110e] rounded-br-none'
-                        : 'bg-[#1b1410] border border-amber-500/10 text-amber-100 rounded-bl-none'
-                    }`}
-                  >
-                    {msg.content.includes('[TUTORIAL_VIDEO]') ? (
-                      <div className="space-y-3">
-                        <p className="whitespace-pre-wrap">{msg.content.replace('[TUTORIAL_VIDEO]', '')}</p>
-                        <button
-                          onClick={() => setShowTutorialVideoModal(true)}
-                          className="w-full mt-2 py-2 px-4 bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 active:scale-95 text-black font-extrabold text-center rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all uppercase tracking-wider"
-                        >
-                          <Play className="w-4 h-4 text-black animate-pulse" /> Assistir ao Vídeo Tutorial do Pay 🎥
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {isAssistantTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-[#1b1410] border border-amber-500/10 text-amber-100 rounded-2xl rounded-bl-none px-4 py-2.5 flex items-center gap-1 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Form control bottom */}
-            <div className="p-3 bg-[#17120e] border-t border-[#fbbf24]/10 flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Pergunte ao Pay..."
-                value={assistantInput}
-                onChange={(e) => setAssistantInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSendAssistantMessage();
-                }}
-                disabled={isAssistantTyping}
-                className="flex-grow bg-[#100c09] border border-amber-500/10 hover:border-amber-500/25 focus:border-[#fbbf24]/40 rounded-xl px-3.5 py-2 text-xs text-amber-100 focus:outline-none placeholder-amber-500/30 transition-all duration-300"
-              />
-              <button
-                onClick={handleSendAssistantMessage}
-                disabled={isAssistantTyping || !assistantInput.trim()}
-                className="py-2 px-3.5 bg-gradient-to-r from-[#d97706] to-[#fbbf24] text-black text-xs font-bold rounded-xl transition-all hover:opacity-90 disabled:opacity-40 disabled:hover:opacity-40 cursor-pointer"
-              >
-                Enviar
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <PayAssistantModal
+        currentUser={currentUser}
+        isOpen={showPayAssistant}
+        onClose={() => setShowPayAssistant(false)}
+        onNavigateToRegister={() => {
+          setShowPayAssistant(false);
+          handleLogout();
+        }}
+        onExecuteCommand={(command, payload) => {
+          if (command === 'DELETE_POST') {
+            const userPosts = posts.filter(p => p.authorId === currentUser.id);
+            if (userPosts.length > 0) {
+              const latest = userPosts[0];
+              dbDeletePost(latest.id);
+            }
+          } else if (command === 'CHANGE_THEME') {
+            setThemeState('eyes-max');
+            localStorage.setItem('theme', 'eyes-max');
+            if (currentUser && currentUser.id !== 'guest') {
+              localStorage.setItem(`theme_user_${currentUser.id}`, 'eyes-max');
+            }
+          } else if (command === 'OPEN_MESSAGES') {
+            setActiveView('chat');
+          }
+        }}
+        posts={posts}
+      />
 
       {/* ========================================== */}
       {/* 5. WELCOME POPUP ALERT DIALOG FROM PAY    */}

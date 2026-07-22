@@ -207,6 +207,158 @@ export const DEVICE_BRANDS: Record<string, BrandTheme> = {
   }
 };
 
+export function BrandLogo({ brandKey, size = "w-7 h-7" }: { brandKey: string; size?: string }) {
+  switch (brandKey) {
+    case 'apple':
+      return (
+        <svg className={`${size} fill-current text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.7)]`} viewBox="0 0 170 170">
+          <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.84.13-9.64-1.9-14.41-6.1-3.23-2.76-7.1-7.44-11.62-14.04-6.09-8.83-10.89-18.72-14.41-29.67-3.52-10.95-5.28-21.65-5.28-32.1 0-12.21 2.87-22.56 8.6-31.06 5.73-8.5 13.3-12.79 22.7-12.87 4.71 0 9.87 1.25 15.48 3.75 5.61 2.5 9.4 3.79 11.38 3.87 1.73 0 5.69-1.33 11.87-3.99 6.18-2.66 11.33-3.87 15.48-3.63 10.22.62 18.27 4.41 24.15 11.37-9.08 5.5-13.52 13.17-13.32 23.01.2 9.84 4.88 17.65 14.03 23.42-2.12 6.22-4.99 12.37-8.6 18.45zm-23.75-99.39c0 5.68-2.03 11.13-6.1 16.36-4.07 5.23-9.17 8.4-15.3 9.5-.13-1.03-.2-1.92-.2-2.67 0-6.12 2.37-11.88 7.1-17.27 4.73-5.39 10.37-8.38 16.92-8.98.39 1.03.58 2.05.58 3.06z"/>
+        </svg>
+      );
+    case 'samsung':
+      return (
+        <div className="flex items-center justify-center font-orbitron font-black text-[10px] tracking-widest text-sky-400 bg-sky-950/90 border border-sky-400/60 px-2.5 py-1 rounded-lg uppercase italic shadow-[0_0_12px_rgba(56,189,248,0.4)] shrink-0 select-none">
+          SAMSUNG
+        </div>
+      );
+    case 'xiaomi':
+      return (
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#ff5500] to-[#ff7700] flex items-center justify-center text-white font-black font-sans text-xs tracking-tighter shadow-[0_0_12px_rgba(255,85,0,0.5)] shrink-0 border border-orange-300/40 select-none">
+          mi
+        </div>
+      );
+    case 'huawei':
+      return (
+        <svg className={`${size} fill-current text-rose-500 drop-shadow-[0_0_12px_rgba(244,63,94,0.7)]`} viewBox="0 0 100 100">
+          <g>
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(45 50 50)" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(90 50 50)" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(135 50 50)" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(180 50 50)" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(225 50 50)" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(270 50 50)" />
+            <path d="M50 15 C44 32 44 42 50 50 C56 42 56 32 50 15 Z" transform="rotate(315 50 50)" />
+          </g>
+        </svg>
+      );
+    case 'tecno':
+      return (
+        <div className="px-2 py-1 rounded-lg bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-black font-orbitron font-black text-[10px] tracking-wider uppercase shadow-[0_0_12px_rgba(52,211,153,0.5)] shrink-0 select-none">
+          HiOS
+        </div>
+      );
+    case 'motorola':
+      return (
+        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-700 to-indigo-600 border border-purple-300/60 flex items-center justify-center text-white font-black text-xs italic shadow-[0_0_12px_rgba(168,85,247,0.5)] shrink-0 select-none">
+          M
+        </div>
+      );
+    case 'pixel':
+      return (
+        <svg className={`${size} drop-shadow-[0_0_10px_rgba(45,212,191,0.5)]`} viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+      );
+    case 'oneplus':
+      return (
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-red-600 to-rose-500 border border-white/60 flex items-center justify-center text-white font-mono font-black text-xs shadow-[0_0_12px_rgba(239,68,68,0.5)] shrink-0 select-none">
+          1+
+        </div>
+      );
+    default:
+      return (
+        <div className="w-7 h-7 rounded-lg bg-neon-cyan/20 border border-neon-cyan flex items-center justify-center text-neon-cyan font-orbitron font-extrabold text-[10px] shadow-[0_0_12px_rgba(0,245,255,0.5)] shrink-0 select-none">
+          EO
+        </div>
+      );
+  }
+}
+
+export function playBrandChime(key: string) {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    const playNote = (freq: number, startTime: number, duration: number, type: OscillatorType = 'sine', volume = 0.15) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + startTime);
+      gain.gain.setValueAtTime(volume, ctx.currentTime + startTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + startTime);
+      osc.stop(ctx.currentTime + startTime + duration);
+    };
+
+    switch (key) {
+      case 'apple':
+        playNote(880, 0, 0.8, 'sine', 0.2); // A5
+        playNote(1318.51, 0.15, 1.2, 'sine', 0.25); // E6
+        playNote(1760, 0.35, 1.8, 'sine', 0.2); // A6
+        break;
+
+      case 'samsung':
+        playNote(523.25, 0, 0.4, 'triangle', 0.2); // C5
+        playNote(783.99, 0.12, 0.4, 'triangle', 0.2); // G5
+        playNote(1046.50, 0.24, 0.5, 'triangle', 0.25); // C6
+        playNote(1318.51, 0.38, 1.2, 'triangle', 0.3); // E6
+        break;
+
+      case 'xiaomi':
+        playNote(659.25, 0, 0.3, 'sine', 0.2); // E5
+        playNote(880, 0.1, 0.3, 'sine', 0.2); // A5
+        playNote(1108.73, 0.22, 1.0, 'sine', 0.25); // C#6
+        break;
+
+      case 'huawei':
+        playNote(220, 0, 1.5, 'triangle', 0.3); // A3 bass
+        playNote(440, 0.05, 1.2, 'sine', 0.2); // A4
+        playNote(880, 0.2, 1.5, 'sine', 0.25); // A5 bell
+        break;
+
+      case 'tecno':
+        playNote(587.33, 0, 0.25, 'sawtooth', 0.15); // D5
+        playNote(739.99, 0.08, 0.25, 'sawtooth', 0.15); // F#5
+        playNote(880, 0.16, 0.3, 'sawtooth', 0.18); // A5
+        playNote(1174.66, 0.26, 1.2, 'sine', 0.25); // D6
+        break;
+
+      case 'motorola':
+        playNote(659.25, 0, 0.2, 'sine', 0.2); // E5
+        playNote(987.77, 0.15, 0.2, 'sine', 0.2); // B5
+        playNote(1318.51, 0.3, 1.0, 'sine', 0.25); // E6
+        break;
+
+      case 'pixel':
+        playNote(392.00, 0, 0.3, 'sine', 0.2); // G4
+        playNote(523.25, 0.1, 0.3, 'sine', 0.2); // C5
+        playNote(659.25, 0.2, 0.3, 'sine', 0.2); // E5
+        playNote(783.99, 0.3, 1.0, 'sine', 0.25); // G5
+        break;
+
+      case 'oneplus':
+        playNote(440, 0, 0.15, 'triangle', 0.25);
+        playNote(880, 0.12, 0.2, 'triangle', 0.25);
+        playNote(1318.51, 0.25, 1.2, 'sine', 0.25);
+        break;
+
+      default:
+        playNote(587.33, 0, 0.3, 'sine', 0.2);
+        playNote(880, 0.15, 1.0, 'sine', 0.25);
+        break;
+    }
+  } catch (e) {
+    // Audio fallback
+  }
+}
+
 export function detectDeviceBrand(): string {
   if (typeof window === 'undefined') return 'default';
   const ua = (navigator.userAgent || '').toLowerCase();
@@ -231,18 +383,53 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoToSavedAccounts }: LoginViewProps) {
-  // Dynamic Mobile Device Brand Theme State
-  const [selectedBrandKey, setSelectedBrandKey] = useState<string>(() => detectDeviceBrand());
-  const [showBrandSelector, setShowBrandSelector] = useState<boolean>(false);
+  // Persistent & Mandatory Mobile Device Brand Theme State
+  const [selectedBrandKey, setSelectedBrandKey] = useState<string>(() => {
+    const saved = localStorage.getItem('user_chosen_device_brand');
+    if (saved && DEVICE_BRANDS[saved]) {
+      return saved;
+    }
+    return detectDeviceBrand();
+  });
+
+  const [hasChosenBrand, setHasChosenBrand] = useState<boolean>(() => {
+    return !!localStorage.getItem('user_chosen_device_brand');
+  });
+
+  const [showBrandSelector, setShowBrandSelector] = useState<boolean>(() => {
+    return !localStorage.getItem('user_chosen_device_brand');
+  });
+
+  const [activatingBrandKey, setActivatingBrandKey] = useState<string | null>(null);
+  const [activationProgress, setActivationProgress] = useState<number>(0);
   const [brandPulse, setBrandPulse] = useState<boolean>(false);
 
   const currentBrand = DEVICE_BRANDS[selectedBrandKey] || DEVICE_BRANDS.default;
 
   const handleSelectBrand = (key: string) => {
-    setSelectedBrandKey(key);
-    setShowBrandSelector(false);
-    setBrandPulse(true);
-    setTimeout(() => setBrandPulse(false), 700);
+    setActivatingBrandKey(key);
+    setActivationProgress(0);
+    playBrandChime(key);
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 5;
+      if (progress >= 100) {
+        clearInterval(interval);
+        setActivationProgress(100);
+        setTimeout(() => {
+          setSelectedBrandKey(key);
+          localStorage.setItem('user_chosen_device_brand', key);
+          setHasChosenBrand(true);
+          setShowBrandSelector(false);
+          setActivatingBrandKey(null);
+          setBrandPulse(true);
+          setTimeout(() => setBrandPulse(false), 800);
+        }, 300);
+      } else {
+        setActivationProgress(progress);
+      }
+    }, 90);
   };
 
   const [email, setEmail] = useState('');
@@ -493,7 +680,7 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
           className="mb-5 w-full flex justify-center"
         >
           <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl border ${currentBrand.badgeBorder} ${currentBrand.badgeBg} backdrop-blur-md shadow-xl transition-all duration-500`}>
-            <span className="text-xl animate-bounce">{currentBrand.icon}</span>
+            <BrandLogo brandKey={currentBrand.key} size="w-6 h-6" />
             <div className="flex flex-col text-left">
               <div className="flex items-center gap-1.5">
                 <span className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">DISPOSITIVO:</span>
@@ -505,14 +692,21 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                 Cor Auto: <span className="text-white font-extrabold">{currentBrand.colorName}</span>
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowBrandSelector(!showBrandSelector)}
-              className="ml-2 px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-[9px] font-orbitron font-extrabold text-white uppercase tracking-wider cursor-pointer transition-all border border-white/20 flex items-center gap-1.5 shadow-md active:scale-95"
-            >
-              <Palette className="w-3.5 h-3.5" />
-              <span>{showBrandSelector ? 'Fechar' : 'Mudar Marca'}</span>
-            </button>
+            {!hasChosenBrand ? (
+              <button
+                type="button"
+                onClick={() => setShowBrandSelector(true)}
+                className="ml-2 px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-[9px] font-orbitron font-extrabold text-white uppercase tracking-wider cursor-pointer transition-all border border-white/20 flex items-center gap-1.5 shadow-md active:scale-95"
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Escolher Marca</span>
+              </button>
+            ) : (
+              <div className="ml-2 px-2.5 py-1 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-[9px] font-orbitron font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 shadow-md select-none">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>🔒 Registado</span>
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -1010,39 +1204,52 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
         </div>
       </motion.div>
 
-      {/* BRAND SELECTOR MODAL / OVERLAY */}
-      {showBrandSelector && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[90000] flex items-center justify-center p-4">
+      {/* BRAND SELECTOR MODAL / OVERLAY (Shown only before brand is locked) */}
+      {showBrandSelector && !hasChosenBrand && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[99999] flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="bg-[#0b0c20] border border-white/20 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-[#0b0c20]/95 border border-white/25 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-[0_0_50px_rgba(0,245,255,0.25)] relative space-y-5 max-h-[92vh] overflow-y-auto scrollbar-thin scrollbar-thumb-cyan-500/20"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center text-white shadow-md">
-                  <Palette className="w-5 h-5 text-white" />
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-white/10 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg flex-shrink-0 mt-0.5">
+                  <Smartphone className="w-5 h-5 text-white animate-pulse" />
                 </div>
                 <div>
-                  <h3 className="font-orbitron font-extrabold text-sm text-white uppercase tracking-wider">
-                    Marcas de Celular & Temas
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-[9px] font-orbitron font-extrabold text-amber-300 uppercase tracking-wider">
+                      🔒 Escolha Definitiva do Dispositivo
+                    </span>
+                  </div>
+                  <h3 className="font-orbitron font-extrabold text-base md:text-lg text-white uppercase tracking-wider bg-gradient-to-r from-white via-cyan-200 to-white bg-clip-text text-transparent">
+                    Escolha a Marca do seu Celular
                   </h3>
-                  <p className="text-[10px] text-gray-400 font-bold">
-                    Selecione para alterar a cor e atmosfera do Login
+                  <p className="text-xs text-gray-300 font-medium leading-relaxed mt-1">
+                    Selecione a marca do seu telemóvel para ativar o logotipo animado, vinheta sonora e paleta de cores personalizada. <span className="text-amber-300 font-bold">Nota: Esta escolha será registada permanentemente para este dispositivo.</span>
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowBrandSelector(false)}
-                className="text-gray-400 hover:text-white p-1 text-xs font-bold cursor-pointer"
-              >
-                ✕
-              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            {/* Auto-detected brand badge callout */}
+            <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎯</span>
+                <span className="text-xs text-cyan-200 font-semibold">
+                  Marca detetada no seu navegador:
+                </span>
+              </div>
+              <span className="text-xs font-orbitron font-extrabold text-cyan-400 uppercase tracking-wider bg-cyan-500/20 px-2.5 py-1 rounded-lg border border-cyan-500/40">
+                {DEVICE_BRANDS[detectDeviceBrand()]?.name || 'SISTEMA UNIVERSAL'}
+              </span>
+            </div>
+
+            {/* Brand Cards Grid with Vector Logos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               {Object.values(DEVICE_BRANDS).map((brand) => {
                 const isSelected = selectedBrandKey === brand.key;
                 return (
@@ -1050,32 +1257,116 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                     key={brand.key}
                     type="button"
                     onClick={() => handleSelectBrand(brand.key)}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                    className={`p-3.5 rounded-2xl border text-left transition-all duration-300 flex items-center justify-between cursor-pointer group active:scale-95 ${
                       isSelected
-                        ? `${brand.badgeBorder} ${brand.badgeBg} shadow-lg ring-1 ${brand.badgeBorder}`
-                        : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-300'
+                        ? `${brand.badgeBorder} ${brand.badgeBg} shadow-xl ring-2 ring-white/20`
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/30 text-gray-200'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">{brand.icon}</span>
+                      <div className="w-10 h-10 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center p-1 group-hover:scale-110 transition-transform duration-300 shrink-0">
+                        <BrandLogo brandKey={brand.key} size="w-7 h-7" />
+                      </div>
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-orbitron font-extrabold text-white">
+                          <span className="text-xs md:text-sm font-orbitron font-extrabold text-white group-hover:text-cyan-300 transition-colors">
                             {brand.name}
                           </span>
                         </div>
-                        <p className="text-[9px] text-gray-400 font-bold">{brand.colorName}</p>
+                        <p className="text-[10px] text-gray-300 font-bold mt-0.5">{brand.colorName}</p>
                       </div>
                     </div>
-                    {isSelected && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                    <div className="text-[10px] text-cyan-400 font-orbitron font-extrabold uppercase tracking-wider bg-cyan-500/10 px-2 py-1 rounded-lg border border-cyan-500/30 group-hover:bg-cyan-500/20 transition-all">
+                      Ativar →
+                    </div>
                   </button>
                 );
               })}
             </div>
 
-            <div className="pt-2 text-center">
-              <span className="text-[10px] text-gray-400 font-semibold italic">
-                💡 O sistema detecta automaticamente a marca do celular quando acede no telemóvel!
+            <div className="pt-2 text-center border-t border-white/10">
+              <span className="text-[11px] text-gray-400 font-medium">
+                🔒 Após a confirmação com som e vinheta, a marca ficará registada e não será exibida novamente.
+              </span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* FULL-SCREEN ANIMATED BRAND ACTIVATION SPLASH OVERLAY */}
+      {activatingBrandKey && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[999999] flex flex-col items-center justify-center p-6 text-center select-none overflow-hidden">
+          {/* Glowing Radial Backdrop Orb */}
+          <div 
+            className="absolute w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse pointer-events-none"
+            style={{ backgroundColor: DEVICE_BRANDS[activatingBrandKey]?.particleColor || '#00f5ff' }}
+          />
+
+          <motion.div
+            initial={{ scale: 0.5, opacity: 0, y: 30 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, type: 'spring', damping: 15 }}
+            className="relative z-10 flex flex-col items-center max-w-md w-full space-y-6"
+          >
+            {/* Animated Brand Logo Container */}
+            <div 
+              className="w-28 h-28 rounded-3xl p-5 flex items-center justify-center border border-white/30 shadow-2xl relative"
+              style={{
+                backgroundColor: (DEVICE_BRANDS[activatingBrandKey]?.particleColor || '#00f5ff') + '25',
+                boxShadow: `0 0 70px ${DEVICE_BRANDS[activatingBrandKey]?.particleColor || '#00f5ff'}80`
+              }}
+            >
+              <div className="scale-150 transform animate-bounce">
+                <BrandLogo brandKey={activatingBrandKey} size="w-12 h-12" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[10px] font-orbitron font-extrabold text-white uppercase tracking-widest inline-block animate-pulse">
+                ⚡ Sincronizando Dispositivo
+              </span>
+              <h2 className="font-orbitron font-black text-2xl md:text-3xl text-white uppercase tracking-wider">
+                {DEVICE_BRANDS[activatingBrandKey]?.name}
+              </h2>
+              <p className="text-xs font-bold font-mono text-cyan-300 uppercase tracking-widest">
+                {DEVICE_BRANDS[activatingBrandKey]?.tagline}
+              </p>
+            </div>
+
+            {/* Audio Wave Visualizer Bars */}
+            <div className="flex items-center justify-center gap-1.5 h-10 py-1">
+              {[40, 80, 60, 100, 70, 90, 50, 85, 65].map((h, idx) => (
+                <motion.div
+                  key={idx}
+                  animate={{ height: ['20%', `${h}%`, '30%'] }}
+                  transition={{ repeat: Infinity, duration: 0.5, delay: idx * 0.07, repeatType: 'mirror' }}
+                  className="w-1.5 rounded-full"
+                  style={{ backgroundColor: DEVICE_BRANDS[activatingBrandKey]?.particleColor || '#00f5ff' }}
+                />
+              ))}
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full space-y-2">
+              <div className="flex justify-between items-center text-[10px] font-orbitron font-bold text-gray-300 uppercase">
+                <span>Aplicando Cores da Marca ao Login</span>
+                <span className="text-white">{activationProgress}%</span>
+              </div>
+              <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/10 p-0.5">
+                <div 
+                  className="h-full rounded-full transition-all duration-100"
+                  style={{ 
+                    width: `${activationProgress}%`,
+                    backgroundColor: DEVICE_BRANDS[activatingBrandKey]?.particleColor || '#00f5ff',
+                    boxShadow: `0 0 15px ${DEVICE_BRANDS[activatingBrandKey]?.particleColor || '#00f5ff'}`
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <span className="text-[11px] text-gray-300 font-semibold tracking-wide">
+                ✓ Dispositivo registado! A abrir o ecrã de Login...
               </span>
             </div>
           </motion.div>

@@ -317,12 +317,6 @@ export async function dbCheckUserVote(userId: string, postId: string): Promise<b
 export async function dbCreateUserVote(userId: string, postId: string, location: string | undefined, ratingValue: number): Promise<boolean> {
   try {
     const voteRef = doc(db, 'votes', `${userId}_${postId}`);
-    const voteSnap = await getDoc(voteRef);
-    if (voteSnap.exists()) {
-      alert('Você já avaliou esta publicação.');
-      return false;
-    }
-
     const voteData = sanitizeDoc({
       userId: userId || '',
       postId: postId || '',
@@ -331,7 +325,7 @@ export async function dbCreateUserVote(userId: string, postId: string, location:
       timestamp: Date.now()
     });
 
-    await setDoc(voteRef, voteData);
+    await setDoc(voteRef, voteData, { merge: true });
     return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `votes/${userId}_${postId}`);

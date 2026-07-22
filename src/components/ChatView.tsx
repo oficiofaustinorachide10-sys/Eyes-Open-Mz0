@@ -9,7 +9,7 @@ import {
   Hourglass, Phone, Video, FileUp, MapPin, Calendar, Award, Folder, Play, Check, CheckCheck, Mic, Square,
   X, HelpCircle, Briefcase, Radio, AlertTriangle, Sparkles, Star, Users, CheckCircle2, UserX, Plus,
   MoreVertical, Settings, ArrowLeft, VideoOff, Tv, Pin, Volume2, VolumeX, Trash2, Edit3, Download, Share2, Smile, MessageCircle,
-  Search, ShieldAlert, User as UserIcon, Palette
+  Search, ShieldAlert, User as UserIcon, Palette, Eye, Bell, Info, Paperclip, Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Friendship, ChatPermission } from '../types';
@@ -211,6 +211,23 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
+
+  // Stories / Status highlights state
+  const [userStories, setUserStories] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('eo_user_stories');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      { id: 's1', userId: 'u1', name: 'Constância', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100', text: 'Desenvolvimento e novidades da Eyes Open MZ! 🚀', image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400', time: 'Há 15 min' },
+      { id: 's2', userId: 'u2', name: 'Otall Lizy', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100', text: 'Projetos de alta performance na plataforma 💻', image: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400', time: 'Há 40 min' },
+      { id: 's3', userId: 'u3', name: 'Tânia Dha', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100', text: 'Sessão de fotos e design gráfico 📸', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400', time: 'Há 2 horas' }
+    ];
+  });
+  const [activeStoryViewer, setActiveStoryViewer] = useState<any | null>(null);
+  const [showAddStoryModal, setShowAddStoryModal] = useState<boolean>(false);
+  const [newStoryText, setNewStoryText] = useState<string>('');
+  const [newStoryImageUrl, setNewStoryImageUrl] = useState<string>('');
 
   // Group creation states
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -1167,136 +1184,215 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
         )}
       </AnimatePresence>
 
-      {/* GLOBAL CHAT VIEWS TOP HEADER */}
-      <div className="flex items-center justify-between bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-2xl px-4 py-2.5 shadow-md shrink-0 relative">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-[var(--theme-accent)]" />
+      {/* EYES OPEN MZ HEADER BAR */}
+      <header className="h-16 border-b border-gray-800/60 bg-[#131C31]/90 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center justify-between px-4 md:px-6 z-20 shrink-0 shadow-xl">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <Eye className="text-white w-5 h-5 animate-pulse" />
+          </div>
           <div>
-            <h2 className="font-orbitron font-extrabold text-xs tracking-widest uppercase text-[var(--theme-text-main)]">Central de Conversas</h2>
-            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">
-              Modo Layout: {chatLayoutTheme === 'normal' ? 'Normal (Mobile/Focado)' : 'Divisão (Split-View)'}
-            </p>
+            <h1 className="font-bold text-base md:text-lg tracking-wide bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
+              Eyes Open MZ
+            </h1>
+            <p className="text-[10px] md:text-xs text-gray-400 font-medium">Plataforma Social Inteligente</p>
           </div>
         </div>
 
-        {/* Action controls (Three-Dots Menu) */}
-        <div className="relative">
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="w-8 h-8 rounded-lg bg-[var(--theme-bg-hover)] hover:bg-[var(--theme-border)] border border-[var(--theme-border)] flex items-center justify-center cursor-pointer transition-all text-gray-400 hover:text-white animate-pulse"
-            title="Menu"
+        {/* Global Search Bar */}
+        <div className="hidden md:flex items-center bg-gray-900/80 border border-gray-700/50 rounded-full px-4 py-1.5 w-80 lg:w-96 focus-within:border-blue-500 transition-all shadow-inner">
+          <Search className="text-gray-400 mr-2.5 w-4 h-4" />
+          <input
+            type="text"
+            placeholder="Pesquisar conversas, amigos ou tags..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-transparent border-none outline-none text-xs w-full text-gray-200 placeholder-gray-500 font-medium"
+          />
+        </div>
+
+        {/* Action Controls & Notifications */}
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => setActiveTab('pedidos')}
+            className="w-9 h-9 rounded-xl bg-gray-800/60 hover:bg-gray-700 flex items-center justify-center text-gray-300 transition relative cursor-pointer"
+            title="Notificações & Pedidos"
           >
-            <MoreVertical className="w-4 h-4" />
+            <Bell className="w-4 h-4" />
+            {(incomingFriendRequestsCount + incomingChatRequestsCount) > 0 && (
+              <>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full animate-ping"></span>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full"></span>
+              </>
+            )}
           </button>
 
-          {/* Settings Menu Dropdown */}
-          <AnimatePresence>
-            {isMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute right-0 mt-2 w-64 bg-[#0a0a1a] border border-[var(--theme-border)] rounded-2xl p-3 shadow-2xl z-50 space-y-2.5 font-sans"
-              >
-                {/* Definições Option */}
-                <div 
-                  onClick={() => setIsDefinitionsOpen(!isDefinitionsOpen)}
-                  className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl cursor-pointer text-xs font-bold text-gray-200 uppercase tracking-wider transition-colors"
+          {/* Settings dropdown button */}
+          <div className="relative">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="w-9 h-9 rounded-xl bg-gray-800/60 hover:bg-gray-700 border border-gray-700/50 flex items-center justify-center cursor-pointer transition-all text-gray-300"
+              title="Menu Definições"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            <AnimatePresence>
+              {isMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-64 bg-[#0a0a1a] border border-white/10 rounded-2xl p-3 shadow-2xl z-50 space-y-2.5 font-sans"
                 >
-                  <span className="flex items-center gap-1.5">
-                    <Settings className="w-4 h-4 text-[var(--theme-accent)]" /> Definições
-                  </span>
-                  <span className="text-[9px] text-gray-500 font-mono">{isDefinitionsOpen ? '▾' : '▸'}</span>
-                </div>
-
-                {/* Submenu: Temas de Conversa */}
-                {isDefinitionsOpen && (
-                  <div className="border-t border-white/5 pt-2 pl-2 space-y-2">
-                    <p className="text-[9px] font-bold text-[var(--theme-accent)] uppercase tracking-wider">Temas de Conversa</p>
-                    
-                    <button
-                      onClick={() => {
-                        changeChatLayoutTheme('normal');
-                        setIsMenuOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-xl transition-all border text-xs ${
-                        chatLayoutTheme === 'normal'
-                          ? 'bg-[var(--theme-accent)]/10 border-[var(--theme-accent)] text-[var(--theme-accent)]'
-                          : 'bg-transparent border-white/5 text-gray-400 hover:border-white/20'
-                      }`}
-                    >
-                      <p className="font-bold">Tema 1: Normal (Focado)</p>
-                      <p className="text-[9px] text-gray-400 font-medium normal-case">Mobile/Focado: oculta a lista de utilizadores ao conversar.</p>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        changeChatLayoutTheme('division');
-                        setIsMenuOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-xl transition-all border text-xs ${
-                        chatLayoutTheme === 'division'
-                          ? 'bg-[var(--theme-accent)]/10 border-[var(--theme-accent)] text-[var(--theme-accent)]'
-                          : 'bg-transparent border-white/5 text-gray-400 hover:border-white/20'
-                      }`}
-                    >
-                      <p className="font-bold">Tema 2: Divisão (Split-View)</p>
-                      <p className="text-[9px] text-gray-400 font-medium normal-case">Split-View: lista e área de chat lado a lado.</p>
-                    </button>
+                  <div 
+                    onClick={() => setIsDefinitionsOpen(!isDefinitionsOpen)}
+                    className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl cursor-pointer text-xs font-bold text-gray-200 uppercase tracking-wider transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Settings className="w-4 h-4 text-blue-400" /> Definições
+                    </span>
+                    <span className="text-[9px] text-gray-500 font-mono">{isDefinitionsOpen ? '▾' : '▸'}</span>
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+
+                  {isDefinitionsOpen && (
+                    <div className="border-t border-white/5 pt-2 pl-2 space-y-2">
+                      <p className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">Modo de Layout</p>
+                      
+                      <button
+                        onClick={() => {
+                          changeChatLayoutTheme('normal');
+                          setIsMenuOpen(false);
+                        }}
+                        className={`w-full text-left p-2 rounded-xl transition-all border text-xs ${
+                          chatLayoutTheme === 'normal'
+                            ? 'bg-blue-500/10 border-blue-500 text-blue-400'
+                            : 'bg-transparent border-white/5 text-gray-400 hover:border-white/20'
+                        }`}
+                      >
+                        <p className="font-bold">Tema 1: Normal (Focado)</p>
+                        <p className="text-[9px] text-gray-400 font-medium normal-case">Mobile/Focado: oculta a lista de utilizadores ao conversar.</p>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          changeChatLayoutTheme('division');
+                          setIsMenuOpen(false);
+                        }}
+                        className={`w-full text-left p-2 rounded-xl transition-all border text-xs ${
+                          chatLayoutTheme === 'division'
+                            ? 'bg-blue-500/10 border-blue-500 text-blue-400'
+                            : 'bg-transparent border-white/5 text-gray-400 hover:border-white/20'
+                        }`}
+                      >
+                        <p className="font-bold">Tema 2: Divisão (Split-View)</p>
+                        <p className="text-[9px] text-gray-400 font-medium normal-case">Split-View: lista e área de chat lado a lado.</p>
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex items-center space-x-2 pl-2 border-l border-gray-800">
+            <UserAvatar 
+              src={currentUser.avatar} 
+              status={true} 
+              nickname={currentUser.nickname} 
+              className="w-9 h-9 rounded-xl object-cover border border-blue-500/30" 
+            />
+          </div>
         </div>
-      </div>
+      </header>
 
       {/* Main columns wrapper */}
       <div className="flex-grow flex flex-col md:flex-row gap-4 h-full overflow-hidden">
         
-        {/* COLUMN 1: SIDEBAR USER LIST & REQUESTS */}
+        {/* COLUMN 1: SIDEBAR USER LIST, STORIES & REQUESTS */}
         {(chatLayoutTheme === 'division' || !isMobileChatActive) && (
-          <div className="w-full md:w-80 shrink-0 bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl flex flex-col overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
-        
-        {/* Sidebar tabs */}
-        <div className="grid grid-cols-3 border-b border-[var(--theme-border)] font-orbitron font-extrabold text-[10px] tracking-widest text-center select-none shrink-0">
-          <button
-            onClick={() => setActiveTab('conversas')}
-            className={`py-3.5 flex flex-col items-center justify-center gap-1 transition-all uppercase cursor-pointer ${
-              activeTab === 'conversas' 
-                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-neon-cyan text-neon-cyan font-black' 
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            Comunidade
-          </button>
-          <button
-            onClick={() => setActiveTab('pedidos')}
-            className={`py-3.5 flex flex-col items-center justify-center gap-1 transition-all uppercase cursor-pointer relative ${
-              activeTab === 'pedidos' 
-                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-neon-magenta text-neon-magenta font-black' 
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            {(incomingFriendRequestsCount + incomingChatRequestsCount) > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-neon-magenta animate-ping" />
-            )}
-            <UserPlus className="w-3.5 h-3.5" />
-            Pedidos
-          </button>
-          <button
-            onClick={() => setActiveTab('grupos')}
-            className={`py-3.5 flex flex-col items-center justify-center gap-1 transition-all uppercase cursor-pointer ${
-              activeTab === 'grupos' 
-                ? 'bg-[var(--theme-bg-hover)] border-b-2 border-purple-500 text-purple-400 font-black' 
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            Grupos
-          </button>
-        </div>
+          <aside className="w-full md:w-96 shrink-0 border border-gray-800/60 flex flex-col bg-[#131C31]/80 backdrop-blur-xl rounded-3xl overflow-hidden h-[45vh] md:h-full shadow-2xl relative">
+            
+            {/* Seção de Stories / Status em Círculo */}
+            <div className="p-3.5 border-b border-gray-800/40">
+              <div className="flex justify-between items-center mb-2.5">
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Destaques & Conexões</h2>
+                <button 
+                  onClick={() => setShowAddStoryModal(true)}
+                  className="text-xs text-blue-400 hover:underline cursor-pointer font-semibold"
+                >
+                  Ver todos
+                </button>
+              </div>
+              <div className="flex space-x-3 overflow-x-auto pb-1 scrollbar-none">
+                {/* Botão Adicionar Story */}
+                <div 
+                  onClick={() => setShowAddStoryModal(true)}
+                  className="flex flex-col items-center flex-shrink-0 cursor-pointer group"
+                >
+                  <div className="w-[52px] h-[52px] rounded-2xl bg-gray-800/80 border-2 border-dashed border-gray-600 flex items-center justify-center group-hover:border-blue-500 transition">
+                    <Plus className="text-blue-400 w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] mt-1 text-gray-400 font-medium">Seu Status</span>
+                </div>
+
+                {/* Dynamic User Stories */}
+                {userStories.map((story) => (
+                  <div 
+                    key={story.id} 
+                    onClick={() => setActiveStoryViewer(story)}
+                    className="flex flex-col items-center flex-shrink-0 cursor-pointer group"
+                  >
+                    <div className="w-[52px] h-[52px] rounded-2xl p-[2px] bg-gradient-to-tr from-blue-500 to-purple-600 shadow-md group-hover:scale-105 transition-transform">
+                      <img 
+                        src={story.avatar} 
+                        className="w-full h-full object-cover rounded-[13px] border-2 border-[#090D16]" 
+                        alt={story.name} 
+                      />
+                    </div>
+                    <span className="text-[10px] mt-1 text-gray-300 truncate w-14 text-center font-medium">{story.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex px-3 py-2 space-x-1.5 border-b border-gray-800/40 overflow-x-auto">
+              <button 
+                onClick={() => setActiveTab('conversas')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'conversas' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
+                    : 'bg-gray-800/60 hover:bg-gray-700 text-gray-400'
+                }`}
+              >
+                Tudo
+              </button>
+              <button 
+                onClick={() => setActiveTab('pedidos')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer relative ${
+                  activeTab === 'pedidos' 
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' 
+                    : 'bg-gray-800/60 hover:bg-gray-700 text-gray-400'
+                }`}
+              >
+                Não lidas
+                {(incomingFriendRequestsCount + incomingChatRequestsCount) > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 bg-blue-500/20 text-blue-400 rounded-full text-[10px]">
+                    {incomingFriendRequestsCount + incomingChatRequestsCount}
+                  </span>
+                )}
+              </button>
+              <button 
+                onClick={() => setActiveTab('grupos')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'grupos' 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' 
+                    : 'bg-gray-800/60 hover:bg-gray-700 text-gray-400'
+                }`}
+              >
+                Grupos
+              </button>
+            </div>
 
         {/* Tab 1 content: Comunidade (Conversas ativas) */}
         {activeTab === 'conversas' && (
@@ -1381,17 +1477,17 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                   return (
                     <div
                       key={u.id}
-                      className={`p-2.5 rounded-2xl border transition-all relative flex flex-col gap-1 hover:bg-[var(--theme-bg-hover)] group ${
+                      className={`p-3 rounded-2xl border transition-all relative flex flex-col gap-1 cursor-pointer group ${
                         unreadCount > 0 
-                          ? 'border-[#00ff66]/60 bg-[#00ff66]/5 shadow-[0_0_12px_rgba(0,255,102,0.05)] animate-pulse' 
+                          ? 'border-blue-500/60 bg-blue-500/10 shadow-lg shadow-blue-500/20 animate-pulse' 
                           : isSelected 
-                            ? 'bg-[var(--theme-bg-hover)] border-neon-cyan/40 shadow-lg shadow-neon-cyan/5' 
-                            : 'bg-black/10 border-white/5'
+                            ? 'bg-blue-600/10 border-blue-500/30 shadow-lg shadow-blue-500/10 text-white' 
+                            : 'bg-gray-800/40 hover:bg-gray-800/80 border-gray-700/40'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2.5">
                         <div 
-                          className="flex items-center gap-2.5 min-w-0 cursor-pointer flex-grow"
+                          className="flex items-center gap-3 min-w-0 flex-grow"
                           onClick={() => {
                             setSelectedChatId(u.id);
                             setIsMobileChatActive(true);
@@ -1402,10 +1498,10 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                               src={u.avatar} 
                               status={isUserOnline(u)} 
                               nickname={u.nickname} 
-                              className="w-9 h-9" 
+                              className="w-10 h-10 rounded-xl" 
                             />
                             {isPinned && (
-                              <div className="absolute -top-1 -left-1 bg-neon-cyan text-black p-0.5 rounded-full border border-black shadow">
+                              <div className="absolute -top-1 -left-1 bg-blue-500 text-white p-0.5 rounded-full border border-black shadow">
                                 <Pin className="w-2.5 h-2.5 rotate-45" />
                               </div>
                             )}
@@ -1413,13 +1509,20 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
-                              <p className="text-xs font-bold text-white truncate group-hover:text-neon-cyan transition-colors">{u.nickname}</p>
-                              <span className="text-[9px] text-gray-500 font-medium whitespace-nowrap">{lastMsgTime}</span>
+                              <p className="text-xs font-bold text-white truncate group-hover:text-blue-400 transition-colors">{u.nickname}</p>
+                              <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">{lastMsgTime}</span>
                             </div>
 
-                            <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5 leading-relaxed">
-                              {lastMsgText}
-                            </p>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <p className="text-[11px] text-gray-400 font-medium truncate leading-relaxed">
+                                {lastMsgText}
+                              </p>
+                              {unreadCount > 0 && (
+                                <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ml-1">
+                                  {unreadCount}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -1886,7 +1989,7 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
             </div>
           </div>
         )}
-      </div>
+      </aside>
       )}
 
       {/* COLUMN 2: ACTIVE CHAT PANEL */}
@@ -2627,19 +2730,19 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                         <img
                           src={msg.sender.avatar || "https://i.pravatar.cc/80?img=1"}
                           alt={msg.sender.name}
-                          className="w-8 h-8 rounded-full border border-[var(--theme-border)] object-cover shrink-0"
+                          className="w-8 h-8 rounded-xl border border-gray-700 object-cover shrink-0"
                         />
                         <div className="space-y-1">
-                          <div className={`flex items-center gap-1.5 text-[10px] text-gray-500 ${isMe ? 'justify-end' : ''}`}>
-                            <span className="font-bold text-[var(--theme-accent)]">{msg.sender.name}</span>
-                            <span className="flex items-center gap-0.5">
+                          <div className={`flex items-center gap-1.5 text-[10px] text-gray-400 ${isMe ? 'justify-end' : ''}`}>
+                            <span className="font-bold text-blue-400">{msg.sender.name}</span>
+                            <span className="flex items-center gap-0.5 text-gray-500">
                               <Clock className="w-2.5 h-2.5" />{' '}
                               {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             {isMe && (
                               <span className="flex items-center ml-1">
                                 {msg.status === 'read' ? (
-                                  <CheckCheck className="w-3.5 h-3.5 text-neon-cyan" title="Mensagem lida pelo destinatário" />
+                                  <CheckCheck className="w-3.5 h-3.5 text-blue-400" title="Mensagem lida pelo destinatário" />
                                 ) : msg.status === 'delivered' ? (
                                   <CheckCheck className="w-3.5 h-3.5 text-gray-500" title="Mensagem entregue no dispositivo" />
                                 ) : (
@@ -2653,31 +2756,31 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                           {msg.messageType === 'audio' ? (
                             <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed font-semibold relative ${
                               isMe 
-                                ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
-                                : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
+                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-tr-none shadow-lg shadow-blue-500/20 font-bold' 
+                                : 'bg-gray-800/80 border border-gray-700/40 text-gray-100 rounded-tl-none font-medium'
                             }`}>
                               <div className="flex flex-col gap-2 min-w-[200px]">
                                 <div className="flex items-center gap-2">
-                                  <Mic className="w-4 h-4 text-red-400 shrink-0" />
-                                  <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">Gravação de Voz ({msg.audioDuration}s)</span>
+                                  <Mic className="w-4 h-4 text-red-400 shrink-0 animate-pulse" />
+                                  <span className="text-[10px] uppercase font-black tracking-wider text-gray-300">Gravação de Voz ({msg.audioDuration}s)</span>
                                 </div>
                                 <audio src={msg.audioUrl} controls className="w-full h-8 outline-none filter invert brightness-200" />
                                 {msg.transcribedText && (
                                   <div className="bg-black/20 border border-white/5 rounded-lg p-2 mt-1 text-[11px] text-gray-300">
-                                    <p className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">Transcrição Automática:</p>
+                                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Transcrição Automática:</p>
                                     <p className="italic">"{msg.transcribedText}"</p>
                                   </div>
                                 )}
                               </div>
                             </div>
                           ) : msg.messageType === 'text' ? (
-                            <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed font-semibold relative ${
+                            <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed font-medium relative ${
                               isMe 
-                                ? 'bg-[var(--theme-accent)] text-white rounded-tr-none font-bold shadow-sm' 
-                                : 'bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] text-[var(--theme-text-main)] rounded-tl-none font-medium'
+                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-tr-none font-bold shadow-lg shadow-blue-500/20' 
+                                : 'bg-gray-800/80 border border-gray-700/40 text-gray-100 rounded-tl-none'
                             } ${msg.text?.includes('@' + currentUser.nickname) ? 'border-2 border-red-500 animate-pulse bg-red-500/10 text-red-200' : ''}`}>
                               {msg.text?.includes('@' + currentUser.nickname) && (
-                                <div className="text-[9px] font-orbitron font-extrabold text-red-400 mb-1 tracking-widest uppercase animate-pulse">
+                                <div className="text-[9px] font-bold text-red-400 mb-1 tracking-widest uppercase animate-pulse">
                                   🚨 CHAMANDO VOCÊ (MENÇÃO)
                                 </div>
                               )}
@@ -2997,30 +3100,66 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                   )}
 
                   {/* Message submit form */}
-                  <form onSubmit={handleSendMessage} className="flex gap-2">
+                  <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                    {/* Attachment + button */}
+                    <button
+                      type="button"
+                      onClick={() => setSimulationModal({ type: 'file_share', targetUser: activeChatUser })}
+                      className="w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700/50 text-gray-300 flex items-center justify-center cursor-pointer transition shrink-0"
+                      title="Anexar Ficheiro / Recurso"
+                    >
+                      <Plus className="w-4 h-4 text-blue-400" />
+                    </button>
+
+                    {/* Image attachment button */}
+                    <button
+                      type="button"
+                      onClick={() => setSimulationModal({ type: 'file_share', targetUser: activeChatUser })}
+                      className="w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700/50 text-gray-300 flex items-center justify-center cursor-pointer transition shrink-0"
+                      title="Enviar Imagem ou Foto"
+                    >
+                      <ImageIcon className="w-4 h-4 text-purple-400" />
+                    </button>
+
+                    {/* Mic button */}
                     <button
                       type="button"
                       onClick={startRecording}
                       disabled={isRecording || !!recordedBlob}
-                      className="w-12 h-12 rounded-xl bg-gray-500/10 hover:bg-red-500/20 border border-white/5 hover:border-red-500/30 text-gray-400 hover:text-red-400 flex items-center justify-center cursor-pointer active:scale-95 transition-all shrink-0 disabled:opacity-30 disabled:pointer-events-none"
+                      className="w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-red-500/20 border border-gray-700/50 hover:border-red-500/40 text-gray-300 hover:text-red-400 flex items-center justify-center cursor-pointer transition shrink-0 disabled:opacity-30 disabled:pointer-events-none"
                       title="Gravar Mensagem de Voz"
                     >
-                      <Mic className="w-5 h-5" />
+                      <Mic className="w-4 h-4 text-red-400" />
                     </button>
-                    <input
-                      type="text"
-                      value={inputText}
-                      onChange={(e) => handleInputChange(e.target.value)}
-                      placeholder="Escreva a sua mensagem privada..."
-                      disabled={isRecording || !!recordedBlob}
-                      className="flex-grow bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--theme-accent)] text-[var(--theme-text-main)] placeholder:text-gray-500 font-semibold disabled:opacity-50"
-                    />
+
+                    {/* Text Input */}
+                    <div className="relative flex-grow">
+                      <input
+                        type="text"
+                        value={inputText}
+                        onChange={(e) => handleInputChange(e.target.value)}
+                        placeholder="Escreva uma mensagem..."
+                        disabled={isRecording || !!recordedBlob}
+                        className="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500 text-gray-100 placeholder:text-gray-500 font-medium disabled:opacity-50 pr-9"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-yellow-400 transition cursor-pointer"
+                        title="Emojis"
+                      >
+                        <Smile className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Send Button */}
                     <button
                       type="submit"
-                      disabled={isRecording || !!recordedBlob}
-                      className="w-12 h-12 rounded-xl bg-[var(--theme-accent)] hover:opacity-90 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-sm shrink-0 disabled:opacity-50"
+                      disabled={isRecording || !!recordedBlob || !inputText.trim()}
+                      className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-purple-600 hover:opacity-95 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-lg shadow-blue-500/25 shrink-0 disabled:opacity-40 disabled:pointer-events-none"
+                      title="Enviar Mensagem"
                     >
-                      <Send className="w-5 h-5 text-white" />
+                      <Send className="w-4 h-4 text-white" />
                     </button>
                   </form>
                 </div>
@@ -3208,6 +3347,183 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                   )}
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* INTERACTIVE STORY VIEWER MODAL */}
+      <AnimatePresence>
+        {activeStoryViewer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-[#131C31] border border-blue-500/30 rounded-3xl p-5 shadow-2xl text-center space-y-4 overflow-hidden"
+            >
+              {/* Progress bar animation indicator */}
+              <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 5, ease: "linear" }}
+                  onAnimationComplete={() => setActiveStoryViewer(null)}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 h-full"
+                />
+              </div>
+
+              {/* Story Header */}
+              <div className="flex items-center justify-between text-left border-b border-gray-800 pb-3">
+                <div className="flex items-center space-x-3">
+                  <img src={activeStoryViewer.avatar} className="w-10 h-10 rounded-xl object-cover border border-blue-500/40" alt={activeStoryViewer.name} />
+                  <div>
+                    <p className="font-bold text-xs text-white">{activeStoryViewer.name}</p>
+                    <p className="text-[10px] text-gray-400">{activeStoryViewer.time}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveStoryViewer(null)}
+                  className="w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center cursor-pointer transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Story Content */}
+              <div className="space-y-3 py-2">
+                {activeStoryViewer.image && (
+                  <img src={activeStoryViewer.image} className="w-full max-h-64 object-cover rounded-2xl border border-gray-700/50 shadow-md" alt="Story" />
+                )}
+                <p className="text-sm text-gray-100 font-medium leading-relaxed px-2">
+                  "{activeStoryViewer.text}"
+                </p>
+              </div>
+
+              {/* Reply Input */}
+              <div className="pt-2 border-t border-gray-800 flex items-center space-x-2">
+                <input
+                  type="text"
+                  placeholder={`Responder a ${activeStoryViewer.name}...`}
+                  className="flex-grow bg-gray-900 border border-gray-700/60 rounded-xl px-3.5 py-2 text-xs text-gray-200 outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={() => {
+                    alert(`Mensagem enviada a ${activeStoryViewer.name}!`);
+                    setActiveStoryViewer(null);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer"
+                >
+                  Enviar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ADD NEW STORY MODAL */}
+      <AnimatePresence>
+        {showAddStoryModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-[#131C31] border border-blue-500/30 rounded-3xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-400" /> Publicar no Status & Destaques
+                </h3>
+                <button
+                  onClick={() => setShowAddStoryModal(false)}
+                  className="w-8 h-8 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Texto / Legenda do Destaque:</label>
+                  <textarea
+                    value={newStoryText}
+                    onChange={(e) => setNewStoryText(e.target.value)}
+                    placeholder="O que está a acontecer hoje no seu dia?"
+                    className="w-full bg-gray-900 border border-gray-700/60 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500 h-24 resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">URL da Imagem (Opcional):</label>
+                  <input
+                    type="text"
+                    value={newStoryImageUrl}
+                    onChange={(e) => setNewStoryImageUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full bg-gray-900 border border-gray-700/60 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Preset image selector suggestions */}
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Escolher do Álbum:</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400',
+                      'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400',
+                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'
+                    ].map((img, idx) => (
+                      <img
+                        key={idx}
+                        src={img}
+                        onClick={() => setNewStoryImageUrl(img)}
+                        className={`h-16 w-full object-cover rounded-xl cursor-pointer border-2 transition ${
+                          newStoryImageUrl === img ? 'border-blue-500 scale-105' : 'border-gray-700 hover:border-blue-400'
+                        }`}
+                        alt="Preset"
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    if (!newStoryText.trim()) return alert('Insira um texto para o seu destaque!');
+                    const storyObj = {
+                      id: 'story_' + Date.now(),
+                      userId: currentUser.id,
+                      name: currentUser.nickname,
+                      avatar: currentUser.avatar || 'https://i.pravatar.cc/80?img=1',
+                      text: newStoryText,
+                      image: newStoryImageUrl || undefined,
+                      time: 'Agora'
+                    };
+                    const updated = [storyObj, ...userStories];
+                    setUserStories(updated);
+                    localStorage.setItem('eo_user_stories', JSON.stringify(updated));
+                    setShowAddStoryModal(false);
+                    setNewStoryText('');
+                    setNewStoryImageUrl('');
+                  }}
+                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/25 hover:opacity-95 transition cursor-pointer uppercase tracking-wider"
+                >
+                  Publicar Status
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

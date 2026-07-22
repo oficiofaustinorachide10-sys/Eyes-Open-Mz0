@@ -67,14 +67,14 @@ export default function Sidebar({
   };
 
   const content = (
-    <div className="flex flex-col h-full bg-[#08081a]/95 border-r border-neon-cyan/20 p-6 font-rajdhani text-white select-none">
+    <div className="flex flex-col h-full overflow-y-auto no-scrollbar bg-[#08081a]/95 border-r border-neon-cyan/20 p-5 font-rajdhani text-white select-none pb-12">
       {/* Brand logo */}
-      <div className="flex flex-col items-center mb-8 border-b border-neon-cyan/10 pb-6 text-center animate-pulse-slow">
-        <LeafLogo className="w-14 h-14 mb-2" />
-        <h2 className="font-orbitron font-extrabold text-2xl tracking-wider bg-gradient-to-r from-neon-cyan to-neon-magenta bg-clip-text text-transparent glow-text-cyan">
+      <div className="flex flex-col items-center mb-6 border-b border-neon-cyan/10 pb-4 text-center animate-pulse-slow shrink-0">
+        <LeafLogo className="w-12 h-12 mb-1.5" />
+        <h2 className="font-orbitron font-extrabold text-xl tracking-wider bg-gradient-to-r from-neon-cyan to-neon-magenta bg-clip-text text-transparent glow-text-cyan">
           OPEN MZ
         </h2>
-        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
+        <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
           SUA VISÃO É A NOSSA MISSÃO
         </p>
       </div>
@@ -82,7 +82,7 @@ export default function Sidebar({
       {/* Profile summary */}
       <div 
         onClick={() => handleItemClick('profile')} 
-        className="flex items-center gap-3 bg-[#111130]/60 hover:bg-[#151540] border border-neon-cyan/15 rounded-2xl p-3 mb-6 transition-all duration-300 cursor-pointer"
+        className="flex items-center gap-3 bg-[#111130]/60 hover:bg-[#151540] border border-neon-cyan/15 rounded-2xl p-3 mb-4 transition-all duration-300 cursor-pointer shrink-0"
       >
         <UserAvatar 
           src={currentUser.avatar || "https://i.pravatar.cc/100?img=1"} 
@@ -101,7 +101,7 @@ export default function Sidebar({
       </div>
 
       {/* Main menu navigation links */}
-      <nav className="flex-1 space-y-1 overflow-y-auto no-scrollbar pr-1 max-h-[60vh]">
+      <nav className="space-y-1 pr-1 mb-4">
         {menuItems.map((item) => {
           const isActive = activeView === item.id;
           const Icon = item.icon;
@@ -277,9 +277,9 @@ export default function Sidebar({
 
         <button
           onClick={onLogout}
-          className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-950/30 border border-red-500/20 hover:border-red-500 hover:bg-red-950/50 text-red-400 font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 py-3 bg-red-600/90 hover:bg-red-600 border border-red-500 text-white font-orbitron font-black text-xs tracking-widest rounded-xl transition-all cursor-pointer shadow-lg shadow-red-600/30 active:scale-95 uppercase"
         >
-          <LogOut className="w-4 h-4" /> SAIR DA CONTA
+          <LogOut className="w-4 h-4 text-white" /> SAIR DA CONTA
         </button>
       </div>
     </div>
