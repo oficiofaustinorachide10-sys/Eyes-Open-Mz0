@@ -977,20 +977,30 @@ export default function ProfileView({
               
               {/* Conditional Action buttons based on 3-state relation engine */}
               {isOwner ? (
-                <button 
-                  onClick={() => {
-                    if (isUnverified) {
-                      if (onUnverifiedClick) {
-                        onUnverifiedClick();
+                <div className="flex flex-wrap gap-2 justify-center md:justify-start items-center">
+                  <button 
+                    onClick={() => {
+                      if (isUnverified) {
+                        if (onUnverifiedClick) {
+                          onUnverifiedClick();
+                        }
+                        return;
                       }
-                      return;
-                    }
-                    setIsEditing(true);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-400 text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer self-center md:self-start shadow-sm"
-                >
-                  <Edit3 className="w-3.5 h-3.5" /> Editar Registo
-                </button>
+                      setIsEditing(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-400 text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Editar Registo
+                  </button>
+                  {onLogout && (
+                    <button
+                      onClick={onLogout}
+                      className="px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-400 hover:text-red-300 text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" /> Sair da Conta
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-wrap gap-2 justify-center md:justify-start items-center">
                   {/* Stranger connects CTA */}

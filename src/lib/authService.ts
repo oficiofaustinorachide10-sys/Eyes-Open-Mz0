@@ -670,6 +670,68 @@ export async function authResetPassword(email: string, newPassword: any, resetTo
   return { success: true };
 }
 
+export async function authGoogleLoginWithEmail(googleEmail: string, googleDisplayName?: string, photoURL?: string): Promise<{ user: User; token: string }> {
+  const emailClean = googleEmail.trim().toLowerCase();
+  if (!emailClean || !emailClean.includes('@')) {
+    throw new Error('Por favor introduza um e-mail válido do Google.');
+  }
+
+  const usersCol = collection(db, 'users');
+  const q = query(usersCol, where('email', '==', emailClean));
+  const snap = await getDocs(q);
+
+  let finalUser: User;
+
+  if (!snap.empty) {
+    const userDoc = snap.docs[0];
+    finalUser = userDoc.data() as User;
+    if (!finalUser.isVerified) {
+      finalUser.isVerified = true;
+      await setDoc(doc(db, 'users', finalUser.id), { ...finalUser, isVerified: true });
+    }
+  } else {
+    const fullname = googleDisplayName || emailClean.split('@')[0];
+    const nameParts = fullname.split(' ');
+    const firstname = nameParts[0] || 'Utilizador';
+    const surname = nameParts.slice(1).join(' ') || 'Google';
+    const nickname = emailClean.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + '_' + Math.random().toString(36).substring(2, 5);
+
+    const userId = 'google_' + btoa(emailClean).replace(/=/g, '').substring(0, 15);
+    const newUser: User = {
+      id: userId,
+      phone: '',
+      email: emailClean,
+      fullname,
+      firstname,
+      surname,
+      nickname,
+      password: 'google_auth_placeholder',
+      province: 'Maputo',
+      district: 'Maputo',
+      created: new Date().toISOString(),
+      avatar: photoURL || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150`,
+      stats: { likes: 0, posts: 0, friends: 0 },
+      nameEditDate: null,
+      isVIP: false,
+      isVerified: true,
+      lastReadChatTimestamp: 0,
+      lastReadNotificationsTimestamp: 0,
+      mutedNotifications: false
+    };
+
+    await setDoc(doc(db, 'users', userId), newUser);
+    finalUser = newUser;
+  }
+
+  const tokenPayload = { id: finalUser.id, nickname: finalUser.nickname };
+  const token = btoa(JSON.stringify(tokenPayload));
+
+  const clientUser = { ...finalUser };
+  delete clientUser.password;
+
+  return { user: clientUser, token };
+}
+
 export async function authGoogleLogin(): Promise<{ user: User; token: string }> {
   try {
     const provider = new GoogleAuthProvider();
@@ -677,67 +739,30 @@ export async function authGoogleLogin(): Promise<{ user: User; token: string }> 
       prompt: 'select_account'
     });
 
-    const result = await signInWithPopup(auth, provider);
-    const googleUser = result.user;
+    let googleUser = null;
+    try {
+      const result = await signInWithPopup(auth, provider);
+      googleUser = result.user;
+    } catch (popupError: any) {
+      console.warn('[AuthService] Google popup was blocked or failed:', popupError);
+      
+      // If user is logged in via auth current user
+      if (auth.currentUser && auth.currentUser.email) {
+        googleUser = auth.currentUser;
+      } else {
+        // Rethrow popup error so UI can trigger Google Email Fast Login dialog if blocked
+        throw popupError;
+      }
+    }
 
-    if (!googleUser.email) {
+    if (!googleUser || !googleUser.email) {
       throw new Error('Não foi possível obter o endereço de e-mail da sua conta Google.');
     }
 
-    const emailClean = googleUser.email.trim().toLowerCase();
-    const usersCol = collection(db, 'users');
-    const q = query(usersCol, where('email', '==', emailClean));
-    const snap = await getDocs(q);
-
-    let finalUser: User;
-
-    if (!snap.empty) {
-      const userDoc = snap.docs[0];
-      finalUser = userDoc.data() as User;
-    } else {
-      const fullname = googleUser.displayName || emailClean.split('@')[0];
-      const nameParts = fullname.split(' ');
-      const firstname = nameParts[0] || 'Utilizador';
-      const surname = nameParts.slice(1).join(' ') || 'Google';
-      const nickname = emailClean.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + '_' + Math.random().toString(36).substring(2, 5);
-
-      const userId = 'google_' + googleUser.uid;
-      const newUser: User = {
-        id: userId,
-        phone: '',
-        email: emailClean,
-        fullname,
-        firstname,
-        surname,
-        nickname,
-        password: 'google_auth_placeholder',
-        province: 'Maputo',
-        district: 'Maputo',
-        created: new Date().toISOString(),
-        avatar: googleUser.photoURL || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150`,
-        stats: { likes: 0, posts: 0, friends: 0 },
-        nameEditDate: null,
-        isVIP: false,
-        isVerified: true,
-        lastReadChatTimestamp: 0,
-        lastReadNotificationsTimestamp: 0,
-        mutedNotifications: false
-      };
-
-      await setDoc(doc(db, 'users', userId), newUser);
-      finalUser = newUser;
-    }
-
-    const tokenPayload = { id: finalUser.id, nickname: finalUser.nickname };
-    const token = btoa(JSON.stringify(tokenPayload));
-
-    const clientUser = { ...finalUser };
-    delete clientUser.password;
-
-    return { user: clientUser, token };
+    return await authGoogleLoginWithEmail(googleUser.email, googleUser.displayName || undefined, googleUser.photoURL || undefined);
   } catch (err: any) {
     console.error('[AuthService] Google Authentication failed:', err);
-    throw new Error(err.message || 'Erro durante a autenticação com o Google.');
+    throw err;
   }
 }
 

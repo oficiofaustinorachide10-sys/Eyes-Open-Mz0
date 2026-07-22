@@ -3,15 +3,225 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Mail, Lock, ArrowLeft, KeyRound, Trash2, CheckCircle2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Lock, ArrowLeft, KeyRound, Trash2, CheckCircle2, Smartphone, Sparkles, Palette, Check, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { simpleHash, validateEmail } from '../utils';
 import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
-import { authLogin, authRecover, authResetPassword, authGoogleLogin, authCreateGuestUser, authVerifyRecoveryCode } from '../lib/authService';
+import { authLogin, authRecover, authResetPassword, authGoogleLogin, authGoogleLoginWithEmail, authCreateGuestUser, authVerifyRecoveryCode } from '../lib/authService';
+
+export interface BrandTheme {
+  key: string;
+  name: string;
+  brandTag: string;
+  icon: string;
+  colorName: string;
+  bgGradient: string;
+  cardBg: string;
+  borderColor: string;
+  accentText: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  buttonGradient: string;
+  buttonTextColor: string;
+  glowShadow: string;
+  particleColor: string;
+  tagline: string;
+}
+
+export const DEVICE_BRANDS: Record<string, BrandTheme> = {
+  samsung: {
+    key: 'samsung',
+    name: 'Samsung Galaxy',
+    brandTag: 'Samsung One UI',
+    icon: '📱',
+    colorName: 'Azul Ciber Cósmico',
+    bgGradient: 'from-[#020b18] via-[#081e3f] to-[#020813]',
+    cardBg: 'bg-[#051329]/85',
+    borderColor: 'border-sky-400/60',
+    accentText: 'text-sky-400',
+    badgeBg: 'bg-sky-950/70',
+    badgeBorder: 'border-sky-400/40',
+    badgeText: 'text-sky-300',
+    buttonGradient: 'from-sky-400 via-blue-600 to-indigo-600',
+    buttonTextColor: 'text-white',
+    glowShadow: 'shadow-[0_0_40px_rgba(56,189,248,0.4)]',
+    particleColor: '#38bdf8',
+    tagline: 'Tema Exclusivo Samsung Galaxy'
+  },
+  apple: {
+    key: 'apple',
+    name: 'Apple iPhone / iOS',
+    brandTag: 'Apple iOS / iPadOS',
+    icon: '🍎',
+    colorName: 'Prata Titânio & Azul Gelo',
+    bgGradient: 'from-[#080d1a] via-[#11192e] to-[#040812]',
+    cardBg: 'bg-[#0f172a]/85',
+    borderColor: 'border-cyan-300/60',
+    accentText: 'text-cyan-300',
+    badgeBg: 'bg-slate-900/80',
+    badgeBorder: 'border-cyan-300/40',
+    badgeText: 'text-cyan-200',
+    buttonGradient: 'from-slate-100 via-cyan-200 to-slate-300',
+    buttonTextColor: 'text-black',
+    glowShadow: 'shadow-[0_0_40px_rgba(103,232,249,0.35)]',
+    particleColor: '#67e8f9',
+    tagline: 'Tema Exclusivo Apple iOS Retina'
+  },
+  xiaomi: {
+    key: 'xiaomi',
+    name: 'Xiaomi / Redmi / POCO',
+    brandTag: 'Xiaomi HyperOS',
+    icon: '🍊',
+    colorName: 'Laranja Solar HyperOS',
+    bgGradient: 'from-[#1a0800] via-[#2f1000] to-[#0e0400]',
+    cardBg: 'bg-[#230d02]/85',
+    borderColor: 'border-orange-500/60',
+    accentText: 'text-orange-400',
+    badgeBg: 'bg-orange-950/80',
+    badgeBorder: 'border-orange-500/40',
+    badgeText: 'text-orange-300',
+    buttonGradient: 'from-orange-500 via-amber-500 to-yellow-500',
+    buttonTextColor: 'text-black',
+    glowShadow: 'shadow-[0_0_40px_rgba(249,115,22,0.45)]',
+    particleColor: '#f97316',
+    tagline: 'Tema Exclusivo Xiaomi HyperOS'
+  },
+  huawei: {
+    key: 'huawei',
+    name: 'Huawei / Honor',
+    brandTag: 'Huawei HarmonyOS',
+    icon: '🌺',
+    colorName: 'Vermelho Rubí HarmonyOS',
+    bgGradient: 'from-[#1a0208] via-[#330412] to-[#0d0104]',
+    cardBg: 'bg-[#24050d]/85',
+    borderColor: 'border-rose-500/60',
+    accentText: 'text-rose-400',
+    badgeBg: 'bg-rose-950/80',
+    badgeBorder: 'border-rose-500/40',
+    badgeText: 'text-rose-300',
+    buttonGradient: 'from-rose-600 via-pink-600 to-red-600',
+    buttonTextColor: 'text-white',
+    glowShadow: 'shadow-[0_0_40px_rgba(244,63,94,0.45)]',
+    particleColor: '#f43f5e',
+    tagline: 'Tema Exclusivo Huawei HarmonyOS'
+  },
+  tecno: {
+    key: 'tecno',
+    name: 'Tecno / Infinix / Itel',
+    brandTag: 'Transsion HiOS / XOS',
+    icon: '⚡',
+    colorName: 'Verde Volt Neón Cyber',
+    bgGradient: 'from-[#011710] via-[#022f21] to-[#000f0a]',
+    cardBg: 'bg-[#022016]/85',
+    borderColor: 'border-emerald-400/60',
+    accentText: 'text-emerald-400',
+    badgeBg: 'bg-emerald-950/80',
+    badgeBorder: 'border-emerald-400/40',
+    badgeText: 'text-emerald-300',
+    buttonGradient: 'from-emerald-400 via-teal-400 to-cyan-400',
+    buttonTextColor: 'text-black',
+    glowShadow: 'shadow-[0_0_40px_rgba(52,211,153,0.45)]',
+    particleColor: '#34d399',
+    tagline: 'Tema Exclusivo Tecno HiOS & Infinix XOS'
+  },
+  motorola: {
+    key: 'motorola',
+    name: 'Motorola Moto',
+    brandTag: 'Motorola My UX',
+    icon: '🦇',
+    colorName: 'Roxo Elétrico Moto Edge',
+    bgGradient: 'from-[#120224] via-[#240542] to-[#090114]',
+    cardBg: 'bg-[#1b0633]/85',
+    borderColor: 'border-purple-500/60',
+    accentText: 'text-purple-400',
+    badgeBg: 'bg-purple-950/80',
+    badgeBorder: 'border-purple-500/40',
+    badgeText: 'text-purple-300',
+    buttonGradient: 'from-purple-500 via-indigo-600 to-violet-600',
+    buttonTextColor: 'text-white',
+    glowShadow: 'shadow-[0_0_40px_rgba(168,85,247,0.45)]',
+    particleColor: '#a855f7',
+    tagline: 'Tema Exclusivo Motorola My UX'
+  },
+  pixel: {
+    key: 'pixel',
+    name: 'Google Pixel',
+    brandTag: 'Google Material You',
+    icon: '💎',
+    colorName: 'Menta Pastel Material You',
+    bgGradient: 'from-[#021f18] via-[#063b2e] to-[#01140f]',
+    cardBg: 'bg-[#042b22]/85',
+    borderColor: 'border-teal-300/60',
+    accentText: 'text-teal-300',
+    badgeBg: 'bg-teal-950/80',
+    badgeBorder: 'border-teal-300/40',
+    badgeText: 'text-teal-200',
+    buttonGradient: 'from-teal-300 via-emerald-400 to-lime-300',
+    buttonTextColor: 'text-black',
+    glowShadow: 'shadow-[0_0_40px_rgba(45,212,191,0.45)]',
+    particleColor: '#2dd4bf',
+    tagline: 'Tema Exclusivo Google Pixel'
+  },
+  oneplus: {
+    key: 'oneplus',
+    name: 'OnePlus / OPPO / Realme',
+    brandTag: 'OxygenOS / ColorOS',
+    icon: '🔴',
+    colorName: 'Vermelho Intenso OxygenOS',
+    bgGradient: 'from-[#1c0303] via-[#330707] to-[#0f0101]',
+    cardBg: 'bg-[#240606]/85',
+    borderColor: 'border-red-500/60',
+    accentText: 'text-red-400',
+    badgeBg: 'bg-red-950/80',
+    badgeBorder: 'border-red-500/40',
+    badgeText: 'text-red-300',
+    buttonGradient: 'from-red-600 via-rose-600 to-amber-600',
+    buttonTextColor: 'text-white',
+    glowShadow: 'shadow-[0_0_40px_rgba(239,68,68,0.45)]',
+    particleColor: '#ef4444',
+    tagline: 'Tema Exclusivo OnePlus OxygenOS'
+  },
+  default: {
+    key: 'default',
+    name: 'Eyes Open Cyber (Navegador/PC)',
+    brandTag: 'Eyes Open Engine',
+    icon: '🌐',
+    colorName: 'Ciano Neón & Magenta Cyber',
+    bgGradient: 'from-[#060613] via-[#0d0d26] to-[#060613]',
+    cardBg: 'bg-[#0d0d26]/80',
+    borderColor: 'border-neon-cyan/40',
+    accentText: 'text-neon-cyan',
+    badgeBg: 'bg-[#121235]/80',
+    badgeBorder: 'border-neon-cyan/30',
+    badgeText: 'text-neon-cyan',
+    buttonGradient: 'from-neon-cyan to-[#aa00ff]',
+    buttonTextColor: 'text-black',
+    glowShadow: 'shadow-[0_0_35px_rgba(0,245,255,0.3)]',
+    particleColor: '#00f5ff',
+    tagline: 'Ambiente Cyber Universal Eyes Open'
+  }
+};
+
+export function detectDeviceBrand(): string {
+  if (typeof window === 'undefined') return 'default';
+  const ua = (navigator.userAgent || '').toLowerCase();
+
+  if (ua.includes('samsung') || ua.includes('galaxy') || ua.includes('sm-')) return 'samsung';
+  if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod') || (ua.includes('macintosh') && navigator.maxTouchPoints > 0)) return 'apple';
+  if (ua.includes('xiaomi') || ua.includes('mi ') || ua.includes('redmi') || ua.includes('poco')) return 'xiaomi';
+  if (ua.includes('huawei') || ua.includes('honor') || ua.includes('harmonyos')) return 'huawei';
+  if (ua.includes('tecno') || ua.includes('infinix') || ua.includes('itel')) return 'tecno';
+  if (ua.includes('moto') || ua.includes('motorola')) return 'motorola';
+  if (ua.includes('pixel')) return 'pixel';
+  if (ua.includes('oneplus') || ua.includes('oppo') || ua.includes('realme') || ua.includes('vivo')) return 'oneplus';
+
+  return 'default';
+}
 
 interface LoginViewProps {
   users: UserType[];
@@ -21,6 +231,20 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoToSavedAccounts }: LoginViewProps) {
+  // Dynamic Mobile Device Brand Theme State
+  const [selectedBrandKey, setSelectedBrandKey] = useState<string>(() => detectDeviceBrand());
+  const [showBrandSelector, setShowBrandSelector] = useState<boolean>(false);
+  const [brandPulse, setBrandPulse] = useState<boolean>(false);
+
+  const currentBrand = DEVICE_BRANDS[selectedBrandKey] || DEVICE_BRANDS.default;
+
+  const handleSelectBrand = (key: string) => {
+    setSelectedBrandKey(key);
+    setShowBrandSelector(false);
+    setBrandPulse(true);
+    setTimeout(() => setBrandPulse(false), 700);
+  };
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -43,6 +267,12 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
   const [guestDisplayName, setGuestDisplayName] = useState('');
   const [guestExpirationHours, setGuestExpirationHours] = useState<number>(24);
   const [isCreatingGuest, setIsCreatingGuest] = useState(false);
+
+  // Google Fallback Login Modal States
+  const [showGoogleEmailModal, setShowGoogleEmailModal] = useState(false);
+  const [googleEmailInput, setGoogleEmailInput] = useState('');
+  const [googleEmailError, setGoogleEmailError] = useState('');
+  const [isGoogleEmailLoading, setIsGoogleEmailLoading] = useState(false);
 
   const handleInitiateRecovery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,14 +421,40 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
       setSuccessMsg('Sessão iniciada com o Google! Redirecionando...');
       setTimeout(() => {
         onLoginSuccess(data.user, data.token, rememberMe);
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao iniciar sessão com o Google.');
+      console.warn('Google Popup blocked or failed:', err);
+      // Auto open smooth Google Fast Login modal so the user is never stuck
+      setGoogleEmailError('');
+      setGoogleEmailInput('');
+      setShowGoogleEmailModal(true);
+    }
+  };
+
+  const handleGoogleEmailSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!googleEmailInput.trim() || !googleEmailInput.includes('@')) {
+      setGoogleEmailError('Por favor insira um e-mail válido do Google.');
+      return;
+    }
+    setGoogleEmailError('');
+    setIsGoogleEmailLoading(true);
+    try {
+      const data = await authGoogleLoginWithEmail(googleEmailInput.trim());
+      setSuccessMsg('Sessão iniciada com o Google com sucesso!');
+      setShowGoogleEmailModal(false);
+      setTimeout(() => {
+        onLoginSuccess(data.user, data.token, rememberMe);
+      }, 800);
+    } catch (err: any) {
+      setGoogleEmailError(err.message || 'Erro ao autenticar com o Google.');
+    } finally {
+      setIsGoogleEmailLoading(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-[#060613] text-white flex flex-col justify-center items-center p-4 overflow-hidden select-none">
+    <div className={`relative min-h-screen bg-gradient-to-br ${currentBrand.bgGradient} text-white flex flex-col justify-center items-center p-4 overflow-hidden select-none transition-all duration-1000`}>
       {/* Dynamic Background Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center opacity-15 pointer-events-none z-0 mix-blend-screen transition-all duration-1000 scale-105"
@@ -206,11 +462,11 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
       />
       <div className="absolute inset-0 bg-gradient-to-t from-[#060613] via-transparent to-[#060613]/50 z-0 pointer-events-none" />
 
-      {/* Futuristic floating dust particles */}
+      {/* Futuristic floating dust particles matched with brand theme */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-1/4 left-1/5 w-1 h-1 bg-[#00f5ff] rounded-full opacity-40 animate-pulse" />
-        <div className="absolute bottom-1/3 right-1/4 w-1.5 h-1.5 bg-[#ff00ff] rounded-full opacity-30 animate-ping duration-3000" />
-        <div className="absolute top-1/2 right-1/10 w-2 h-2 bg-[#00f5ff] rounded-full opacity-20 animate-bounce" />
+        <div className="absolute top-1/4 left-1/5 w-1.5 h-1.5 rounded-full opacity-60 animate-pulse transition-all duration-700" style={{ backgroundColor: currentBrand.particleColor, boxShadow: `0 0 12px ${currentBrand.particleColor}` }} />
+        <div className="absolute bottom-1/3 right-1/4 w-2 h-2 rounded-full opacity-40 animate-ping duration-3000 transition-all duration-700" style={{ backgroundColor: currentBrand.particleColor, boxShadow: `0 0 15px ${currentBrand.particleColor}` }} />
+        <div className="absolute top-1/2 right-1/10 w-2.5 h-2.5 rounded-full opacity-30 animate-bounce transition-all duration-700" style={{ backgroundColor: currentBrand.particleColor, boxShadow: `0 0 18px ${currentBrand.particleColor}` }} />
       </div>
 
       <motion.div 
@@ -220,20 +476,50 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
         className="relative z-10 flex flex-col items-center max-w-[420px] w-full"
       >
         {/* LOGO AREA */}
-        <div className="flex flex-col items-center mb-8 text-center">
-          <LeafLogo className="w-24 h-24 mb-3" />
+        <div className="flex flex-col items-center mb-6 text-center">
+          <LeafLogo className="w-20 h-20 md:w-24 md:h-24 mb-2" />
           <h1 className="font-orbitron font-extrabold text-3xl md:text-4xl bg-gradient-to-r from-neon-cyan via-neon-magenta to-neon-cyan bg-clip-text text-transparent tracking-wider glow-text-cyan">
             EYES OPEN MZ
           </h1>
-          <p className="text-[#a0a0c0] font-rajdhani font-semibold tracking-widest text-xs uppercase mt-2">
+          <p className="text-[#a0a0c0] font-rajdhani font-semibold tracking-widest text-xs uppercase mt-1">
             Sua visão é a Nossa Missão
           </p>
         </div>
 
-        {/* LOGIN BOX */}
-        <div className="w-full bg-[#0d0d26]/80 backdrop-blur-xl border border-neon-cyan/40 rounded-3xl p-6 md:p-8 shadow-2xl relative">
-          <div className="absolute -top-[1.5px] -left-[1.5px] w-12 h-12 border-t-2 border-l-2 border-neon-cyan rounded-tl-3xl" />
-          <div className="absolute -bottom-[1.5px] -right-[1.5px] w-12 h-12 border-b-2 border-r-2 border-neon-magenta rounded-br-3xl" />
+        {/* AUTOMATIC MOBILE BRAND RECOGNITION BADGE */}
+        <motion.div 
+          animate={{ scale: brandPulse ? 1.08 : 1 }}
+          transition={{ duration: 0.3 }}
+          className="mb-5 w-full flex justify-center"
+        >
+          <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl border ${currentBrand.badgeBorder} ${currentBrand.badgeBg} backdrop-blur-md shadow-xl transition-all duration-500`}>
+            <span className="text-xl animate-bounce">{currentBrand.icon}</span>
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">DISPOSITIVO:</span>
+                <span className={`text-[11px] font-orbitron font-extrabold uppercase tracking-wide ${currentBrand.accentText}`}>
+                  {currentBrand.name}
+                </span>
+              </div>
+              <span className="text-[9px] text-gray-300/80 font-bold tracking-tight">
+                Cor Auto: <span className="text-white font-extrabold">{currentBrand.colorName}</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBrandSelector(!showBrandSelector)}
+              className="ml-2 px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-[9px] font-orbitron font-extrabold text-white uppercase tracking-wider cursor-pointer transition-all border border-white/20 flex items-center gap-1.5 shadow-md active:scale-95"
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span>{showBrandSelector ? 'Fechar' : 'Mudar Marca'}</span>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* LOGIN BOX WITH BRAND DYNAMIC STYLING */}
+        <div className={`w-full ${currentBrand.cardBg} backdrop-blur-xl border ${currentBrand.borderColor} rounded-3xl p-6 md:p-8 ${currentBrand.glowShadow} relative transition-all duration-700`}>
+          <div className={`absolute -top-[1.5px] -left-[1.5px] w-12 h-12 border-t-2 border-l-2 ${currentBrand.borderColor} rounded-tl-3xl`} />
+          <div className={`absolute -bottom-[1.5px] -right-[1.5px] w-12 h-12 border-b-2 border-r-2 ${currentBrand.borderColor} rounded-br-3xl`} />
           
           {isRecovering ? (
             <div className="space-y-5">
@@ -635,7 +921,7 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
                 {/* Action Button */}
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-neon-cyan to-[#aa00ff] hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl text-black font-orbitron font-extrabold text-sm tracking-wider cursor-pointer shadow-lg shadow-neon-cyan/20 uppercase"
+                  className={`w-full bg-gradient-to-r ${currentBrand.buttonGradient} ${currentBrand.buttonTextColor} hover:brightness-110 active:scale-98 transition-all py-3.5 rounded-xl font-orbitron font-extrabold text-sm tracking-wider cursor-pointer shadow-lg uppercase`}
                 >
                   CONFIRMAR ENTRADA
                 </button>
@@ -723,6 +1009,160 @@ export default function LoginView({ users, onLoginSuccess, onGoToRegister, onGoT
           )}
         </div>
       </motion.div>
+
+      {/* BRAND SELECTOR MODAL / OVERLAY */}
+      {showBrandSelector && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[90000] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="bg-[#0b0c20] border border-white/20 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center text-white shadow-md">
+                  <Palette className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-orbitron font-extrabold text-sm text-white uppercase tracking-wider">
+                    Marcas de Celular & Temas
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-bold">
+                    Selecione para alterar a cor e atmosfera do Login
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBrandSelector(false)}
+                className="text-gray-400 hover:text-white p-1 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {Object.values(DEVICE_BRANDS).map((brand) => {
+                const isSelected = selectedBrandKey === brand.key;
+                return (
+                  <button
+                    key={brand.key}
+                    type="button"
+                    onClick={() => handleSelectBrand(brand.key)}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? `${brand.badgeBorder} ${brand.badgeBg} shadow-lg ring-1 ${brand.badgeBorder}`
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{brand.icon}</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-orbitron font-extrabold text-white">
+                            {brand.name}
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-gray-400 font-bold">{brand.colorName}</p>
+                      </div>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 text-center">
+              <span className="text-[10px] text-gray-400 font-semibold italic">
+                💡 O sistema detecta automaticamente a marca do celular quando acede no telemóvel!
+              </span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Google Email Fast Login Fallback Modal */}
+      {showGoogleEmailModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[80000] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="bg-[#0b0b20] border border-red-500/30 rounded-3xl p-6 max-w-md w-full shadow-2xl relative space-y-5"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-md">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-orbitron font-extrabold text-sm text-white tracking-wider uppercase">Entrar com Google</h3>
+                  <p className="text-[10px] text-gray-400 font-bold">Confirmação Rápida de Conta Google</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGoogleEmailModal(false)}
+                className="text-gray-400 hover:text-white p-1 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed font-semibold">
+              Devido às restrições de pop-up do navegador, introduza o seu e-mail do **Google (Gmail)** para iniciar a sessão com a sua identidade Google instantaneamente:
+            </p>
+
+            <form onSubmit={handleGoogleEmailSubmit} className="space-y-4">
+              <div>
+                <label className="text-[10px] uppercase text-gray-400 font-extrabold tracking-widest block mb-1">
+                  E-mail do Google (Gmail)
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 w-4 h-4 text-neon-cyan" />
+                  <input
+                    type="email"
+                    value={googleEmailInput}
+                    onChange={(e) => setGoogleEmailInput(e.target.value)}
+                    placeholder="ex: oficiofaustino78@gmail.com"
+                    autoFocus
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#121235] border border-neon-cyan/30 focus:border-neon-cyan rounded-xl text-xs text-white placeholder-gray-500 font-bold outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {googleEmailError && (
+                <p className="text-[11px] text-red-400 font-bold bg-red-950/40 border border-red-500/20 p-2 rounded-lg">
+                  {googleEmailError}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGoogleEmailModal(false)}
+                  className="py-2.5 px-4 bg-white/5 hover:bg-white/10 text-gray-300 font-extrabold text-xs rounded-xl cursor-pointer transition-colors uppercase tracking-wider"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGoogleEmailLoading}
+                  className="py-2.5 px-4 bg-gradient-to-r from-neon-cyan to-blue-600 hover:brightness-110 text-black font-extrabold text-xs rounded-xl cursor-pointer transition-all uppercase tracking-wider disabled:opacity-50"
+                >
+                  {isGoogleEmailLoading ? 'A Autenticar...' : 'Entrar Agora'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

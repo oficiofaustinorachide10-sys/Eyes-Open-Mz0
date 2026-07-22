@@ -1,20 +1,23 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Eyes Open MZ
 
-# Run and deploy your AI Studio app
+Uma plataforma e campanha comunitária para o fomento de cinema digital, fotografia e artes independentes em Moçambique.
 
-This contains everything you need to run your app locally.
+## Funcionalidades Principais
 
-View your app in AI Studio: https://ai.studio/apps/5835cd23-8dfa-4ec8-b91f-0509b4044958
+- **Feed Social Interativo**: Publicações com suporte a fotos, vídeos e áudio em tempo real.
+- **Painel de Identidade (Minha Conta)**: Cartão VIP 3D interativo com dados da conta e opções de segurança.
+- **Assistente Virtual "Pay"**: Apoio interativo aos utilizadores com áudio e canal de orientação.
+- **Autenticação Segura**: Suporte para e-mail/palavra-passe e autenticação rápida com Google.
+- **Gestão de Perfil**: Edição de dados, avatar, biografias e histórico de publicações.
 
-## Run Locally
+## Executar Localmente
 
-**Prerequisites:**  Node.js
+1. Instalar as dependências:
+   ```bash
+   npm install
+   ```
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+2. Iniciar o servidor de desenvolvimento:
+   ```bash
+   npm run dev
+   ```

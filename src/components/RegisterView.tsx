@@ -14,7 +14,7 @@ import { User as UserType } from '../types';
 import LeafLogo from './LeafLogo';
 // @ts-ignore
 import mozMap from '../assets/images/mozambique_map_1783337073381.jpg';
-import { authGoogleLogin, authRegisterEmailInitiate, authRegisterEmailConfirm, authRegisterComplete } from '../lib/authService';
+import { authGoogleLogin, authGoogleLoginWithEmail, authRegisterEmailInitiate, authRegisterEmailConfirm, authRegisterComplete } from '../lib/authService';
 
 interface RegisterViewProps {
   users: UserType[];
@@ -304,6 +304,27 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
         setShowWelcome(true);
       }, 400);
     } catch (err: any) {
+      console.warn('Google Popup issue in RegisterView:', err);
+      // Prompt for Google email fallback
+      const userGoogleEmail = window.prompt('O pop-up do Google foi bloqueado. Por favor, digite o seu e-mail do Google (Gmail):');
+      if (userGoogleEmail && userGoogleEmail.includes('@')) {
+        try {
+          setStatusMsg('A validar e-mail do Google...');
+          const data = await authGoogleLoginWithEmail(userGoogleEmail.trim());
+          setStatusMsg('Conta Google autenticada com sucesso!');
+          setStatusType('success');
+          setCreatedUser(data.user);
+          setCreatedToken(data.token);
+          setTimeout(() => {
+            setShowWelcome(true);
+          }, 400);
+          return;
+        } catch (e: any) {
+          setStatusMsg(e.message || 'Erro ao autenticar com o Google.');
+          setStatusType('error');
+          return;
+        }
+      }
       setStatusMsg(err.message || 'Erro ao autenticar com o Google.');
       setStatusType('error');
     }

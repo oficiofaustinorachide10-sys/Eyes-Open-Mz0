@@ -1973,6 +1973,7 @@ export default function App() {
             users={users}
             onUpdateUser={handleUpdateUser}
             onDeleteAccount={handleDeleteAccount}
+            onLogout={handleLogout}
           />
         );
       case 'publish-post':

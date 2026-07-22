@@ -16,10 +16,11 @@ interface AccountViewProps {
   users: UserType[];
   onUpdateUser: (updatedUser: UserType) => void;
   onDeleteAccount: (userId: string) => void;
+  onLogout?: () => void;
 }
 
 export default function AccountView({ 
-  currentUser, users, onUpdateUser, onDeleteAccount 
+  currentUser, users, onUpdateUser, onDeleteAccount, onLogout 
 }: AccountViewProps) {
   if (currentUser.id === 'guest') {
     return (
@@ -82,6 +83,13 @@ export default function AccountView({
     setRotateY(yRotation);
   };
 
+  const handleToggleFlip = () => {
+    const nextFlip = !isFlipped;
+    setIsFlipped(nextFlip);
+    setRotateY(nextFlip ? 180 : 0);
+    setRotateX(0);
+  };
+
   const handlePointerUp = () => {
     if (!isDragging) return;
     setIsDragging(false);
@@ -90,11 +98,9 @@ export default function AccountView({
       cardRef.current.style.transition = 'transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
     }
 
-    // Determine flip threshold (dragged past 80px horizontally)
-    if (Math.abs(dragOffset) > 80) {
-      const nextFlip = !isFlipped;
-      setIsFlipped(nextFlip);
-      setRotateY(nextFlip ? 180 : 0);
+    // Determine flip threshold (dragged past 40px horizontally)
+    if (Math.abs(dragOffset) > 40) {
+      handleToggleFlip();
     } else {
       setRotateY(isFlipped ? 180 : 0);
     }
@@ -147,11 +153,21 @@ export default function AccountView({
       </div>
 
       {/* CARD COMPONENT WRAPPER */}
-      <div className="flex justify-center items-center py-6">
-        <div className="w-full max-w-[460px] aspect-[1.586/1] relative perspective-[2000px]">
+      <div className="flex flex-col items-center justify-center py-4 space-y-4">
+        {/* Flip Card Action Button */}
+        <button
+          onClick={handleToggleFlip}
+          className="px-6 py-2.5 rounded-full bg-gradient-to-r from-neon-cyan/20 to-neon-magenta/20 border border-neon-cyan/50 hover:border-neon-cyan text-neon-cyan font-orbitron font-extrabold text-xs tracking-wider transition-all cursor-pointer shadow-lg shadow-neon-cyan/10 flex items-center gap-2 uppercase active:scale-95"
+        >
+          <RefreshCw className={`w-4 h-4 transition-transform duration-500 ${isFlipped ? 'rotate-180' : ''}`} />
+          {isFlipped ? 'Ver Frente do Cartão 💳' : 'Girar Cartão (Ver Verso) 🔄'}
+        </button>
+
+        <div className="w-full max-w-[460px] aspect-[1.586/1] relative perspective-[2000px] touch-none">
           {/* Main 4D Card Face Container */}
           <div
             ref={cardRef}
+            onClick={handleToggleFlip}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -160,10 +176,16 @@ export default function AccountView({
               transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
               transformStyle: 'preserve-3d',
             }}
-            className="w-full h-full absolute cursor-grab active:cursor-grabbing transition-transform duration-700 rounded-3xl border border-neon-cyan/40 shadow-2xl relative select-none"
+            className="w-full h-full absolute cursor-pointer rounded-3xl border border-neon-cyan/40 shadow-2xl relative select-none transition-transform duration-700"
           >
             {/* FRONT FACE OF CARD */}
-            <div className="absolute inset-0 bg-[#0c0c26]/95 backdrop-blur-md rounded-3xl p-6 flex flex-col justify-between backface-hidden overflow-hidden">
+            <div 
+              className="absolute inset-0 bg-[#0c0c26]/95 backdrop-blur-md rounded-3xl p-6 flex flex-col justify-between overflow-hidden"
+              style={{
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden'
+              }}
+            >
               {/* Card microchip and plan badge */}
               <div className="flex items-center justify-between">
                 <div className="w-12 h-10 bg-gradient-to-tr from-yellow-600/40 to-yellow-400/20 border border-yellow-500/30 rounded-lg flex items-center justify-center">
@@ -205,7 +227,14 @@ export default function AccountView({
             </div>
 
             {/* BACK FACE OF CARD */}
-            <div className="absolute inset-0 bg-[#0d0d2a]/95 backdrop-blur-md rounded-3xl p-6 flex flex-col justify-between overflow-hidden backface-hidden" style={{ transform: 'rotateY(180deg)' }}>
+            <div 
+              className="absolute inset-0 bg-[#0d0d2a]/95 backdrop-blur-md rounded-3xl p-6 flex flex-col justify-between overflow-hidden" 
+              style={{ 
+                transform: 'rotateY(180deg)',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden'
+              }}
+            >
               {/* Back Header */}
               <div className="flex items-center justify-between border-b border-neon-magenta/20 pb-3">
                 <h4 className="font-orbitron font-extrabold text-xs text-neon-magenta tracking-widest uppercase">
@@ -263,11 +292,19 @@ export default function AccountView({
         </div>
       </div>
 
-      {/* DESTRUCTIVE DELETE ACCOUNT TRIGGERS */}
-      <div className="flex justify-center pt-4">
+      {/* ACCOUNT ACTION TRIGGERS */}
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full sm:w-auto px-6 py-3 rounded-full bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-400 hover:text-red-300 font-orbitron font-extrabold text-xs tracking-widest transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 uppercase"
+          >
+            <ShieldAlert className="w-4 h-4" /> SAIR DA CONTA
+          </button>
+        )}
         <button
           onClick={() => setActivePopup('delete')}
-          className="px-8 py-3 rounded-full bg-red-600 hover:bg-red-500 text-white font-orbitron font-extrabold text-xs tracking-widest transition-all cursor-pointer shadow-lg shadow-red-500/20 animate-pulse uppercase flex items-center gap-2"
+          className="w-full sm:w-auto px-6 py-3 rounded-full bg-red-600 hover:bg-red-500 text-white font-orbitron font-extrabold text-xs tracking-widest transition-all cursor-pointer shadow-lg shadow-red-500/20 uppercase flex items-center justify-center gap-2"
         >
           <Trash2 className="w-4 h-4" /> ELIMINAR CONTA DEFINITIVAMENTE
         </button>
