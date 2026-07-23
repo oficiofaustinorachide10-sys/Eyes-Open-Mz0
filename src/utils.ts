@@ -91,6 +91,48 @@ export function validateEmail(email: string): boolean {
   return re.test(email.trim());
 }
 
+/**
+ * Compress Base64 Image to ensure it stays below ~250KB for fast transfer and Firestore compatibility.
+ */
+export function compressBase64Image(dataUrl: string, maxDim = 800, quality = 0.65): Promise<string> {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+      return resolve(dataUrl);
+    }
+    // If image is already smaller than 200KB in base64 length, return as is
+    if (dataUrl.length < 200000) {
+      return resolve(dataUrl);
+    }
+    const img = new Image();
+    img.src = dataUrl;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      } else {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+  });
+}
+
 // Name token validator
 export function validateNames(fullName: string, firstName: string, surname: string): { ok: boolean; error?: string } {
   const fName = fullName.trim();

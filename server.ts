@@ -868,7 +868,7 @@ A TUA PERSONALIDADE E IDENTIDADE STRICTA (PAY 2.0):
       let responseText = '';
       try {
         const response = await client.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.6-flash',
           contents,
           config: {
             systemInstruction: systemInstruction + (personalityInstruction ? `\n\nInstrução de Personalidade: ${personalityInstruction}` : ''),
@@ -877,10 +877,10 @@ A TUA PERSONALIDADE E IDENTIDADE STRICTA (PAY 2.0):
         });
         responseText = response.text || '';
       } catch (geminiErr: any) {
-        console.warn('Gemini 2.5 flash error, attempting gemini-2.0-flash:', geminiErr?.message || geminiErr);
+        console.warn('Gemini 3.6 flash error, attempting gemini-flash-latest:', geminiErr?.message || geminiErr);
         try {
           const response = await client.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-flash-latest',
             contents,
             config: {
               systemInstruction,
@@ -920,7 +920,7 @@ A TUA PERSONALIDADE E IDENTIDADE STRICTA (PAY 2.0):
       }
 
       const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: [
           {
             role: 'user',

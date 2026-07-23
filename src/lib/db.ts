@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { User, Post, Story, Notification, Friendship, ChatPermission } from '../types';
-import { SEED_USERS, SEED_POSTS, SEED_STORIES } from '../utils';
+import { SEED_USERS, SEED_POSTS, SEED_STORIES, compressBase64Image } from '../utils';
 
 export enum OperationType {
   CREATE = 'create',
@@ -345,6 +345,14 @@ export async function dbDeleteUser(userId: string) {
 // Post Actions
 export async function dbCreatePost(post: Post) {
   const cleanPost = sanitizeDoc(post);
+
+  // Compress large base64 image or cover if present before saving to Firestore
+  if (cleanPost.image && typeof cleanPost.image === 'string' && cleanPost.image.startsWith('data:image')) {
+    cleanPost.image = await compressBase64Image(cleanPost.image, 800, 0.65);
+  }
+  if ((cleanPost as any).mediaCover && typeof (cleanPost as any).mediaCover === 'string' && (cleanPost as any).mediaCover.startsWith('data:image')) {
+    (cleanPost as any).mediaCover = await compressBase64Image((cleanPost as any).mediaCover, 800, 0.65);
+  }
 
   // Sync to local cache immediately
   try {
