@@ -60,6 +60,12 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
   const [createdUser, setCreatedUser] = useState<UserType | null>(null);
   const [createdToken, setCreatedToken] = useState('');
 
+  // Google Email Fast Login Modal States
+  const [showGoogleEmailModal, setShowGoogleEmailModal] = useState(false);
+  const [googleEmailInput, setGoogleEmailInput] = useState('');
+  const [googleEmailError, setGoogleEmailError] = useState('');
+  const [isGoogleEmailLoading, setIsGoogleEmailLoading] = useState(false);
+
   // Manage security resend timer decrement
   useEffect(() => {
     if (resendTimer > 0) {
@@ -305,28 +311,34 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
       }, 400);
     } catch (err: any) {
       console.warn('Google Popup issue in RegisterView:', err);
-      // Prompt for Google email fallback
-      const userGoogleEmail = window.prompt('O pop-up do Google foi bloqueado. Por favor, digite o seu e-mail do Google (Gmail):');
-      if (userGoogleEmail && userGoogleEmail.includes('@')) {
-        try {
-          setStatusMsg('A validar e-mail do Google...');
-          const data = await authGoogleLoginWithEmail(userGoogleEmail.trim());
-          setStatusMsg('Conta Google autenticada com sucesso!');
-          setStatusType('success');
-          setCreatedUser(data.user);
-          setCreatedToken(data.token);
-          setTimeout(() => {
-            setShowWelcome(true);
-          }, 400);
-          return;
-        } catch (e: any) {
-          setStatusMsg(e.message || 'Erro ao autenticar com o Google.');
-          setStatusType('error');
-          return;
-        }
-      }
-      setStatusMsg(err.message || 'Erro ao autenticar com o Google.');
-      setStatusType('error');
+      setGoogleEmailError('');
+      setGoogleEmailInput('');
+      setShowGoogleEmailModal(true);
+    }
+  };
+
+  const handleGoogleEmailSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!googleEmailInput.trim() || !googleEmailInput.includes('@')) {
+      setGoogleEmailError('Por favor insira um e-mail válido do Google.');
+      return;
+    }
+    setGoogleEmailError('');
+    setIsGoogleEmailLoading(true);
+    try {
+      const data = await authGoogleLoginWithEmail(googleEmailInput.trim());
+      setStatusMsg('Conta Google autenticada com sucesso!');
+      setStatusType('success');
+      setCreatedUser(data.user);
+      setCreatedToken(data.token);
+      setShowGoogleEmailModal(false);
+      setTimeout(() => {
+        setShowWelcome(true);
+      }, 400);
+    } catch (err: any) {
+      setGoogleEmailError(err.message || 'Erro ao autenticar com o Google.');
+    } finally {
+      setIsGoogleEmailLoading(false);
     }
   };
 
@@ -963,6 +975,87 @@ export default function RegisterView({ users, onRegisterSuccess, onGoToLogin }: 
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Google Email Fast Login Fallback Modal */}
+      {showGoogleEmailModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[80000] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="bg-[#0b0b20] border border-red-500/30 rounded-3xl p-6 max-w-md w-full shadow-2xl relative space-y-5"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-md">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-orbitron font-extrabold text-sm text-white tracking-wider uppercase">Criar/Entrar com Google</h3>
+                  <p className="text-[10px] text-gray-400 font-bold">Confirmação Rápida de Conta Google</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGoogleEmailModal(false)}
+                className="text-gray-400 hover:text-white p-1 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed font-semibold">
+              Devido às restrições de pop-up do navegador, introduza o seu e-mail do **Google (Gmail)** para registar/iniciar a sessão com a sua identidade Google instantaneamente:
+            </p>
+
+            <form onSubmit={handleGoogleEmailSubmit} className="space-y-4">
+              <div>
+                <label className="text-[10px] uppercase text-gray-400 font-extrabold tracking-widest block mb-1">
+                  E-mail do Google (Gmail)
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 w-4 h-4 text-neon-cyan" />
+                  <input
+                    type="email"
+                    value={googleEmailInput}
+                    onChange={(e) => setGoogleEmailInput(e.target.value)}
+                    placeholder="ex: oficiofaustino78@gmail.com"
+                    autoFocus
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#121235] border border-neon-cyan/30 focus:border-neon-cyan rounded-xl text-xs text-white placeholder-gray-500 font-bold outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {googleEmailError && (
+                <p className="text-[11px] text-red-400 font-bold bg-red-950/40 border border-red-500/20 p-2 rounded-lg">
+                  {googleEmailError}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGoogleEmailModal(false)}
+                  className="py-2.5 px-4 bg-white/5 hover:bg-white/10 text-gray-300 font-extrabold text-xs rounded-xl cursor-pointer transition-colors uppercase tracking-wider"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGoogleEmailLoading}
+                  className="py-2.5 px-4 bg-gradient-to-r from-neon-cyan to-blue-600 hover:brightness-110 text-black font-extrabold text-xs rounded-xl cursor-pointer transition-all uppercase tracking-wider disabled:opacity-50"
+                >
+                  {isGoogleEmailLoading ? 'A Autenticar...' : 'Registar/Entrar'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

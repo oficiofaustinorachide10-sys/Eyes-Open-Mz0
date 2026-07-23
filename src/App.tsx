@@ -143,23 +143,23 @@ export default function App() {
       }
     }
     const saved = localStorage.getItem('theme') as any;
-    return (saved && THEME_CONFIGS[saved]) ? saved : 'noite';
+    return (saved && THEME_CONFIGS[saved]) ? saved : 'eyes-max';
   });
 
   useEffect(() => {
     if (currentUser) {
       if (currentUser.id === 'guest') {
-        setThemeState('noite');
+        setThemeState('eyes-max');
       } else {
         const savedUserTheme = localStorage.getItem(`theme_user_${currentUser.id}`);
         if (savedUserTheme && THEME_CONFIGS[savedUserTheme as any]) {
           setThemeState(savedUserTheme as any);
         } else {
-          setThemeState('noite');
+          setThemeState('eyes-max');
         }
       }
     } else {
-      setThemeState('noite');
+      setThemeState('eyes-max');
     }
   }, [currentUser]);
 
@@ -715,7 +715,7 @@ export default function App() {
   // Adaptive Controls & Sensors
   const [adaptiveControls, setAdaptiveControls] = useState<boolean>(() => {
     const saved = localStorage.getItem('adaptiveControls');
-    return saved === null ? true : saved === 'true';
+    return saved === null ? false : saved === 'true';
   });
 
   const [uiMode, setUiMode] = useState<'performance' | 'immersive'>(() => {
@@ -813,7 +813,7 @@ export default function App() {
     if (adaptiveControls) {
       if (effectiveBatteryLevel < 20) {
         // Battery mode forces amoled black variable overrides in injectThemeVariables
-      } else {
+      } else if (theme === 'luz' || theme === 'noite') {
         // Circadian Clock switching: Day (06:00 to 18:00) vs Night (18:01 to 05:59)
         const hour = new Date().getHours();
         const isDay = hour >= 6 && hour < 18;
@@ -821,7 +821,7 @@ export default function App() {
       }
     }
 
-    const config = THEME_CONFIGS[resolvedThemeId] || THEME_CONFIGS['noite'];
+    const config = THEME_CONFIGS[resolvedThemeId] || THEME_CONFIGS['eyes-max'];
     setCurrentThemeConfig(config);
 
     // Inject styles instantly to documentElement
