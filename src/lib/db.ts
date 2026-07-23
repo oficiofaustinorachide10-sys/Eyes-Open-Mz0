@@ -204,36 +204,107 @@ export function subscribePosts(callback: (posts: Post[]) => void) {
   const postsCol = collection(db, 'posts');
   // Order by timestamp desc
   const q = query(postsCol, orderBy('timestamp', 'desc'));
-  return onSnapshot(q, (snapshot) => {
+
+  const handleSnapshot = (snapshot: any) => {
     const list: Post[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       const data = docSnap.data();
       list.push({
         id: docSnap.id,
         ...data
       } as Post);
     });
-    callback(list);
-  }, (err) => {
+
+    if (list.length > 0) {
+      try {
+        localStorage.setItem('eo_cached_posts', JSON.stringify(list));
+      } catch (e) {}
+      callback(list);
+    } else {
+      // If Firestore returned no posts, check localStorage or fallback to SEED_POSTS
+      try {
+        const stored = localStorage.getItem('eo_cached_posts');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            callback(parsed);
+            return;
+          }
+        }
+      } catch (e) {}
+      callback(SEED_POSTS);
+    }
+  };
+
+  return onSnapshot(q, handleSnapshot, (err) => {
     handleFirestoreError(err, OperationType.LIST, 'posts');
+    // If ordered query fails (e.g. missing index), try basic collection listener without orderBy
+    onSnapshot(postsCol, (basicSnap) => {
+      handleSnapshot(basicSnap);
+    }, (basicErr) => {
+      handleFirestoreError(basicErr, OperationType.LIST, 'posts_basic');
+      try {
+        const stored = localStorage.getItem('eo_cached_posts');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            callback(parsed);
+            return;
+          }
+        }
+      } catch (e) {}
+      callback(SEED_POSTS);
+    });
   });
 }
 
 export function subscribeStories(callback: (stories: Story[]) => void) {
   const storiesCol = collection(db, 'stories');
   const q = query(storiesCol, orderBy('timestamp', 'desc'));
-  return onSnapshot(q, (snapshot) => {
+
+  const handleSnapshot = (snapshot: any) => {
     const list: Story[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       const data = docSnap.data();
       list.push({
         id: docSnap.id,
         ...data
       } as Story);
     });
-    callback(list);
-  }, (err) => {
+
+    if (list.length > 0) {
+      try {
+        localStorage.setItem('eo_cached_stories', JSON.stringify(list));
+      } catch (e) {}
+      callback(list);
+    } else {
+      try {
+        const stored = localStorage.getItem('eo_cached_stories');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            callback(parsed);
+            return;
+          }
+        }
+      } catch (e) {}
+      callback(SEED_STORIES);
+    }
+  };
+
+  return onSnapshot(q, handleSnapshot, (err) => {
     handleFirestoreError(err, OperationType.LIST, 'stories');
+    try {
+      const stored = localStorage.getItem('eo_cached_stories');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          callback(parsed);
+          return;
+        }
+      }
+    } catch (e) {}
+    callback(SEED_STORIES);
   });
 }
 
@@ -273,8 +344,17 @@ export async function dbDeleteUser(userId: string) {
 
 // Post Actions
 export async function dbCreatePost(post: Post) {
+  const cleanPost = sanitizeDoc(post);
+
+  // Sync to local cache immediately
   try {
-    const cleanPost = sanitizeDoc(post);
+    const stored = localStorage.getItem('eo_cached_posts');
+    const existing: Post[] = stored ? JSON.parse(stored) : SEED_POSTS;
+    const updated = [cleanPost, ...existing.filter(p => p.id !== cleanPost.id)];
+    localStorage.setItem('eo_cached_posts', JSON.stringify(updated));
+  } catch (e) {}
+
+  try {
     await setDoc(doc(db, 'posts', cleanPost.id), {
       ...cleanPost,
       comments: cleanPost.comments || []
@@ -285,6 +365,16 @@ export async function dbCreatePost(post: Post) {
 }
 
 export async function dbDeletePost(postId: string) {
+  // Sync to local cache immediately
+  try {
+    const stored = localStorage.getItem('eo_cached_posts');
+    if (stored) {
+      const existing: Post[] = JSON.parse(stored);
+      const updated = existing.filter(p => p.id !== postId);
+      localStorage.setItem('eo_cached_posts', JSON.stringify(updated));
+    }
+  } catch (e) {}
+
   try {
     await deleteDoc(doc(db, 'posts', postId));
   } catch (err) {
@@ -293,8 +383,19 @@ export async function dbDeletePost(postId: string) {
 }
 
 export async function dbUpdatePost(post: Post) {
+  const cleanPost = sanitizeDoc(post);
+
+  // Sync to local cache immediately
   try {
-    const cleanPost = sanitizeDoc(post);
+    const stored = localStorage.getItem('eo_cached_posts');
+    if (stored) {
+      const existing: Post[] = JSON.parse(stored);
+      const updated = existing.map(p => p.id === cleanPost.id ? { ...p, ...cleanPost } : p);
+      localStorage.setItem('eo_cached_posts', JSON.stringify(updated));
+    }
+  } catch (e) {}
+
+  try {
     await setDoc(doc(db, 'posts', cleanPost.id), cleanPost, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}`);

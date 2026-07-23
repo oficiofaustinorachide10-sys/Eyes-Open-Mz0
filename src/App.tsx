@@ -885,8 +885,27 @@ export default function App() {
   };
 
   // App core persistent states
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [stories, setStories] = useState<Story[]>([]);
+  const [posts, setPosts] = useState<Post[]>(() => {
+    try {
+      const stored = localStorage.getItem('eo_cached_posts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return SEED_POSTS;
+  });
+
+  const [stories, setStories] = useState<Story[]>(() => {
+    try {
+      const stored = localStorage.getItem('eo_cached_stories');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return SEED_STORIES;
+  });
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [chatPermissions, setChatPermissions] = useState<ChatPermission[]>([]);
   const [selectedCommunityUser, setSelectedCommunityUser] = useState<User | null>(null);

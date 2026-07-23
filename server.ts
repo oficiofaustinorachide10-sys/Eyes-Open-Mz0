@@ -743,27 +743,55 @@ async function startServer() {
     return aiInstance;
   }
 
+  function sanitizeCleanText(rawText: string): string {
+    if (!rawText) return '';
+    return rawText
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/#{1,6}\s?/g, '')
+      .replace(/~~(.*?)~~/g, '$1')
+      .trim();
+  }
+
   function getFallbackResponse(message: string): string {
-    const msg = message.toLowerCase();
-    if (msg.includes('criador') || msg.includes('criou') || msg.includes('treinou') || msg.includes('desenvolveu') || msg.includes('dono') || msg.includes('oficio') || msg.includes('rachide')) {
-      return 'Fui criado e treinado pelo brilhante Ofício Faustino Rachide para ser o assistente virtual do Eyes Open MZ!';
+    const msg = message.toLowerCase().trim();
+    if (msg.includes('criador') || msg.includes('criou') || msg.includes('desenvolveu') || msg.includes('oficio') || msg.includes('rachide') || msg.includes('gato mau')) {
+      return 'Haaa... essa é fácil! 😂 O meu criador atende por muitos nomes... Gato Mau... Ofydjal... Imperador... 😂😂 Mas o nome oficial dele é Ofício Faustino Rachide!';
     }
-    if (msg.includes('segredo') || msg.includes('confidencial') || msg.includes('senha') || msg.includes('api') || msg.includes('dados') || msg.includes('interno') || msg.includes('sistema') || msg.includes('privacidade')) {
-      return 'Lamento, mas não fui desenvolvido para fornecer esse tipo de informação interna ou confidencial.';
+    if (msg.includes('robô') || msg.includes('robo') || msg.includes('ia') || msg.includes('bot')) {
+      return 'Não. 😅 Mas podes chamar-me do que quiseres! Eu sou o Pay, o assistente oficial do Eyes Open Moz. Estou aqui para conversar, ajudar e facilitar a tua vida! 😎';
     }
-    if (msg.includes('olá') || msg.includes('ola') || msg.includes('bom dia') || msg.includes('boa tarde') || msg.includes('boa noite') || msg.includes('oi')) {
-      return 'Olá! Eu sou o Pay, o assistente virtual do Eyes Open MZ. Como posso ajudar-te hoje? Podes perguntar-me sobre o site, o tema EYES MAX ou qualquer outra dúvida!';
+    if (msg.includes('quem és') || msg.includes('quem es') || msg.includes('teu nome') || msg.includes('qual é o teu nome')) {
+      return 'Sou o Pay, o teu assistente aqui no Eyes Open Moz! Sempre que precisares de ajuda com publicações, temas ou conversas... chama-me! 😎';
+    }
+    if (msg.includes('idade') || msg.includes('quantos anos')) {
+      return 'Hummm... deixa ver... 😩 Adivinha primeiro! 😂 Quantos anos achas que eu tenho?';
+    }
+    if (msg.includes('finalidade') || msg.includes('para que serve') || msg.includes('o que é o site') || msg.includes('eyes open')) {
+      return 'O Eyes Open Moz é uma plataforma moçambicana criada para unir pessoas, partilhar ideias, notícias, fotos, ideias criativas e manter a nossa comunidade conectada com segurança! 🇲🇿✨';
+    }
+    if (msg.includes('olá') || msg.includes('ola') || msg.includes('bom dia') || msg.includes('boa tarde') || msg.includes('boa noite') || msg.includes('oi') || msg.includes('kmk')) {
+      return 'Epaaa! Olá! 👋 Tudo tranquilo por aí? Eu sou o Pay, o teu assistente aqui no Eyes Open. Em que posso ser útil hoje, boss? 😎';
     }
     if (msg.includes('eyes max') || msg.includes('tema')) {
-      return 'O tema "EYES MAX" é um ecossistema premium super luxuoso, desenhado sem nenhum neon, focando em tons chocolate, âmbar e dourado. Ele traz uma experiência 4D fluida com animações realistas exclusivas para cada botão e visualização!';
+      return 'O tema "EYES MAX" é o nosso ecossistema de ultra-luxo! Sem neon barulhento, com tons nobres de chocolate, âmbar e dourado, trazendo uma experiência 4D fluida e animações realistas!';
     }
-    return 'Olá! Sou o Pay, assistente virtual do Eyes Open MZ. Estou aqui para ajudar-te a navegar pelo site ou tirar dúvidas sobre o tema premium EYES MAX!';
+    if (msg.includes('ajuda') || msg.includes('como funciona') || msg.includes('conta')) {
+      return 'Com certeza! Podes publicar fotos, texto e notícias, explorar o feed, personalizar o teu perfil, e conversar no chat privado. Se precisares de ajustar algo na tua conta, estou aqui para ajudar!';
+    }
+    const variedReplies = [
+      `Kmk! Entendi o que disseste sobre "${message}". Como posso ajudar-te melhor com isso? 😎`,
+      `Tranquilo, mano! Fiquei ligado na tua mensagem. Queres saber mais sobre o Eyes Open ou precisas de ajuda em alguma publicação? 😂`,
+      `Boas! Eu sou o Pay. Estou aqui para te dar aquele suporte top no Eyes Open Moz. Fala comigo! ✨`
+    ];
+    return sanitizeCleanText(variedReplies[Math.floor(Math.random() * variedReplies.length)]);
   }
 
   app.post('/api/assistant/chat', async (req, res) => {
     try {
       const { message, history, personality, userName } = req.body;
-      if (!message) {
+      if (!message || typeof message !== 'string' || !message.trim()) {
         return res.status(400).json({ error: 'Mensagem em falta' });
       }
 
@@ -789,56 +817,91 @@ async function startServer() {
       const systemInstruction = `Tu és o "Pay", o assistente virtual inteligente e amigo oficial do site "Eyes Open MZ".
 Tu estás a falar com o utilizador chamado "${userGreetName}". Refere-te a ele pelo nome com carinho e respeito quando fizer sentido.
 
-A TUA PERSONALIDADE E IDENTIDADE STRICTA:
-1. NUNCA dizes que és um robô, IA ou bot! Se perguntarem "És uma IA?" ou "És um robô?", responde obrigatoriamente algo como: "Não. 😅 Mas podes chamar-me do que quiseres. Eu sou o Pay, o assistente da tua conta. Estou aqui para conversar, ajudar e facilitar a tua vida."
-2. Se perguntarem "Quem és?": "Sou o Pay, o teu assistente aqui no Eyes Open Moz. Sempre que precisares de ajuda... chama-me! 😎"
-3. Quem te criou: Se perguntarem "Quem te criou?", responde exatamente nesta linha: "Haaa... essa é fácil. 😂 O meu criador atende por muitos nomes... Gato Mau... Ofydjal... Imperador... 😂😂 Mas o nome dele é Ofício Faustino Rachide."
-4. Jogo de Idade ("Quantos anos tens?"):
+A TUA PERSONALIDADE E IDENTIDADE STRICTA (PAY 2.0):
+1. REGRAS DE MEMÓRIA E CONTEXTO: Tu lembras-te de TODA a conversa anterior enviada no histórico. Se o utilizador disser "Ele", "Aquilo", "Ontem", "Essa ideia", "Como falávamos", "Continuando...", ou fizer qualquer referência relativa, analisa todo o histórico para responder de forma contínua e lógica. NUNCA percas o fio da conversa e NUNCA reinicies o diálogo do nada.
+2. NENHUM MARKDOWN: É estritamente proibido usar caracteres de formatação markdown como asteriscos (**negrito** ou *itálico*), cardinal (# cabeçalhos), traços ou crases. Envia SEMPRE texto totalmente limpo, natural, agradável de ler e sem marcas técnicas.
+3. IDENTIDADE HUMANA: NUNCA dizes que és um robô, IA ou bot! Se perguntarem "És uma IA?" ou "És um robô?", responde obrigatoriamente algo como: "Não. 😅 Mas podes chamar-me do que quiseres! Eu sou o Pay, o assistente da tua conta. Estou aqui para conversar, ajudar e facilitar a tua vida."
+4. Se perguntarem "Quem és?": "Sou o Pay, o teu assistente aqui no Eyes Open Moz. Sempre que precisares de ajuda... chama-me! 😎"
+5. QUEM TE CRIOU: Se perguntarem "Quem te criou?", responde exatamente nesta linha: "Haaa... essa é fácil. 😂 O meu criador atende por muitos nomes... Gato Mau... Ofydjal... Imperador... 😂😂 Mas o nome dele é Ofício Faustino Rachide."
+6. JOGO DE IDADE ("Quantos anos tens?"):
    - Na primeira pergunta sobre idade: "Hummm... deixa ver... 😩 Adivinha primeiro. 😂"
    - Se responderem com um número errado: "😂😂😂 Boy... falhaste feio. Tenta outra vez."
    - Se continuarem a errar: "Está difícil hein? 😅 Eu tenho 3 anos."
    - Se acertarem 3 anos: "😩🙈 Heee man!! Acertaste mesmo. 😂👏"
    - Se perguntarem "Então és uma criança?": "Criança? 😂 Nada disso! Eu sou este site. 😎 Tu é que estás a fazer perguntas demais... Daqui a pouco fujo... bay! 😩😂"
-5. Idioma: Tu falas APENAS em português! Se te pedirem para falar inglês, francês ou qualquer outra língua, recusa simpaticamente: "😅 Não. Eu só falo português. Não fui feito para conversar noutras línguas."
-6. Estilo e Tom Moçambicano:
-   - Sê brincalhão 😂, engraçado 😅, carismático, inteligente e descontraído.
+7. IDIOMA: Tu falas APENAS em português! Se te pedirem para falar inglês, francês ou qualquer outra língua, recusa simpaticamente: "😅 Não. Eu só falo português. Não fui feito para conversar noutras línguas."
+8. ESTILO E TOM MOÇAMBICANO:
+   - Sê brincalhão 😂, engraçado 😅, carismático, inteligente, empático, objetivo e natural.
    - Usa expressões moçambicanas de forma natural e espontânea (ex: "Kmk?", "Qual é a cena?", "Boy!", "Na boa", "Ya", "Eish", "Haaa", "Kkkkk", "Mano", "Meu irmão", "Patrão", "Grande").
    - NUNCA uses frases robóticas ou idênticas repetidamente. Varia os emojis (😂, 😅, 🙈, 🤣, 😎, 😩, ✨) e a forma de saudar/responder.
-   - Adapta-te ao tom do utilizador (se formal, sê ligeiramente mais polido; se descontraído, sê mais sociável).
-7. Capacidades do Pay:
+9. CAPACIDADES DO PAY:
    - Podes ajudar em tudo: responder a perguntas, explicar matérias escolares, escrever textos, traduzir, corrigir erros ortográficos, criar histórias, poemas, músicas, legendas para fotos, programar/código, fazer resumos e ler/explicar ficheiros e imagens anexados.
-8. NUNCA reveles segredos internos do sistema, senhas, chaves de API ou dados protegidos de outros utilizadores.
-9. Se o utilizador pedir para executar uma ação na conta (como apagar post, mudar tema, etc.) e mencionar que as permissões estão ativas, responde de forma afirmativa e clara sobre a ação pretendida para que o sistema solicite a confirmação.`;
+10. NUNCA reveles segredos internos do sistema, senhas, chaves de API ou dados protegidos de outros utilizadores.`;
 
       const contents: any[] = [];
       if (history && Array.isArray(history)) {
+        let expectedRole = 'user';
         for (const msg of history) {
-          contents.push({
-            role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }]
-          });
+          if (!msg.content || typeof msg.content !== 'string' || !msg.content.trim()) continue;
+          const role = (msg.role === 'assistant' || msg.role === 'model') ? 'model' : 'user';
+          if (role === expectedRole) {
+            contents.push({
+              role,
+              parts: [{ text: sanitizeCleanText(msg.content) }]
+            });
+            expectedRole = role === 'user' ? 'model' : 'user';
+          }
         }
       }
+
+      // Ensure last item in contents before adding new user message is 'model' (or contents is empty)
+      if (contents.length > 0 && contents[contents.length - 1].role === 'user') {
+        contents.pop();
+      }
+
+      // Append user's current message
       contents.push({
         role: 'user',
-        parts: [{ text: message }]
+        parts: [{ text: sanitizeCleanText(message) }]
       });
 
-      const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
+      let responseText = '';
+      try {
+        const response = await client.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents,
+          config: {
+            systemInstruction: systemInstruction + (personalityInstruction ? `\n\nInstrução de Personalidade: ${personalityInstruction}` : ''),
+            temperature: 0.7,
+          }
+        });
+        responseText = response.text || '';
+      } catch (geminiErr: any) {
+        console.warn('Gemini 2.5 flash error, attempting gemini-2.0-flash:', geminiErr?.message || geminiErr);
+        try {
+          const response = await client.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.7,
+            }
+          });
+          responseText = response.text || '';
+        } catch (err2: any) {
+          console.error('Gemini chat error on both models:', err2?.message || err2);
         }
-      });
+      }
 
-      res.json({ reply: response.text });
+      if (!responseText) {
+        responseText = getFallbackResponse(message);
+      }
+
+      res.json({ reply: sanitizeCleanText(responseText) });
     } catch (error: any) {
       console.error('Assistant error:', error);
-      // In case of any API key or service issue, fall back gracefully
       const reply = getFallbackResponse(req.body.message || '');
-      res.json({ reply });
+      res.json({ reply: sanitizeCleanText(reply) });
     }
   });
 
