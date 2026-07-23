@@ -179,8 +179,8 @@
 
 /* Custom CSS-based Theme Override System */
 .theme-lite, .theme-luz, .theme-noite, .theme-esmeralda, .theme-vinho, .theme-ciano, .theme-crepusculo, .theme-neon-cyber, .theme-glass-minimalist, .theme-eyes-max {
-  background-color: var(--theme-bg-main) !important;
-  color: var(--theme-text-main) !important;
+  background-color: var(--theme-bg-main);
+  color: var(--theme-text-main);
 }
 
 /* Smooth Morphing Transitions for Theme Swapping */
@@ -195,80 +195,26 @@ body, aside, main, header, section, footer, select, input, textarea, button, .ro
 
 /* Required Status Indicator Borders */
 .status-online {
-  border: 3px solid red !important;
+  border: 3px solid #ef4444 !important;
 }
 .status-offline {
-  border: 3px solid black !important;
+  border: 3px solid #18181b !important;
 }
 
 /* Sidebar and Header overrides */
 .theme-lite aside, .theme-luz aside, .theme-esmeralda aside, .theme-vinho aside, .theme-ciano aside, .theme-crepusculo aside, .theme-neon-cyber aside, .theme-glass-minimalist aside, .theme-eyes-max aside,
-.theme-lite .bg-\[\#08081a\]\/95, .theme-luz .bg-\[\#08081a\]\/95, .theme-noite .bg-\[\#08081a\]\/95, .theme-esmeralda .bg-\[\#08081a\]\/95, .theme-vinho .bg-\[\#08081a\]\/95, .theme-ciano .bg-\[\#08081a\]\/95, .theme-crepusculo .bg-\[\#08081a\]\/95, .theme-neon-cyber .bg-\[\#08081a\]\/95, .theme-glass-minimalist .bg-\[\#08081a\]\/95, .theme-eyes-max .bg-\[\#08081a\]\/95,
-.theme-lite header, .theme-luz header, .theme-esmeralda header, .theme-vinho header, .theme-ciano header, .theme-crepusculo header, .theme-neon-cyber header, .theme-glass-minimalist header, .theme-eyes-max header,
-.theme-lite .bg-\[\#111130\]\/60, .theme-luz .bg-\[\#111130\]\/60, .theme-noite .bg-\[\#111130\]\/60, .theme-esmeralda .bg-\[\#111130\]\/60, .theme-vinho .bg-\[\#111130\]\/60, .theme-ciano .bg-\[\#111130\]\/60, .theme-crepusculo .bg-\[\#111130\]\/60, .theme-neon-cyber .bg-\[\#111130\]\/60, .theme-glass-minimalist .bg-\[\#111130\]\/60, .theme-eyes-max .bg-\[\#111130\]\/60 {
-  background-color: var(--theme-bg-sidebar) !important;
-  border-color: var(--theme-border) !important;
-}
-
-/* Card and component backgrounds */
-.theme-lite .bg-\[\#090924\], .theme-luz .bg-\[\#090924\], .theme-noite .bg-\[\#090924\], .theme-esmeralda .bg-\[\#090924\], .theme-vinho .bg-\[\#090924\], .theme-ciano .bg-\[\#090924\], .theme-crepusculo .bg-\[\#090924\], .theme-neon-cyber .bg-\[\#090924\], .theme-glass-minimalist .bg-\[\#090924\], .theme-eyes-max .bg-\[\#090924\],
-.theme-lite .bg-\[\#0c0c24\], .theme-luz .bg-\[\#0c0c24\], .theme-noite .bg-\[\#0c0c24\], .theme-esmeralda .bg-\[\#0c0c24\], .theme-vinho .bg-\[\#0c0c24\], .theme-ciano .bg-\[\#0c0c24\], .theme-crepusculo .bg-\[\#0c0c24\], .theme-neon-cyber .bg-\[\#0c0c24\], .theme-glass-minimalist .bg-\[\#0c0c24\], .theme-eyes-max .bg-\[\#0c0c24\],
-.theme-lite .bg-\[\#090924\]\/85, .theme-luz .bg-\[\#090924\]\/85, .theme-noite .bg-\[\#090924\]\/85, .theme-esmeralda .bg-\[\#090924\]\/85, .theme-vinho .bg-\[\#090924\]\/85, .theme-ciano .bg-\[\#090924\]\/85, .theme-crepusculo .bg-\[\#090924\]\/85, .theme-neon-cyber .bg-\[\#090924\]\/85, .theme-glass-minimalist .bg-\[\#090924\]\/85, .theme-eyes-max .bg-\[\#090924\]\/85,
-.theme-lite .bg-black\/60, .theme-luz .bg-black\/60, .theme-noite .bg-black\/60, .theme-esmeralda .bg-black\/60, .theme-vinho .bg-black\/60, .theme-ciano .bg-black\/60, .theme-crepusculo .bg-black\/60, .theme-neon-cyber .bg-black\/60, .theme-glass-minimalist .bg-black\/60, .theme-eyes-max .bg-black\/60,
-.theme-lite .bg-black\/30, .theme-luz .bg-black\/30, .theme-noite .bg-black\/30, .theme-esmeralda .bg-black\/30, .theme-vinho .bg-black\/30, .theme-ciano .bg-black\/30, .theme-crepusculo .bg-black\/30, .theme-neon-cyber .bg-black\/30, .theme-glass-minimalist .bg-black\/30, .theme-eyes-max .bg-black\/30,
-.theme-lite .bg-\[\#121235\], .theme-luz .bg-\[\#121235\], .theme-noite .bg-\[\#121235\], .theme-esmeralda .bg-\[\#121235\], .theme-vinho .bg-\[\#121235\], .theme-ciano .bg-\[\#121235\], .theme-crepusculo .bg-\[\#121235\], .theme-neon-cyber .bg-\[\#121235\], .theme-glass-minimalist .bg-\[\#121235\], .theme-eyes-max .bg-\[\#121235\],
-.theme-lite .bg-\[\#121235\]\/50, .theme-luz .bg-\[\#121235\]\/50, .theme-noite .bg-\[\#121235\]\/50, .theme-esmeralda .bg-\[\#121235\]\/50, .theme-vinho .bg-\[\#121235\]\/50, .theme-ciano .bg-\[\#121235\]\/50, .theme-crepusculo .bg-\[\#121235\]\/50, .theme-neon-cyber .bg-\[\#121235\]\/50, .theme-glass-minimalist .bg-\[\#121235\]\/50, .theme-eyes-max .bg-\[\#121235\]\/50,
-.theme-lite .bg-\[\#050511\], .theme-luz .bg-\[\#050511\], .theme-noite .bg-\[\#050511\], .theme-esmeralda .bg-\[\#050511\], .theme-vinho .bg-\[\#050511\], .theme-ciano .bg-\[\#050511\], .theme-crepusculo .bg-\[\#050511\], .theme-neon-cyber .bg-\[\#050511\], .theme-glass-minimalist .bg-\[\#050511\], .theme-eyes-max .bg-\[\#050511\] {
-  background-color: var(--theme-bg-card) !important;
-  border-color: var(--theme-border) !important;
-  border-radius: var(--theme-border-radius, 16px) !important;
-  box-shadow: var(--theme-box-shadow, none) !important;
-  backdrop-filter: blur(var(--theme-blur, 10px)) !important;
+.theme-lite header, .theme-luz header, .theme-esmeralda header, .theme-vinho header, .theme-ciano header, .theme-crepusculo header, .theme-neon-cyber header, .theme-glass-minimalist header, .theme-eyes-max header {
+  border-color: var(--theme-border);
 }
 
 /* Inputs, Textareas, Select elements */
 .theme-lite input, .theme-luz input, .theme-noite input, .theme-esmeralda input, .theme-vinho input, .theme-ciano input, .theme-crepusculo input, .theme-neon-cyber input, .theme-glass-minimalist input, .theme-eyes-max input,
 .theme-lite textarea, .theme-luz textarea, .theme-noite textarea, .theme-esmeralda textarea, .theme-vinho textarea, .theme-ciano textarea, .theme-crepusculo textarea, .theme-neon-cyber textarea, .theme-glass-minimalist textarea, .theme-eyes-max textarea,
 .theme-lite select, .theme-luz select, .theme-noite select, .theme-esmeralda select, .theme-vinho select, .theme-ciano select, .theme-crepusculo select, .theme-neon-cyber select, .theme-glass-minimalist select, .theme-eyes-max select {
-  background-color: var(--theme-bg-main) !important;
-  color: var(--theme-text-main) !important;
-  border-color: var(--theme-border) !important;
-  border-radius: var(--theme-border-radius, 16px) !important;
-}
-
-/* Global text overrides for all themes */
-.theme-lite .text-white, .theme-luz .text-white, .theme-noite .text-white, .theme-esmeralda .text-white, .theme-vinho .text-white, .theme-ciano .text-white, .theme-crepusculo .text-white, .theme-neon-cyber .text-white, .theme-glass-minimalist .text-white, .theme-eyes-max .text-white {
-  color: var(--theme-text-main) !important;
-  text-shadow: var(--theme-text-glow, none) !important;
-}
-
-.theme-lite .text-gray-400, .theme-luz .text-gray-400, .theme-noite .text-gray-400, .theme-esmeralda .text-gray-400, .theme-vinho .text-gray-400, .theme-ciano .text-gray-400, .theme-crepusculo .text-gray-400, .theme-neon-cyber .text-gray-400, .theme-glass-minimalist .text-gray-400, .theme-eyes-max .text-gray-400 {
-  color: var(--theme-text-muted) !important;
-}
-
-.theme-lite .text-gray-500, .theme-luz .text-gray-500, .theme-noite .text-gray-500, .theme-esmeralda .text-gray-500, .theme-vinho .text-gray-500, .theme-ciano .text-gray-500, .theme-crepusculo .text-gray-500, .theme-neon-cyber .text-gray-500, .theme-glass-minimalist .text-gray-500, .theme-eyes-max .text-gray-500 {
-  color: var(--theme-text-muted) !important;
-}
-
-/* Borders and lines */
-.theme-lite .border-white\/5, .theme-luz .border-white\/5, .theme-noite .border-white\/5, .theme-esmeralda .border-white\/5, .theme-vinho .border-white\/5, .theme-ciano .border-white\/5, .theme-crepusculo .border-white\/5, .theme-neon-cyber .border-white\/5, .theme-glass-minimalist .border-white\/5, .theme-eyes-max .border-white\/5,
-.theme-lite .border-neon-cyan\/20, .theme-luz .border-neon-cyan\/20, .theme-noite .border-neon-cyan\/20, .theme-esmeralda .border-neon-cyan\/20, .theme-vinho .border-neon-cyan\/20, .theme-ciano .border-neon-cyan\/20, .theme-crepusculo .border-neon-cyan\/20, .theme-neon-cyber .border-neon-cyan\/20, .theme-glass-minimalist .border-neon-cyan\/20, .theme-eyes-max .border-neon-cyan\/20,
-.theme-lite .border-neon-cyan\/15, .theme-luz .border-neon-cyan\/15, .theme-noite .border-neon-cyan\/15, .theme-esmeralda .border-neon-cyan\/15, .theme-vinho .border-neon-cyan\/15, .theme-ciano .border-neon-cyan\/15, .theme-crepusculo .border-neon-cyan\/15, .theme-neon-cyber .border-neon-cyan\/15, .theme-glass-minimalist .border-neon-cyan\/15, .theme-eyes-max .border-neon-cyan\/15,
-.theme-lite .border-neon-cyan\/10, .theme-luz .border-neon-cyan\/10, .theme-noite .border-neon-cyan\/10, .theme-esmeralda .border-neon-cyan\/10, .theme-vinho .border-neon-cyan\/10, .theme-ciano .border-neon-cyan\/10, .theme-crepusculo .border-neon-cyan\/10, .theme-neon-cyber .border-neon-cyan\/10, .theme-glass-minimalist .border-neon-cyan\/10, .theme-eyes-max .border-neon-cyan\/10,
-.theme-lite .border-neon-cyan\/25, .theme-luz .border-neon-cyan\/25, .theme-noite .border-neon-cyan\/25, .theme-esmeralda .border-neon-cyan\/25, .theme-vinho .border-neon-cyan\/25, .theme-ciano .border-neon-cyan\/25, .theme-crepusculo .border-neon-cyan\/25, .theme-neon-cyber .border-neon-cyan\/25, .theme-glass-minimalist .border-neon-cyan\/25, .theme-eyes-max .border-neon-cyan\/25,
-.theme-lite .border-neon-cyan\/30, .theme-luz .border-neon-cyan\/30, .theme-noite .border-neon-cyan\/30, .theme-esmeralda .border-neon-cyan\/30, .theme-vinho .border-neon-cyan\/30, .theme-ciano .border-neon-cyan\/30, .theme-crepusculo .border-neon-cyan\/30, .theme-neon-cyber .border-neon-cyan\/30, .theme-glass-minimalist .border-neon-cyan\/30, .theme-eyes-max .border-neon-cyan\/30 {
-  border-color: var(--theme-border) !important;
-}
-
-/* Active buttons and tags */
-.theme-lite .bg-gradient-to-r, .theme-luz .bg-gradient-to-r, .theme-esmeralda .bg-gradient-to-r, .theme-vinho .bg-gradient-to-r, .theme-ciano .bg-gradient-to-r, .theme-crepusculo .bg-gradient-to-r, .theme-neon-cyber .bg-gradient-to-r, .theme-glass-minimalist .bg-gradient-to-r, .theme-eyes-max .bg-gradient-to-r {
-  background-image: none !important;
-  background-color: var(--theme-accent) !important;
-  color: #000000 !important;
-}
-
-.theme-lite .text-black, .theme-luz .text-black, .theme-esmeralda .text-black, .theme-vinho .text-black, .theme-ciano .text-black, .theme-crepusculo .text-black, .theme-neon-cyber .text-black, .theme-glass-minimalist .text-black, .theme-eyes-max .text-black {
-  color: #000000 !important;
+  background-color: var(--theme-bg-main);
+  color: var(--theme-text-main);
+  border-color: var(--theme-border);
+  border-radius: var(--theme-border-radius, 16px);
 }
 
 

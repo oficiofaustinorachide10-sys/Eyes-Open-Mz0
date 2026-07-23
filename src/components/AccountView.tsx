@@ -19,6 +19,15 @@ interface AccountViewProps {
   onLogout?: () => void;
 }
 
+function getPayPermissions(userId: string) {
+  try {
+    const raw = localStorage.getItem(`pay_permissions_${userId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
 export default function AccountView({ 
   currentUser, users, onUpdateUser, onDeleteAccount, onLogout 
 }: AccountViewProps) {
@@ -354,9 +363,9 @@ export default function AccountView({
             <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input 
                 type="checkbox"
-                defaultChecked={JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}').accessConversations || false}
+                defaultChecked={getPayPermissions(currentUser.id).accessConversations || false}
                 onChange={(e) => {
-                  const current = JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}');
+                  const current = getPayPermissions(currentUser.id);
                   current.accessConversations = e.target.checked;
                   localStorage.setItem(`pay_permissions_${currentUser.id}`, JSON.stringify(current));
                   triggerToast(e.target.checked ? 'Permissão 1 ATIVADA!' : 'Permissão 1 Desativada');
@@ -376,9 +385,9 @@ export default function AccountView({
             <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input 
                 type="checkbox"
-                defaultChecked={JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}').accessPosts || false}
+                defaultChecked={getPayPermissions(currentUser.id).accessPosts || false}
                 onChange={(e) => {
-                  const current = JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}');
+                  const current = getPayPermissions(currentUser.id);
                   current.accessPosts = e.target.checked;
                   localStorage.setItem(`pay_permissions_${currentUser.id}`, JSON.stringify(current));
                   triggerToast(e.target.checked ? 'Permissão 2 ATIVADA!' : 'Permissão 2 Desativada');
@@ -398,9 +407,9 @@ export default function AccountView({
             <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input 
                 type="checkbox"
-                defaultChecked={JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}').monitorAccount || false}
+                defaultChecked={getPayPermissions(currentUser.id).monitorAccount || false}
                 onChange={(e) => {
-                  const current = JSON.parse(localStorage.getItem(`pay_permissions_${currentUser.id}`) || '{}');
+                  const current = getPayPermissions(currentUser.id);
                   current.monitorAccount = e.target.checked;
                   localStorage.setItem(`pay_permissions_${currentUser.id}`, JSON.stringify(current));
                   triggerToast(e.target.checked ? 'Permissão 3 ATIVADA!' : 'Permissão 3 Desativada');

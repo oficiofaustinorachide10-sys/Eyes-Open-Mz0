@@ -2502,7 +2502,7 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
                       </p>
                     </div>
 
-                    {currentUser.isGuest || currentUser.id === 'guest' ? (
+                    {currentUser?.isGuest || currentUser?.id === 'guest' ? (
                       <button
                         onClick={() => onGuestActionAttempt?.()}
                         className="text-[10px] uppercase text-yellow-500 font-bold bg-yellow-500/10 hover:bg-yellow-500/20 p-2.5 border border-yellow-500/25 rounded-xl w-full cursor-pointer transition-colors"
@@ -2863,7 +2863,7 @@ export default function ChatView({ currentUser, initialSelectedChatId, onGuestAc
             })()
           )}
 
-          {currentUser.isGuest || currentUser.id === 'guest' ? (
+          {currentUser?.isGuest || currentUser?.id === 'guest' ? (
             <button
               onClick={() => onGuestActionAttempt?.()}
               className="p-3 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/25 rounded-xl text-center text-xs font-bold text-yellow-500 uppercase tracking-wider shrink-0 cursor-pointer transition-colors w-full"

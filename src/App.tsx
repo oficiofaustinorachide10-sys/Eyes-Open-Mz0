@@ -191,7 +191,7 @@ export default function App() {
   // ==========================================
   const isUnverified = useMemo(() => {
     if (!currentUser) return false;
-    if (currentUser.isGuest || currentUser.id === 'guest') return false;
+    if (currentUser?.isGuest || currentUser?.id === 'guest') return false;
     if (currentUser.isVerified) return false;
     return true;
   }, [currentUser]);

@@ -44,8 +44,8 @@ export default function PayAssistantModal({
   onExecuteCommand,
   posts = []
 }: PayAssistantModalProps) {
-  const isGuest = currentUser.isGuest || currentUser.id === 'guest';
-  const userId = currentUser.id || 'guest';
+  const isGuest = !currentUser || currentUser.isGuest || currentUser.id === 'guest';
+  const userId = currentUser?.id || 'guest';
 
   // Guest question count (limit: 4)
   const [guestQuestionCount, setGuestQuestionCount] = useState<number>(() => {
@@ -97,7 +97,7 @@ export default function PayAssistantModal({
     }
 
     // Welcome greeting for registered user
-    const userName = currentUser.firstname || currentUser.nickname || 'utilizador';
+    const userName = currentUser?.firstname || currentUser?.nickname || 'utilizador';
     const greetings = [
       `Epaaa! Voltaste, ${userName}? 😎 Kmk? Qual é a cena hoje?`,
       `Olá ${userName}! Bem-vindo de volta ao Eyes Open Moz. Como te posso ajudar hoje, boss?`,
@@ -457,7 +457,7 @@ export default function PayAssistantModal({
         body: JSON.stringify({
           message: userMsgContent,
           history: messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
-          userName: currentUser.firstname || currentUser.nickname || 'utilizador',
+          userName: currentUser?.firstname || currentUser?.nickname || 'utilizador',
           isGuest
         })
       });
@@ -490,7 +490,7 @@ export default function PayAssistantModal({
 
   // Export Chat to TXT
   const exportChatToTxt = () => {
-    const textData = messages.map(m => `[${m.timestamp}] ${m.role === 'user' ? (currentUser.nickname || 'Tu') : 'Pay'}: ${m.content}`).join('\n\n');
+    const textData = messages.map(m => `[${m.timestamp}] ${m.role === 'user' ? (currentUser?.nickname || 'Tu') : 'Pay'}: ${m.content}`).join('\n\n');
     const blob = new Blob([textData], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -530,7 +530,7 @@ export default function PayAssistantModal({
             </div>
             <p className="text-[10px] text-amber-200/60 font-semibold flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-              {isGuest ? 'Modo Convidado' : `Assistente de @${currentUser.nickname || 'utilizador'}`}
+              {isGuest ? 'Modo Convidado' : `Assistente de @${currentUser?.nickname || 'utilizador'}`}
             </p>
           </div>
         </div>

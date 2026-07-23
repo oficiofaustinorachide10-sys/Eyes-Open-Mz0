@@ -51,8 +51,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn('[Firestore Handled Error]', errInfo);
 }
 
 // Utility to clean undefined values recursively from objects before writing to Firestore
