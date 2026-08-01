@@ -1,11 +1,60 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Catch-all rules allowing client and server reads/writes
-    // since the app uses custom JWT server-side authentication instead of Firebase Auth.
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'oficiofaustino78@gmail.com' ||
+        request.auth.token.email.lower() == 'admin@alax.mz' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Default catch-all
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // USERS COLLECTION (Isolated per user UID)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // BOOKS COLLECTION (Public reading, Admin publishing & modification)
+    match /books/{bookId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['downloadCount', 'likesCount'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // REVIEWS COLLECTION
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // COMMENTS COLLECTION
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
   }
 }

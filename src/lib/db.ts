@@ -1,811 +1,446 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDocs, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  orderBy,
+import {
+  collection,
+  doc,
   getDoc,
-  where
+  getDocs,
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+  increment,
+  serverTimestamp
 } from 'firebase/firestore';
-import { db, auth } from './firebase';
-import { User, Post, Story, Notification, Friendship, ChatPermission } from '../types';
-import { SEED_USERS, SEED_POSTS, SEED_STORIES, compressBase64Image } from '../utils';
+import { db } from './firebase';
+import { Book, Review, BookComment, User, AdminStats } from '../types';
+import { SAMPLE_BOOKS, SAMPLE_REVIEWS, SAMPLE_COMMENTS, compressBase64Image } from '../utils';
 
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-  }
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  let userId: string | null = null;
-  try {
-    const stored = localStorage.getItem('currentUser');
-    if (stored) {
-      userId = JSON.parse(stored).id;
-    }
-  } catch (e) {}
-
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId,
-    },
-    operationType,
-    path
-  };
-  console.warn('[Firestore Handled Error]', errInfo);
-}
-
-// Utility to clean undefined values recursively from objects before writing to Firestore
-export function sanitizeDoc<T extends object>(obj: T): T {
-  const clean = { ...obj } as any;
-  Object.keys(clean).forEach(key => {
-    if (clean[key] === undefined) {
-      delete clean[key];
-    } else if (clean[key] !== null && typeof clean[key] === 'object') {
-      if (Object.prototype.toString.call(clean[key]) === '[object Object]') {
-        clean[key] = sanitizeDoc(clean[key]);
-      }
-    }
-  });
+// Helper to strip non-serializable fields
+function sanitizeDoc<T>(docObj: T): any {
+  const clean = JSON.parse(JSON.stringify(docObj));
   return clean;
 }
 
-// Helper to check if database has collections and seed them if empty
-export async function seedDatabaseIfEmpty() {
+// -------------------------------------------------------------
+// BOOKS DATA LAYER (Firestore `books`)
+// -------------------------------------------------------------
+
+/**
+ * Real-time listener for all books in Ala X
+ */
+export function dbSubscribeBooks(onUpdate: (books: Book[]) => void): () => void {
   try {
-    // 1. Seed Users
-    const usersCol = collection(db, 'users');
-    const usersSnapshot = await getDocs(usersCol);
-    if (usersSnapshot.empty) {
-      for (const u of SEED_USERS) {
-        await setDoc(doc(db, 'users', u.id), u);
-      }
-      console.log('Seeded users collection successfully.');
-    }
-
-    // 2. Seed Posts
-    const postsCol = collection(db, 'posts');
-    const postsSnapshot = await getDocs(postsCol);
-    if (postsSnapshot.empty) {
-      for (const p of SEED_POSTS) {
-        // Initial posts can have empty comments array
-        await setDoc(doc(db, 'posts', p.id), {
-          ...p,
-          comments: []
-        });
-      }
-      console.log('Seeded posts collection successfully.');
-    }
-
-    // 3. Seed Stories
-    const storiesCol = collection(db, 'stories');
-    const storiesSnapshot = await getDocs(storiesCol);
-    if (storiesSnapshot.empty) {
-      for (const s of SEED_STORIES) {
-        await setDoc(doc(db, 'stories', s.id), s);
-      }
-      console.log('Seeded stories collection successfully.');
-    }
-
-    // 4. Seed Chat Messages
-    const chatsCol = collection(db, 'chats');
-    const chatsSnapshot = await getDocs(chatsCol);
-    if (chatsSnapshot.empty) {
-      const initialMessages = [
-        {
-          id: 'msg_1',
-          sender: {
-            name: 'Alex MZ',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-            id: 'user1'
-          },
-          text: 'Olá malta! Sejam muito bem-vindos à rede de conversação oficial do Eyes Open MZ 🇲🇿',
-          timestamp: Date.now() - 3600000
-        },
-        {
-          id: 'msg_2',
-          sender: {
-            name: 'Oficio MZ',
-            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-            id: 'user2'
-          },
-          text: 'Grande Alex! O feed 4D de histórias está a correr extremamente bem. Parabéns pela arquitetura!',
-          timestamp: Date.now() - 1800000
-        }
-      ];
-      for (const m of initialMessages) {
-        await setDoc(doc(db, 'chats', m.id), m);
-      }
-      console.log('Seeded chats collection successfully.');
-    }
-
-    // 5. Seed Notifications
-    const notificationsCol = collection(db, 'notifications');
-    const notificationsSnapshot = await getDocs(notificationsCol);
-    if (notificationsSnapshot.empty) {
-      const initialNotifications = [
-        {
-          id: 'notif_1',
-          recipientId: 'user1', // Alex MZ
-          title: 'Nova Estrela ⭐',
-          text: 'Oficio MZ deu uma estrela à sua publicação 4D.',
-          type: 'star',
-          sender: {
-            id: 'user2',
-            name: 'Oficio MZ',
-            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200'
-          },
-          read: false,
-          targetId: 'post1',
-          targetView: 'feed',
-          timestamp: Date.now() - 3600000
-        },
-        {
-          id: 'notif_2',
-          recipientId: 'user1', // Alex MZ
-          title: 'Novo Comentário 💬',
-          text: 'Oficio MZ comentou: "Excelente enquadramento, parabéns!".',
-          type: 'comment',
-          sender: {
-            id: 'user2',
-            name: 'Oficio MZ',
-            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200'
-          },
-          read: false,
-          targetId: 'post1',
-          targetView: 'feed',
-          timestamp: Date.now() - 1800000
-        }
-      ];
-      for (const n of initialNotifications) {
-        await setDoc(doc(db, 'notifications', n.id), n);
-      }
-      console.log('Seeded notifications collection successfully.');
-    }
-  } catch (err) {
-    console.error('Error seeding database:', err);
-  }
-}
-
-// Subscribe to real-time collections
-export function subscribeUsers(callback: (users: User[]) => void) {
-  const usersCol = collection(db, 'users');
-  return onSnapshot(usersCol, (snapshot) => {
-    const list: User[] = [];
-    snapshot.forEach((docSnap) => {
-      list.push(docSnap.data() as User);
-    });
-    callback(list);
-  }, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'users');
-  });
-}
-
-export function subscribePosts(callback: (posts: Post[]) => void) {
-  const postsCol = collection(db, 'posts');
-  // Order by timestamp desc
-  const q = query(postsCol, orderBy('timestamp', 'desc'));
-
-  const handleSnapshot = (snapshot: any) => {
-    const list: Post[] = [];
-    snapshot.forEach((docSnap: any) => {
-      const data = docSnap.data();
-      list.push({
-        id: docSnap.id,
-        ...data
-      } as Post);
-    });
-
-    if (list.length > 0) {
-      try {
-        localStorage.setItem('eo_cached_posts', JSON.stringify(list));
-      } catch (e) {}
-      callback(list);
-    } else {
-      // If Firestore returned no posts, check localStorage or fallback to SEED_POSTS
-      try {
-        const stored = localStorage.getItem('eo_cached_posts');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            callback(parsed);
-            return;
-          }
-        }
-      } catch (e) {}
-      callback(SEED_POSTS);
-    }
-  };
-
-  return onSnapshot(q, handleSnapshot, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'posts');
-    // If ordered query fails (e.g. missing index), try basic collection listener without orderBy
-    onSnapshot(postsCol, (basicSnap) => {
-      handleSnapshot(basicSnap);
-    }, (basicErr) => {
-      handleFirestoreError(basicErr, OperationType.LIST, 'posts_basic');
-      try {
-        const stored = localStorage.getItem('eo_cached_posts');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            callback(parsed);
-            return;
-          }
-        }
-      } catch (e) {}
-      callback(SEED_POSTS);
-    });
-  });
-}
-
-export function subscribeStories(callback: (stories: Story[]) => void) {
-  const storiesCol = collection(db, 'stories');
-  const q = query(storiesCol, orderBy('timestamp', 'desc'));
-
-  const handleSnapshot = (snapshot: any) => {
-    const list: Story[] = [];
-    snapshot.forEach((docSnap: any) => {
-      const data = docSnap.data();
-      list.push({
-        id: docSnap.id,
-        ...data
-      } as Story);
-    });
-
-    if (list.length > 0) {
-      try {
-        localStorage.setItem('eo_cached_stories', JSON.stringify(list));
-      } catch (e) {}
-      callback(list);
-    } else {
-      try {
-        const stored = localStorage.getItem('eo_cached_stories');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            callback(parsed);
-            return;
-          }
-        }
-      } catch (e) {}
-      callback(SEED_STORIES);
-    }
-  };
-
-  return onSnapshot(q, handleSnapshot, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'stories');
-    try {
-      const stored = localStorage.getItem('eo_cached_stories');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          callback(parsed);
+    const q = query(collection(db, 'books'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (snapshot.empty) {
+          // Seed sample books if database is empty
+          seedInitialBooks().then(() => {
+            onUpdate(SAMPLE_BOOKS);
+          });
           return;
         }
-      }
-    } catch (e) {}
-    callback(SEED_STORIES);
-  });
-}
-
-export function subscribeChats(callback: (messages: any[]) => void) {
-  const chatsCol = collection(db, 'chats');
-  const q = query(chatsCol, orderBy('timestamp', 'asc'));
-  return onSnapshot(q, (snapshot) => {
-    const list: any[] = [];
-    snapshot.forEach((docSnap) => {
-      list.push({
-        id: docSnap.id,
-        ...docSnap.data()
-      });
-    });
-    callback(list);
-  }, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'chats');
-  });
-}
-
-// User Profile Actions
-export async function dbUpdateUser(user: User) {
-  try {
-    await setDoc(doc(db, 'users', user.id), user, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `users/${user.id}`);
-  }
-}
-
-export async function dbDeleteUser(userId: string) {
-  try {
-    await deleteDoc(doc(db, 'users', userId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `users/${userId}`);
-  }
-}
-
-// Post Actions
-export async function dbCreatePost(post: Post) {
-  const cleanPost = sanitizeDoc(post);
-
-  // Compress large base64 image or cover if present before saving to Firestore
-  if (cleanPost.image && typeof cleanPost.image === 'string' && cleanPost.image.startsWith('data:image')) {
-    cleanPost.image = await compressBase64Image(cleanPost.image, 800, 0.65);
-  }
-  if ((cleanPost as any).mediaCover && typeof (cleanPost as any).mediaCover === 'string' && (cleanPost as any).mediaCover.startsWith('data:image')) {
-    (cleanPost as any).mediaCover = await compressBase64Image((cleanPost as any).mediaCover, 800, 0.65);
-  }
-
-  // Sync to local cache immediately
-  try {
-    const stored = localStorage.getItem('eo_cached_posts');
-    const existing: Post[] = stored ? JSON.parse(stored) : SEED_POSTS;
-    const updated = [cleanPost, ...existing.filter(p => p.id !== cleanPost.id)];
-    localStorage.setItem('eo_cached_posts', JSON.stringify(updated));
-  } catch (e) {}
-
-  try {
-    await setDoc(doc(db, 'posts', cleanPost.id), {
-      ...cleanPost,
-      comments: cleanPost.comments || []
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, `posts/${post.id}`);
-  }
-}
-
-export async function dbDeletePost(postId: string) {
-  // Sync to local cache immediately
-  try {
-    const stored = localStorage.getItem('eo_cached_posts');
-    if (stored) {
-      const existing: Post[] = JSON.parse(stored);
-      const updated = existing.filter(p => p.id !== postId);
-      localStorage.setItem('eo_cached_posts', JSON.stringify(updated));
-    }
-  } catch (e) {}
-
-  try {
-    await deleteDoc(doc(db, 'posts', postId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `posts/${postId}`);
-  }
-}
-
-export async function dbUpdatePost(post: Post) {
-  const cleanPost = sanitizeDoc(post);
-
-  // Sync to local cache immediately
-  try {
-    const stored = localStorage.getItem('eo_cached_posts');
-    if (stored) {
-      const existing: Post[] = JSON.parse(stored);
-      const updated = existing.map(p => p.id === cleanPost.id ? { ...p, ...cleanPost } : p);
-      localStorage.setItem('eo_cached_posts', JSON.stringify(updated));
-    }
-  } catch (e) {}
-
-  try {
-    await setDoc(doc(db, 'posts', cleanPost.id), cleanPost, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}`);
-  }
-}
-
-// User unique votes / ratings functions
-export async function dbCheckUserVote(userId: string, postId: string): Promise<boolean> {
-  try {
-    const voteRef = doc(db, 'votes', `${userId}_${postId}`);
-    const voteSnap = await getDoc(voteRef);
-    return voteSnap.exists();
-  } catch (err) {
-    handleFirestoreError(err, OperationType.GET, `votes/${userId}_${postId}`);
-    return false;
-  }
-}
-
-export async function dbCreateUserVote(userId: string, postId: string, location: string | undefined, ratingValue: number): Promise<boolean> {
-  try {
-    const voteRef = doc(db, 'votes', `${userId}_${postId}`);
-    const voteData = sanitizeDoc({
-      userId: userId || '',
-      postId: postId || '',
-      location: location || '',
-      rating: ratingValue || 0,
-      timestamp: Date.now()
-    });
-
-    await setDoc(voteRef, voteData, { merge: true });
-    return true;
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, `votes/${userId}_${postId}`);
-    return false;
-  }
-}
-
-// Story Actions
-export async function dbCreateStory(story: Story) {
-  try {
-    await setDoc(doc(db, 'stories', story.id), story);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, `stories/${story.id}`);
-  }
-}
-
-export async function dbDeleteStory(storyId: string) {
-  try {
-    await deleteDoc(doc(db, 'stories', storyId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `stories/${storyId}`);
-  }
-}
-
-export async function dbUpdateStory(story: Story) {
-  try {
-    await setDoc(doc(db, 'stories', story.id), story, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `stories/${story.id}`);
-  }
-}
-
-// Message Actions
-export async function dbSendMessage(message: { id: string; sender: any; text: string; timestamp: number }) {
-  try {
-    await setDoc(doc(db, 'chats', message.id), message);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `chats/${message.id}`);
-  }
-}
-
-export async function dbUpdateMessage(message: any) {
-  try {
-    await setDoc(doc(db, 'chats', message.id), message);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `chats/${message.id}`);
-  }
-}
-
-export async function dbDeleteMessage(messageId: string) {
-  try {
-    await deleteDoc(doc(db, 'chats', messageId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `chats/${messageId}`);
-  }
-}
-
-// Notification Actions
-export function subscribeNotifications(recipientId: string, callback: (notifications: Notification[]) => void) {
-  const notificationsCol = collection(db, 'notifications');
-  const q = query(notificationsCol, orderBy('timestamp', 'desc'));
-  return onSnapshot(q, (snapshot) => {
-    const list: Notification[] = [];
-    snapshot.forEach((docSnap) => {
-      const notif = docSnap.data() as Notification;
-      if (notif.recipientId === 'all' || notif.recipientId === recipientId) {
-        list.push({
-          id: docSnap.id,
-          ...notif
+        const books: Book[] = [];
+        snapshot.forEach((docSnap) => {
+          books.push({ id: docSnap.id, ...docSnap.data() } as Book);
         });
-      }
-    });
-    callback(list);
-  }, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'notifications');
-  });
-}
-
-export async function dbCreateNotification(notif: Notification) {
-  try {
-    await setDoc(doc(db, 'notifications', notif.id), notif);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, `notifications/${notif.id}`);
-  }
-}
-
-export async function dbUpdateNotification(notif: Notification) {
-  try {
-    await setDoc(doc(db, 'notifications', notif.id), notif, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `notifications/${notif.id}`);
-  }
-}
-
-export async function dbDeleteNotification(notifId: string) {
-  try {
-    await deleteDoc(doc(db, 'notifications', notifId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `notifications/${notifId}`);
-  }
-}
-
-export async function dbClearAllNotifications(recipientId: string) {
-  try {
-    const notificationsCol = collection(db, 'notifications');
-    const snapshot = await getDocs(notificationsCol);
-    const promises: Promise<void>[] = [];
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (data.recipientId === recipientId) {
-        promises.push(deleteDoc(docSnap.ref));
-      }
-    });
-    await Promise.all(promises);
-  } catch (err) {
-    console.error('Error clearing notifications:', err);
-    handleFirestoreError(err, OperationType.DELETE, 'notifications');
-  }
-}
-
-// Friendship Subscriptions and Actions
-export function subscribeFriendships(callback: (friendships: Friendship[]) => void) {
-  const friendshipsCol = collection(db, 'friendships');
-  return onSnapshot(friendshipsCol, (snapshot) => {
-    const list: Friendship[] = [];
-    snapshot.forEach((docSnap) => {
-      list.push({
-        id: docSnap.id,
-        ...docSnap.data()
-      } as Friendship);
-    });
-    callback(list);
-  }, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'friendships');
-  });
-}
-
-export async function enviarPedidoAmizade(targetUserId: string) {
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) {
-    alert("Precisa de estar autenticado para enviar pedidos de amizade.");
-    return;
-  }
-
-  // 1. Bloqueio de Auto-Interação
-  if (currentUid === targetUserId) {
-    alert("Não é permitido enviar um pedido de amizade para si mesmo.");
-    return;
-  }
-
-  try {
-    // 2. Prevenção de Duplicidade
-    const docId1 = `${currentUid}_${targetUserId}`;
-    const docId2 = `${targetUserId}_${currentUid}`;
-
-    const docRef1 = doc(db, 'friendships', docId1);
-    const docRef2 = doc(db, 'friendships', docId2);
-
-    const [snap1, snap2] = await Promise.all([getDoc(docRef1), getDoc(docRef2)]);
-
-    if (snap1.exists() || snap2.exists()) {
-      alert("Já existe um pedido de amizade ou vínculo entre vocês!");
-      return;
-    }
-
-    // Criar o novo documento de amizade
-    const userDoc = await getDoc(doc(db, 'users', currentUid));
-    const userData = userDoc.exists() ? userDoc.data() : null;
-    const senderName = userData?.nickname || auth.currentUser?.displayName || 'Utilizador';
-    const senderAvatar = userData?.avatar || auth.currentUser?.photoURL || 'https://i.pravatar.cc/100?img=1';
-
-    const newFriendship: Friendship = {
-      id: docId1,
-      senderId: currentUid,
-      receiverId: targetUserId,
-      status: 'pending',
-      level: 'conhecido',
-      timestamp: Date.now()
-    };
-
-    // Usando setDoc com ID composto
-    await setDoc(doc(db, 'friendships', docId1), newFriendship);
-    alert("Pedido de amizade enviado com sucesso!");
-
-    // Criar uma notificação
-    const notifId = 'notif_friend_' + currentUid + '_' + Math.random().toString(36).substring(2, 9);
-    const newNotif: Notification = {
-      id: notifId,
-      recipientId: targetUserId,
-      title: 'Pedido de Amizade Social 👥',
-      text: `${senderName} enviou-lhe um pedido de amizade social no Feed.`,
-      type: 'friend_request',
-      sender: {
-        id: currentUid,
-        name: senderName,
-        avatar: senderAvatar
+        // Sort descending by createdAt
+        books.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        localStorage.setItem('alax_cached_books', JSON.stringify(books));
+        onUpdate(books);
       },
-      read: false,
-      timestamp: Date.now(),
-      targetView: 'notificacoes'
-    };
-    await setDoc(doc(db, 'notifications', notifId), newNotif);
-
+      (error) => {
+        console.warn('Firestore books subscription error, falling back to cache/sample:', error);
+        const cached = localStorage.getItem('alax_cached_books');
+        if (cached) {
+          try { onUpdate(JSON.parse(cached)); } catch (e) { onUpdate(SAMPLE_BOOKS); }
+        } else {
+          onUpdate(SAMPLE_BOOKS);
+        }
+      }
+    );
+    return unsubscribe;
   } catch (err) {
-    console.error("Erro ao enviar pedido de amizade:", err);
-    handleFirestoreError(err, OperationType.CREATE, `friendships/${currentUid}_${targetUserId}`);
+    console.error('Error setting up books subscriber:', err);
+    onUpdate(SAMPLE_BOOKS);
+    return () => {};
   }
 }
 
-export async function dbCreateFriendship(friendship: Friendship) {
+/**
+ * Seed initial sample books to Firestore if collection is empty
+ */
+export async function seedInitialBooks(): Promise<void> {
   try {
-    await setDoc(doc(db, 'friendships', friendship.id), friendship);
+    const snap = await getDocs(collection(db, 'books'));
+    if (snap.empty) {
+      for (const book of SAMPLE_BOOKS) {
+        await setDoc(doc(db, 'books', book.id), sanitizeDoc(book));
+      }
+      console.log('Ala X sample books seeded to Firestore successfully');
+    }
   } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, `friendships/${friendship.id}`);
+    console.warn('Failed to seed initial books:', err);
   }
 }
 
-export async function dbUpdateFriendship(friendship: Friendship) {
+/**
+ * Fetch all published books
+ */
+export async function dbFetchBooks(): Promise<Book[]> {
   try {
-    await setDoc(doc(db, 'friendships', friendship.id), friendship, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `friendships/${friendship.id}`);
-  }
-}
-
-export async function dbDeleteFriendship(friendshipId: string) {
-  try {
-    await deleteDoc(doc(db, 'friendships', friendshipId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `friendships/${friendshipId}`);
-  }
-}
-
-// Chat Permission Subscriptions and Actions
-export function subscribeChatPermissions(callback: (permissions: ChatPermission[]) => void) {
-  const permissionsCol = collection(db, 'chat_permissions');
-  return onSnapshot(permissionsCol, (snapshot) => {
-    const list: ChatPermission[] = [];
-    snapshot.forEach((docSnap) => {
-      list.push({
-        id: docSnap.id,
-        ...docSnap.data()
-      } as ChatPermission);
+    const snap = await getDocs(collection(db, 'books'));
+    if (snap.empty) {
+      await seedInitialBooks();
+      return SAMPLE_BOOKS;
+    }
+    const books: Book[] = [];
+    snap.forEach((docSnap) => {
+      books.push({ id: docSnap.id, ...docSnap.data() } as Book);
     });
-    callback(list);
-  }, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'chat_permissions');
-  });
-}
-
-export async function dbCreateChatPermission(permission: ChatPermission) {
-  try {
-    await setDoc(doc(db, 'chat_permissions', permission.id), permission);
+    books.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    localStorage.setItem('alax_cached_books', JSON.stringify(books));
+    return books;
   } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, `chat_permissions/${permission.id}`);
+    console.warn('dbFetchBooks error, loading cached or sample books:', err);
+    const cached = localStorage.getItem('alax_cached_books');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+    return SAMPLE_BOOKS;
   }
 }
 
-export async function dbUpdateChatPermission(permission: ChatPermission) {
+/**
+ * Fetch a single book by ID
+ */
+export async function dbFetchBookById(id: string): Promise<Book | null> {
   try {
-    await setDoc(doc(db, 'chat_permissions', permission.id), permission, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `chat_permissions/${permission.id}`);
+    const ref = doc(db, 'books', id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as Book;
+    }
+  } catch (e) {
+    console.warn('dbFetchBookById failed:', e);
+  }
+  return SAMPLE_BOOKS.find(b => b.id === id) || null;
+}
+
+/**
+ * Create/Publish a new book doc in Firestore
+ */
+export async function dbCreateBook(book: Book): Promise<Book> {
+  const cleanBook = sanitizeDoc(book);
+
+  // Compress cover image if it's base64 to ensure fast Firestore storage
+  if (cleanBook.coverUrl && cleanBook.coverUrl.startsWith('data:image')) {
+    cleanBook.coverUrl = await compressBase64Image(cleanBook.coverUrl, 800, 0.65);
+  }
+
+  const bookId = cleanBook.id || `book_${Date.now()}`;
+  const docRef = doc(db, 'books', bookId);
+
+  const payload = {
+    ...cleanBook,
+    id: bookId,
+    createdAt: cleanBook.createdAt || Date.now(),
+    downloadCount: cleanBook.downloadCount || 0,
+    likesCount: cleanBook.likesCount || 0,
+    ratingAverage: cleanBook.ratingAverage || 5.0,
+    ratingCount: cleanBook.ratingCount || 1
+  };
+
+  await setDoc(docRef, payload);
+
+  // Update local cache
+  try {
+    const cached = localStorage.getItem('alax_cached_books');
+    const existing: Book[] = cached ? JSON.parse(cached) : [...SAMPLE_BOOKS];
+    const updated = [payload, ...existing.filter(b => b.id !== bookId)];
+    localStorage.setItem('alax_cached_books', JSON.stringify(updated));
+  } catch (e) {}
+
+  return payload;
+}
+
+/**
+ * Update an existing book metadata
+ */
+export async function dbUpdateBook(id: string, updates: Partial<Book>): Promise<void> {
+  try {
+    const ref = doc(db, 'books', id);
+    await updateDoc(ref, sanitizeDoc(updates));
+
+    const cached = localStorage.getItem('alax_cached_books');
+    if (cached) {
+      const list: Book[] = JSON.parse(cached);
+      const updatedList = list.map(b => b.id === id ? { ...b, ...updates } : b);
+      localStorage.setItem('alax_cached_books', JSON.stringify(updatedList));
+    }
+  } catch (e) {
+    console.error('dbUpdateBook error:', e);
   }
 }
 
-export async function dbDeleteChatPermission(permissionId: string) {
+/**
+ * Delete a book doc from Firestore
+ */
+export async function dbDeleteBook(id: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'chat_permissions', permissionId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `chat_permissions/${permissionId}`);
+    const ref = doc(db, 'books', id);
+    await deleteDoc(ref);
+
+    const cached = localStorage.getItem('alax_cached_books');
+    if (cached) {
+      const list: Book[] = JSON.parse(cached);
+      const updatedList = list.filter(b => b.id !== id);
+      localStorage.setItem('alax_cached_books', JSON.stringify(updatedList));
+    }
+  } catch (e) {
+    console.error('dbDeleteBook error:', e);
   }
 }
 
-// Group Live Video Actions
-export function subscribeGroupLives(callback: (participants: any[]) => void) {
-  const livesCol = collection(db, 'group_lives');
-  return onSnapshot(livesCol, (snapshot) => {
-    const list: any[] = [];
-    snapshot.forEach((docSnap) => {
-      list.push({
-        id: docSnap.id,
-        ...docSnap.data()
-      });
+/**
+ * Atomically increment book download count in Firestore
+ */
+export async function dbIncrementBookDownloads(bookId: string): Promise<number> {
+  try {
+    const ref = doc(db, 'books', bookId);
+    await updateDoc(ref, {
+      downloadCount: increment(1)
     });
-    callback(list);
-  }, (err) => {
-    handleFirestoreError(err, OperationType.LIST, 'group_lives');
-  });
+    const updatedSnap = await getDoc(ref);
+    if (updatedSnap.exists()) {
+      return updatedSnap.data().downloadCount || 0;
+    }
+  } catch (e) {
+    console.warn('dbIncrementBookDownloads Firestore failed, updating fallback:', e);
+  }
+  return 1;
 }
 
-export async function dbJoinGroupLive(userId: string, data: { nickname: string; avatar: string }) {
+/**
+ * Toggle book like count
+ */
+export async function dbToggleBookLike(bookId: string, isLiked: boolean): Promise<number> {
   try {
-    await setDoc(doc(db, 'group_lives', userId), {
-      userId,
-      nickname: data.nickname,
-      avatar: data.avatar,
-      joinedAt: Date.now()
+    const ref = doc(db, 'books', bookId);
+    await updateDoc(ref, {
+      likesCount: increment(isLiked ? 1 : -1)
     });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `group_lives/${userId}`);
+    const updatedSnap = await getDoc(ref);
+    if (updatedSnap.exists()) {
+      return Math.max(0, updatedSnap.data().likesCount || 0);
+    }
+  } catch (e) {
+    console.warn('dbToggleBookLike error:', e);
+  }
+  return 0;
+}
+
+// -------------------------------------------------------------
+// REVIEWS DATA LAYER (Firestore `reviews`)
+// -------------------------------------------------------------
+
+/**
+ * Real-time listener for reviews of a specific book
+ */
+export function dbSubscribeReviews(bookId: string, onUpdate: (reviews: Review[]) => void): () => void {
+  try {
+    const q = query(collection(db, 'reviews'), where('bookId', '==', bookId));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const reviews: Review[] = [];
+        snapshot.forEach((docSnap) => {
+          reviews.push({ id: docSnap.id, ...docSnap.data() } as Review);
+        });
+        reviews.sort((a, b) => b.createdAt - a.createdAt);
+        onUpdate(reviews);
+      },
+      (err) => {
+        console.warn('Reviews subscription error, returning sample reviews for book:', err);
+        const filtered = SAMPLE_REVIEWS.filter(r => r.bookId === bookId);
+        onUpdate(filtered);
+      }
+    );
+    return unsubscribe;
+  } catch (e) {
+    const filtered = SAMPLE_REVIEWS.filter(r => r.bookId === bookId);
+    onUpdate(filtered);
+    return () => {};
   }
 }
 
-export async function dbLeaveGroupLive(userId: string) {
-  try {
-    await deleteDoc(doc(db, 'group_lives', userId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `group_lives/${userId}`);
-  }
-}
+/**
+ * Add a review and update book average rating
+ */
+export async function dbAddReview(review: Review): Promise<Review> {
+  const cleanReview = sanitizeDoc(review);
+  const reviewId = cleanReview.id || `rev_${Date.now()}`;
+  const docRef = doc(db, 'reviews', reviewId);
 
-export async function dbDeleteExpiredGuests() {
+  const payload = {
+    ...cleanReview,
+    id: reviewId,
+    createdAt: cleanReview.createdAt || Date.now()
+  };
+
+  await setDoc(docRef, payload);
+
+  // Recalculate book rating average
   try {
-    const usersCol = collection(db, 'users');
-    const q = query(usersCol, where('isGuest', '==', true));
+    const q = query(collection(db, 'reviews'), where('bookId', '==', review.bookId));
     const snap = await getDocs(q);
-    const now = Date.now();
-    for (const d of snap.docs) {
+    let totalRating = 0;
+    let count = 0;
+    snap.forEach((d) => {
       const data = d.data();
-      if (data.expiresAt && data.expiresAt < now) {
-        await deleteDoc(doc(db, 'users', d.id));
-        console.log(`[DB] Deleted expired guest account: ${d.id}`);
+      if (data.rating) {
+        totalRating += data.rating;
+        count++;
       }
+    });
+
+    if (count > 0) {
+      const ratingAverage = parseFloat((totalRating / count).toFixed(1));
+      await updateDoc(doc(db, 'books', review.bookId), {
+        ratingAverage,
+        ratingCount: count
+      });
     }
-  } catch (err) {
-    console.error('[DB] Error deleting expired guests:', err);
+  } catch (e) {
+    console.warn('Failed to update book rating average:', e);
   }
+
+  return payload;
 }
 
-export async function dbDeleteGuestUser(guestId: string) {
+// -------------------------------------------------------------
+// COMMENTS DATA LAYER (Firestore `comments` - Facebook style)
+// -------------------------------------------------------------
+
+/**
+ * Real-time listener for Facebook-style comments of a specific book
+ */
+export function dbSubscribeComments(bookId: string, onUpdate: (comments: BookComment[]) => void): () => void {
   try {
-    await deleteDoc(doc(db, 'users', guestId));
-    console.log(`[DB] Deleted guest account: ${guestId}`);
-  } catch (err) {
-    console.error('[DB] Error deleting guest account:', err);
-  }
-}
-
-export function logoutSeguro() {
-  localStorage.clear();
-  sessionStorage.clear();
-  window.location.reload();
-}
-
-export async function dbWipeAllDataAndAccounts() {
-  const collectionsToWipe = [
-    'users',
-    'posts',
-    'stories',
-    'chats',
-    'friendships',
-    'chat_permissions',
-    'group_lives',
-    'notifications'
-  ];
-
-  for (const colName of collectionsToWipe) {
-    try {
-      const colRef = collection(db, colName);
-      const snapshot = await getDocs(colRef);
-      for (const docSnap of snapshot.docs) {
-        await deleteDoc(doc(db, colName, docSnap.id));
+    const q = query(collection(db, 'comments'), where('bookId', '==', bookId));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const comments: BookComment[] = [];
+        snapshot.forEach((docSnap) => {
+          comments.push({ id: docSnap.id, ...docSnap.data() } as BookComment);
+        });
+        comments.sort((a, b) => b.createdAt - a.createdAt);
+        onUpdate(comments);
+      },
+      (err) => {
+        console.warn('Comments subscription error, returning sample comments:', err);
+        const filtered = SAMPLE_COMMENTS.filter(c => c.bookId === bookId);
+        onUpdate(filtered);
       }
-      console.log(`[Wipe] Coleção ${colName} limpa com sucesso.`);
-    } catch (e) {
-      console.error(`[Wipe] Erro ao limpar coleção ${colName}:`, e);
-    }
+    );
+    return unsubscribe;
+  } catch (e) {
+    const filtered = SAMPLE_COMMENTS.filter(c => c.bookId === bookId);
+    onUpdate(filtered);
+    return () => {};
   }
-
-  // Clear all local states/accounts as well
-  localStorage.clear();
-  sessionStorage.clear();
 }
 
+/**
+ * Add a Facebook-style comment doc
+ */
+export async function dbAddComment(comment: BookComment): Promise<BookComment> {
+  const cleanComment = sanitizeDoc(comment);
+  const commentId = cleanComment.id || `comm_${Date.now()}`;
+  const docRef = doc(db, 'comments', commentId);
+
+  const payload: BookComment = {
+    ...cleanComment,
+    id: commentId,
+    createdAt: cleanComment.createdAt || Date.now(),
+    likesCount: cleanComment.likesCount || 0,
+    likedBy: cleanComment.likedBy || []
+  };
+
+  await setDoc(docRef, payload);
+  return payload;
+}
+
+/**
+ * Toggle like on a Facebook-style comment
+ */
+export async function dbToggleCommentLike(commentId: string, userId: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'comments', commentId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as BookComment;
+      const currentLikedBy = data.likedBy || [];
+      const hasLiked = currentLikedBy.includes(userId);
+      const newLikedBy = hasLiked
+        ? currentLikedBy.filter(id => id !== userId)
+        : [...currentLikedBy, userId];
+
+      await updateDoc(docRef, {
+        likedBy: newLikedBy,
+        likesCount: newLikedBy.length
+      });
+    }
+  } catch (e) {
+    console.warn('dbToggleCommentLike error:', e);
+  }
+}
+
+// -------------------------------------------------------------
+// USER & STATS LAYER
+// -------------------------------------------------------------
+
+export async function dbFetchAdminStats(): Promise<AdminStats> {
+  try {
+    const booksSnap = await getDocs(collection(db, 'books'));
+    let totalDownloads = 0;
+    let totalBooks = 0;
+    booksSnap.forEach((docSnap) => {
+      totalBooks++;
+      const data = docSnap.data();
+      totalDownloads += (data.downloadCount || 0);
+    });
+
+    const reviewsSnap = await getDocs(collection(db, 'reviews'));
+    const usersSnap = await getDocs(collection(db, 'users'));
+
+    return {
+      totalBooks: totalBooks || SAMPLE_BOOKS.length,
+      totalDownloads: totalDownloads || 1800,
+      totalUsers: usersSnap.size || 12,
+      totalReviews: reviewsSnap.size || SAMPLE_REVIEWS.length
+    };
+  } catch (e) {
+    return {
+      totalBooks: SAMPLE_BOOKS.length,
+      totalDownloads: 1849,
+      totalUsers: 14,
+      totalReviews: SAMPLE_REVIEWS.length
+    };
+  }
+}
+
+export async function dbSaveUser(user: User): Promise<void> {
+  try {
+    const ref = doc(db, 'users', user.id);
+    await setDoc(ref, sanitizeDoc(user), { merge: true });
+  } catch (e) {
+    console.warn('dbSaveUser error:', e);
+  }
+}

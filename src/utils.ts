@@ -3,103 +3,202 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { User, Post, Story } from './types';
+import { Book, BookCategory, Review, BookComment, User } from './types';
 
-export const PROVINCES = [
-  'Niassa',
-  'Cabo Delgado',
-  'Nampula',
-  'Zambézia',
-  'Tete',
-  'Manica',
-  'Sofala',
-  'Inhambane',
-  'Gaza',
-  'Maputo Província',
-  'Maputo Cidade'
+export const ADMIN_UID = 'admin_alax_master';
+
+export const BOOK_CATEGORIES: BookCategory[] = [
+  { id: 'cat-all', name: 'Todas as Obras', slug: 'todas', icon: 'BookOpen', description: 'Explore toda a biblioteca do Ala X' },
+  { id: 'cat-thriller', name: 'Thriller & Suspense', slug: 'thriller', icon: 'ShieldAlert', description: 'Histórias intensas e misteriosas' },
+  { id: 'cat-drama', name: 'Drama & Romance', slug: 'drama', icon: 'Heart', description: 'Narrativas emotivas e relacionamentos profundos' },
+  { id: 'cat-ficcao', name: 'Ficção Científica', slug: 'ficcao', icon: 'Sparkles', description: 'Mundos imaginários e futuros distópicos' },
+  { id: 'cat-poesia', name: 'Poesia & Lírica', slug: 'poesia', icon: 'Feather', description: 'Versos, estrofes e sentimentos poéticos' },
+  { id: 'cat-ensaio', name: 'Ensaios & Crítica', slug: 'ensaio', icon: 'FileText', description: 'Análises acadêmicas e pensamentos críticos' },
+  { id: 'cat-historia', name: 'História & Cultura', slug: 'historia', icon: 'Globe', description: 'Patrimônio, memória e narrativas históricas' },
+  { id: 'cat-tecnologia', name: 'Tecnologia & Ciência', slug: 'tecnologia', icon: 'Cpu', description: 'Inovação, programação e computação' }
 ];
 
-export const DISTRICTS_BY_PROVINCE: Record<string, string[]> = {
-  'Niassa': ['Lichinga', 'Cuamba', 'Lago', 'Majune', 'Mandimba', 'Marrupa', 'Maúa', 'Mavago', 'Mecanhelas', 'Mecula', 'Metarica', 'Muembe', 'Ngauma', 'Nipepe', 'Sanga'],
-  'Cabo Delgado': ['Pemba', 'Ancuabe', 'Balama', 'Chiúre', 'Ibo', 'Macomia', 'Muidumbe', 'Montepuez', 'Mueda', 'Nangade', 'Palma', 'Quissanga'],
-  'Nampula': ['Nampula', 'Angoche', 'Eráti', 'Ilha de Moçambique', 'Lalaua', 'Larde', 'Liúpo', 'Malema', 'Meconta', 'Mecubúri', 'Memba', 'Mogincual', 'Mogovolas', 'Moma', 'Monapo', 'Mossuril', 'Muecate', 'Murrupula', 'Nacarôa', 'Nampula Rapale', 'Ribáuè'],
-  'Zambézia': ['Quelimane', 'Alto Molócue', 'Chinde', 'Gilé', 'Guruné', 'Inhassunge', 'Lugela', 'Maganja da Costa', 'Milange', 'Mocuba', 'Mocubela', 'Mopeia', 'Morrumbala', 'Namacurra', 'Namarroi', 'Nicoadala', 'Pebane'],
-  'Tete': ['Angónia', 'Cahora-Bassa', 'Changara', 'Chifunde', 'Chiúta', 'Dôa', 'Macanga', 'Magoé', 'Marávia', 'Moatize', 'Mutarara', 'Tete', 'Tsangano', 'Zumbo'],
-  'Manica': ['Chimoio', 'Bárue', 'Gondola', 'Guro', 'Macate', 'Machaze', 'Macossa', 'Manica', 'Mossurize', 'Sussundenga', 'Tambara', 'Vanduzi'],
-  'Sofala': ['Beira', 'Buzi', 'Caia', 'Chembba', 'Cheringoma', 'Chibabava', 'Dondo', 'Gorongosa', 'Marromeu', 'Machanga', 'Maringué', 'Muanza', 'Nhamatanda'],
-  'Inhambane': ['Funhalouro', 'Govuro', 'Homoíne', 'Inharrime', 'Inhassoro', 'Jangamo', 'Mabote', 'Massinga', 'Maxixe', 'Morrumbene', 'Panda', 'Vilankulo', 'Zavala'],
-  'Gaza': ['Bilene', 'Chibuto', 'Chicualacuala', 'Chigubo', 'Chókwè', 'Guijá', 'Mabalane', 'Manjacaze', 'Massangena', 'Massingir', 'Xai-Xai'],
-  'Maputo Província': ['Boane', 'Magude', 'Manhiça', 'Marracuene', 'Matola', 'Moamba', 'Namaacha', 'Matutuíne'],
-  'Maputo Cidade': ['KaMpfumo', 'KaNhaka', 'KaTembe', 'KaMaxaquene', 'KaMavota', 'KaMubukwana', 'Lhanguene']
+export const SAMPLE_BOOKS: Book[] = [
+  {
+    id: 'book-1',
+    title: 'A Madrasta',
+    author: 'Ofício Faustino Rachide',
+    synopsis: 'Uma trama intensa que explora os meandros de uma família misteriosa em Maputo. Quando segredos do passado começam a emergir, cada membro da casa descobre que a confiança é um privilégio mortal.',
+    category: 'Drama',
+    coverUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=600',
+    pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf',
+    createdAt: Date.now() - 3600000 * 48,
+    downloadCount: 342,
+    likesCount: 189,
+    ratingAverage: 4.8,
+    ratingCount: 24,
+    pageCount: 198,
+    language: 'Português',
+    publishedYear: 2025,
+    isFeatured: true,
+    uploadedBy: 'Admin Ala X',
+    fileSizeFormatted: '2.4 MB'
+  },
+  {
+    id: 'book-2',
+    title: 'A Caça Começou',
+    author: 'Imperador Rachide',
+    synopsis: 'Nas ruas movimentadas de Nampula, um detetive privado descobre uma rede de conspiração corporativa. Com o tempo a esgotar-se, o caçador passa a ser a caça numa corrida pela sobrevivência.',
+    category: 'Thriller',
+    coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600',
+    pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf',
+    createdAt: Date.now() - 3600000 * 96,
+    downloadCount: 512,
+    likesCount: 290,
+    ratingAverage: 4.9,
+    ratingCount: 38,
+    pageCount: 254,
+    language: 'Português',
+    publishedYear: 2026,
+    isFeatured: true,
+    uploadedBy: 'Admin Ala X',
+    fileSizeFormatted: '3.8 MB'
+  },
+  {
+    id: 'book-3',
+    title: 'O Segredo da Ilha',
+    author: 'Helena Vilanculos',
+    synopsis: 'Um romance de aventura nas águas quentes do Arquipélago das Quirimbas. Uma jovem arquivista encontra um diário antigo escondido no farol que revela um tesouro esquecido.',
+    category: 'Ficção',
+    coverUrl: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&q=80&w=600',
+    pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf',
+    createdAt: Date.now() - 3600000 * 120,
+    downloadCount: 215,
+    likesCount: 142,
+    ratingAverage: 4.6,
+    ratingCount: 18,
+    pageCount: 180,
+    language: 'Português',
+    publishedYear: 2024,
+    isFeatured: false,
+    uploadedBy: 'Admin Ala X',
+    fileSizeFormatted: '1.9 MB'
+  },
+  {
+    id: 'book-4',
+    title: 'Cânticos do Mar',
+    author: 'Sérgio Matusse',
+    synopsis: 'Uma coletânea poética inspirada nas marés do Oceano Índico, na nostalgia da brisa marinha e nas memórias das cidades costeiras de Moçambique.',
+    category: 'Poesia',
+    coverUrl: 'https://images.unsplash.com/photo-1476275466078-4007374efbbe?auto=format&fit=crop&q=80&w=600',
+    pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf',
+    createdAt: Date.now() - 3600000 * 200,
+    downloadCount: 180,
+    likesCount: 98,
+    ratingAverage: 4.7,
+    ratingCount: 15,
+    pageCount: 92,
+    language: 'Português',
+    publishedYear: 2025,
+    isFeatured: false,
+    uploadedBy: 'Admin Ala X',
+    fileSizeFormatted: '1.2 MB'
+  },
+  {
+    id: 'book-5',
+    title: 'Redes e Algoritmos Modernos',
+    author: 'Ofício F. Rachide',
+    synopsis: 'Um ensaio técnico e acessível sobre arquiteturas distribuídas, bases de dados em tempo real e desenvolvimento de plataformas digitais no contexto moçambicano.',
+    category: 'Tecnologia',
+    coverUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=600',
+    pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf',
+    createdAt: Date.now() - 3600000 * 300,
+    downloadCount: 680,
+    likesCount: 420,
+    ratingAverage: 5.0,
+    ratingCount: 52,
+    pageCount: 310,
+    language: 'Português',
+    publishedYear: 2026,
+    isFeatured: true,
+    uploadedBy: 'Admin Ala X',
+    fileSizeFormatted: '4.5 MB'
+  }
+];
+
+export const SAMPLE_REVIEWS: Review[] = [
+  {
+    id: 'rev-1',
+    bookId: 'book-1',
+    userId: 'user-reader-1',
+    userName: 'Mateus Cossa',
+    userAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+    rating: 5,
+    comment: 'Uma leitura eletrizante do início ao fim! Os detalhes da ambientação em Maputo tornam tudo fascinante.',
+    createdAt: Date.now() - 3600000 * 12
+  },
+  {
+    id: 'rev-2',
+    bookId: 'book-1',
+    userId: 'user-reader-2',
+    userName: 'Ana Paula Langa',
+    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
+    rating: 4,
+    comment: 'Excelente desenvolvimento de personagens. Mal posso esperar pelo próximo volume!',
+    createdAt: Date.now() - 3600000 * 24
+  },
+  {
+    id: 'rev-3',
+    bookId: 'book-2',
+    userId: 'user-reader-3',
+    userName: 'Celso Sitoe',
+    userAvatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150',
+    rating: 5,
+    comment: 'Ritmo acelerado e diálogos afiados. Imperador Rachide acertou em cheio!',
+    createdAt: Date.now() - 3600000 * 18
+  }
+];
+
+export const SAMPLE_COMMENTS: BookComment[] = [
+  {
+    id: 'comm-1',
+    bookId: 'book-1',
+    userId: 'user-reader-4',
+    userName: 'Eurico Machava',
+    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
+    text: 'Alguém já terminou o Capítulo 5? Que reviravolta incrível no enredo! 🔥',
+    createdAt: Date.now() - 3600000 * 6,
+    likesCount: 14,
+    likedBy: ['admin_alax_master']
+  },
+  {
+    id: 'comm-2',
+    bookId: 'book-1',
+    userId: 'user-reader-2',
+    userName: 'Ana Paula Langa',
+    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
+    text: 'Recomendo a todos descarregarem o PDF para ler durante as viagens, a qualidade do ficheiro no Ala X está impecável.',
+    createdAt: Date.now() - 3600000 * 3,
+    likesCount: 8,
+    likedBy: []
+  }
+];
+
+export const ADMIN_USER: User = {
+  id: ADMIN_UID,
+  email: 'admin@alax.mz',
+  name: 'Ofício Faustino (Admin Ala X)',
+  role: 'admin',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+  favoriteBookIds: ['book-1', 'book-2', 'book-5'],
+  createdAt: Date.now()
 };
 
-export const FONTS_LIST = [
-  'Poppins',
-  'Roboto',
-  'Arial',
-  'Times New Roman',
-  'Calibri',
-  'Georgia',
-  'Verdana',
-  'Trebuchet MS',
-  'Courier New',
-  'Impact',
-  'Comic Sans MS'
-];
-
-export const COLOR_OPTIONS = [
-  '#ffffff',
-  '#00ffea',
-  '#00d9ff',
-  '#9d00ff',
-  '#ff00aa',
-  '#ff3366',
-  '#00ccff'
-];
-
-// Simple compatible hash matching user's original logic
-export function simpleHash(password: string): string {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(16);
-}
-
-// Phone number normalization and validation
-export function validatePhone(phoneInput: string): { ok: boolean; normalized: string; error?: string } {
-  let phone = phoneInput.trim().replace(/\s+/g, '');
-  if (phone.startsWith('+258')) {
-    phone = phone.slice(4);
-  }
-  if (!/^\d{9}$/.test(phone)) {
-    return { ok: false, normalized: '', error: 'O número de telefone deve possuir exatamente 9 dígitos.' };
-  }
-  const prefix = phone.slice(0, 2);
-  const allowedPrefixes = new Set(['82', '83', '84', '85', '86', '87']);
-  if (!allowedPrefixes.has(prefix)) {
-    return { ok: false, normalized: '', error: 'Prefixo de Moçambique inválido (Use 82-87).' };
-  }
-  return { ok: true, normalized: '+258' + phone };
-}
-
-// Email validator
 export function validateEmail(email: string): boolean {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
   return re.test(email.trim());
 }
 
-/**
- * Compress Base64 Image to ensure it stays below ~250KB for fast transfer and Firestore compatibility.
- */
 export function compressBase64Image(dataUrl: string, maxDim = 800, quality = 0.65): Promise<string> {
   return new Promise((resolve) => {
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
       return resolve(dataUrl);
     }
-    // If image is already smaller than 200KB in base64 length, return as is
     if (dataUrl.length < 200000) {
       return resolve(dataUrl);
     }
@@ -132,202 +231,3 @@ export function compressBase64Image(dataUrl: string, maxDim = 800, quality = 0.6
     img.onerror = () => resolve(dataUrl);
   });
 }
-
-// Name token validator
-export function validateNames(fullName: string, firstName: string, surname: string): { ok: boolean; error?: string } {
-  const fName = fullName.trim();
-  const tokens = fName.split(/\s+/).filter(Boolean);
-  
-  if (tokens.length < 3) {
-    return { ok: false, error: 'O nome completo deve possuir pelo menos 3 palavras.' };
-  }
-  if (tokens[0].toLowerCase() !== firstName.trim().toLowerCase()) {
-    return { ok: false, error: 'O primeiro nome informado não corresponde à primeira palavra do nome completo.' };
-  }
-  if (tokens[tokens.length - 1].toLowerCase() !== surname.trim().toLowerCase()) {
-    return { ok: false, error: 'O apelido informado não corresponde à última palavra do nome completo.' };
-  }
-  return { ok: true };
-}
-
-// Nickname format validator
-export function validateNickname(nickname: string): boolean {
-  const re = /^[\p{L}0-9_ ]+$/u;
-  return re.test(nickname.trim()) && nickname.trim().length >= 3;
-}
-
-// Initial Data Seeds
-export const SEED_USERS: User[] = [
-  {
-    id: 'user1',
-    phone: '+25884000111',
-    email: 'alex@openmz.com',
-    fullname: 'Alex Manuel Zandamel',
-    firstname: 'Alex',
-    surname: 'Zandamel',
-    nickname: 'Alex MZ',
-    password: simpleHash('123456'), // Default pass
-    province: 'Maputo Cidade',
-    district: 'KaMpfumo',
-    created: new Date().toISOString(),
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    stats: { likes: 1240, posts: 14, friends: 342 },
-    nameEditDate: null,
-    isVIP: true
-  },
-  {
-    id: 'user2',
-    phone: '+258870755639',
-    email: 'oficiofaustinorachide10@gmail.com',
-    fullname: 'Oficio Faustino Rachide',
-    firstname: 'Oficio',
-    surname: 'Rachide',
-    nickname: 'Oficio MZ',
-    password: simpleHash('123456'),
-    province: 'Zambézia',
-    district: 'Quelimane',
-    created: new Date().toISOString(),
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    stats: { likes: 350, posts: 4, friends: 98 },
-    nameEditDate: null,
-    isVIP: false
-  },
-  {
-    id: 'user_oficiorachide2003',
-    phone: '+258841234567',
-    email: 'oficiorachide2003@gmail.com',
-    fullname: 'Oficio Faustino Rachide',
-    firstname: 'Oficio',
-    surname: 'Rachide',
-    nickname: 'oficiorachide2003',
-    password: simpleHash('Hellfuego005'),
-    province: 'Zambézia',
-    district: 'Quelimane',
-    created: new Date().toISOString(),
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    stats: { likes: 350, posts: 4, friends: 98 },
-    nameEditDate: null,
-    isVIP: true,
-    isVerified: true
-  }
-];
-
-export const SEED_POSTS: Post[] = [
-  {
-    id: 'post_1',
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=600',
-    text: 'A produzir o nosso próximo filme focado no dia a dia em Maputo! Sua visão é a nossa missão 🎬🎥✨',
-    style: { font: 'Poppins', color: '#00ffea' },
-    author: {
-      name: 'Alex MZ',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-      id: 'user1'
-    },
-    stars: 342,
-    views: 1245,
-    starred: true,
-    timestamp: Date.now() - 3600000 * 2 // 2 hours ago
-  },
-  {
-    id: 'post_2',
-    image: null,
-    text: 'Cultura moçambicana no topo do mundo! Novidades incríveis chegando no canal de cinema em breve. Fiquem atentos, olhos bem abertos! 🔥🇲🇿',
-    style: { font: 'Courier New', color: '#ff00aa' },
-    author: {
-      name: 'Alex MZ',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-      id: 'user1'
-    },
-    stars: 189,
-    views: 742,
-    starred: false,
-    timestamp: Date.now() - 3600000 * 8 // 8 hours ago
-  },
-  {
-    id: 'post_3',
-    image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=600',
-    text: 'Concerto incrível que registramos na Beira neste final de semana. A energia de Moçambique é simplesmente contagiante! 🎸🔥🇲🇿',
-    style: { font: 'Impact', color: '#00d9ff' },
-    author: {
-      name: 'Oficio MZ',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-      id: 'user2'
-    },
-    stars: 254,
-    views: 890,
-    starred: false,
-    timestamp: Date.now() - 3600000 * 24 // 1 day ago
-  }
-];
-
-export const SEED_STORIES: Story[] = [
-  {
-    id: 'story_1',
-    type: 'photo',
-    src: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?auto=format&fit=crop&q=80&w=400',
-    text: 'Cinematografia Digital 📽️',
-    style: { font: 'Poppins', color: '#ffffff' },
-    author: {
-      name: 'Alex MZ',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-      id: 'user1'
-    },
-    stars: 45,
-    views: 120,
-    starred: false,
-    timestamp: Date.now() - 1000 * 60 * 30 // 30 mins ago
-  },
-  {
-    id: 'story_2',
-    type: 'photo',
-    src: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=400',
-    text: 'A todo vapor nos bastidores! 🚀',
-    style: { font: 'Courier New', color: '#00ffea' },
-    author: {
-      name: 'Oficio MZ',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-      id: 'user2'
-    },
-    stars: 23,
-    views: 64,
-    starred: false,
-    timestamp: Date.now() - 1000 * 60 * 90 // 90 mins ago
-  }
-];
-
-export function getMediaSrc(url: string | undefined): string {
-  if (!url) return '';
-  if (typeof window === 'undefined') return url;
-  
-  // 1. If we already have a cached Blob URL for this exact content/url, return it
-  const cache = (window as any).mediaObjectUrls = (window as any).mediaObjectUrls || {};
-  if (cache[url]) {
-    return cache[url];
-  }
-  
-  // 2. If it is a Data URL (Base64), convert it to a Blob Object URL to bypass browser size restrictions and enable seeking
-  if (url.startsWith('data:')) {
-    try {
-      const parts = url.split(',');
-      if (parts.length === 2) {
-        const mimeMatch = parts[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : '';
-        const byteCharacters = atob(parts[1]);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: mime });
-        const blobUrl = URL.createObjectURL(blob);
-        cache[url] = blobUrl;
-        return blobUrl;
-      }
-    } catch (e) {
-      console.error('Failed to convert Data URL to Blob URL:', e);
-    }
-  }
-  
-  return url;
-}
-

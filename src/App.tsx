@@ -1,3620 +1,529 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Menu, Eye, Newspaper, Video, Calendar, Store, Users, Settings, 
-  Sparkles, CheckCircle2, ChevronRight, Bookmark, MapPin, Camera, X, MessageSquare,
-  Play, Pause, Mail, ArrowLeft, ArrowRight, Clock, ShieldAlert, LogOut
+  BookOpen, Search, Filter, Shield, Sparkles, Star, Download, 
+  Layers, Heart, FileText, ArrowUpDown, ChevronRight, BookMarked
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { User, Post, Story, Comment, Notification, Friendship, ChatPermission, PublishLog } from './types';
-import { SEED_USERS, SEED_POSTS, SEED_STORIES, simpleHash } from './utils';
-import { authVerify, authLogin } from './lib/authService';
+import { Book, User } from './types';
+import { dbSubscribeBooks, dbIncrementBookDownloads } from './lib/db';
+import { getStoredUser, saveStoredUser, subscribeToAuth, logoutUser } from './lib/authService';
+import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 
-// Import our modular subcomponents
-import LoginView from './components/LoginView';
-import RegisterView from './components/RegisterView';
-import Sidebar, { ViewType } from './components/Sidebar';
-import NotificationsView from './components/NotificationsView';
-import FeedView from './components/FeedView';
-import StoryEditor from './components/StoryEditor';
-import ProfileView from './components/ProfileView';
-import AccountView from './components/AccountView';
-import PublishPostView from './components/PublishPostView';
-import ChatView from './components/ChatView';
-import MusicView from './components/MusicView';
-import FontView from './components/FontView';
-import CinemaView from './components/CinemaView';
-import AbraView from './components/AbraView';
-import PayAssistantModal from './components/PayAssistantModal';
-import { FloatingSearch } from './components/FloatingSearch';
-import { UserAvatar } from './components/UserAvatar';
-import { THEME_CONFIGS, injectThemeVariables, ThemeConfig } from './utils/themeEngine';
-import { playClickFeedback, playCommentSound, playPublishPostSound, playStarSound, playNotificationSound } from './utils/audioSystem';
-
-// Import our Firestore synchronization utilities
-import {
-  seedDatabaseIfEmpty,
-  subscribeUsers,
-  subscribePosts,
-  subscribeStories,
-  dbUpdateUser,
-  dbDeleteUser,
-  dbCreatePost,
-  dbDeletePost,
-  dbUpdatePost,
-  dbCreateStory,
-  dbDeleteStory,
-  dbUpdateStory,
-  subscribeChats,
-  subscribeNotifications,
-  dbCreateNotification,
-  dbDeleteNotification,
-  subscribeFriendships,
-  dbCreateFriendship,
-  dbDeleteFriendship,
-  dbUpdateFriendship,
-  subscribeChatPermissions,
-  dbCreateChatPermission,
-  dbUpdateChatPermission,
-  dbDeleteChatPermission,
-  dbCheckUserVote,
-  dbCreateUserVote,
-  dbDeleteExpiredGuests,
-  dbDeleteGuestUser,
-  logoutSeguro
-} from './lib/db';
+// Subcomponents
+import { Navbar } from './components/Navbar';
+import { HeroBanner } from './components/HeroBanner';
+import { BookCard } from './components/BookCard';
+import { LivroDetailModal } from './components/LivroDetailModal';
+import { PdfViewerModal } from './components/PdfViewerModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
+import { AuthModal } from './components/AuthModal';
+import { UserProfileModal } from './components/UserProfileModal';
+import { ContinueSessionModal } from './components/ContinueSessionModal';
+import { DownloadedBooksModal, DownloadedItem } from './components/DownloadedBooksModal';
 
 export default function App() {
-  // App core persistent states
-  const [users, setUsers] = useState<User[]>([]);
+  const [books, setBooks] = useState<Book[]>(SAMPLE_BOOKS);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [savedSessionUser, setSavedSessionUser] = useState<User | null>(null);
+  const [showSessionPrompt, setShowSessionPrompt] = useState<boolean>(false);
 
-  const currentUserRef = useRef<User | null>(currentUser);
-  useEffect(() => {
-    currentUserRef.current = currentUser;
-  }, [currentUser]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('todas');
+  const [sortBy, setSortBy] = useState<'recent' | 'downloads' | 'rating' | 'title'>('recent');
 
-  // Publication logs persistent state and handler
-  const [publishLogs, setPublishLogs] = useState<PublishLog[]>(() => {
+  // Favorites (array of book IDs)
+  const [favoriteBookIds, setFavoriteBookIds] = useState<string[]>(['book-1', 'book-2']);
+
+  // Downloaded Books State & Manager
+  const [downloadedItems, setDownloadedItems] = useState<DownloadedItem[]>(() => {
     try {
-      const stored = localStorage.getItem('eo_publish_logs');
-      return stored ? JSON.parse(stored) : [];
+      const stored = localStorage.getItem('ala_x_downloaded_items');
+      if (stored) return JSON.parse(stored);
     } catch (e) {
-      return [];
+      console.error(e);
     }
+    return [
+      {
+        id: 'dl_sample_1',
+        bookId: SAMPLE_BOOKS[0]?.id || 'book-1',
+        book: SAMPLE_BOOKS[0],
+        downloadedAt: Date.now() - 3600000,
+        progress: 100,
+        status: 'completed',
+        fileSizeFormatted: '4.2 MB'
+      }
+    ];
   });
 
-  const addPublishLog = (
-    action: 'POST_PUBLISH' | 'STORY_PUBLISH',
-    status: 'SUCCESS' | 'ERROR' | 'PENDING',
-    author: string,
-    type: string,
-    titleOrText: string,
-    error?: string
-  ) => {
-    const logId = 'log_' + Math.random().toString(36).substring(2, 9);
-    const newLog: PublishLog = {
-      id: logId,
-      timestamp: Date.now(),
-      action,
-      status,
-      author,
-      type,
-      titleOrText,
-      error
-    };
+  // Active Modals
+  const [selectedBookForDetails, setSelectedBookForDetails] = useState<Book | null>(null);
+  const [selectedBookForPdfReader, setSelectedBookForPdfReader] = useState<Book | null>(null);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isDownloadsModalOpen, setIsDownloadsModalOpen] = useState<boolean>(false);
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState<boolean>(false);
 
-    // Format highly structured console outputs as requested
-    const consoleMsg = `[PUBLISH_LOG] [${newLog.status}] [${newLog.action}] Author: @${newLog.author} | Type: ${newLog.type} | Content: "${newLog.titleOrText.substring(0, 45)}" ${error ? `| Error: ${error}` : ''}`;
-    if (status === 'ERROR') {
-      console.error(consoleMsg);
-    } else if (status === 'SUCCESS') {
-      console.log(consoleMsg);
-    } else {
-      console.info(consoleMsg);
+  // Sync downloads to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('ala_x_downloaded_items', JSON.stringify(downloadedItems));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [downloadedItems]);
+
+  // Check stored session on load & listen for Firebase Auth state changes
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (stored) {
+      setSavedSessionUser(stored);
+      setShowSessionPrompt(true);
     }
 
-    setPublishLogs((prev) => {
-      const updated = [newLog, ...prev].slice(0, 50); // Store up to last 50 logs
-      try {
-        localStorage.setItem('eo_publish_logs', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
+    const unsubAuth = subscribeToAuth((fbUser) => {
+      if (fbUser) {
+        setCurrentUser(fbUser);
+        saveStoredUser(fbUser);
+        setShowSessionPrompt(false);
+      }
     });
-  };
 
-  // Extended theme state: support all themes, persisting the values properly
-  const [theme, setThemeState] = useState<'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max'>(() => {
-    let userId = '';
-    try {
-      const stored = localStorage.getItem('currentUser');
-      if (stored) {
-        userId = JSON.parse(stored).id;
-      }
-    } catch (e) {}
-    if (userId && userId !== 'guest') {
-      const savedUserTheme = localStorage.getItem(`theme_user_${userId}`);
-      if (savedUserTheme && THEME_CONFIGS[savedUserTheme as any]) {
-        return savedUserTheme as any;
-      }
-    }
-    const saved = localStorage.getItem('theme') as any;
-    return (saved && THEME_CONFIGS[saved]) ? saved : 'eyes-max';
-  });
+    return () => unsubAuth();
+  }, []);
 
+  // Firestore real-time listener for books
   useEffect(() => {
-    if (currentUser) {
-      if (currentUser.id === 'guest') {
-        setThemeState('eyes-max');
-      } else {
-        const savedUserTheme = localStorage.getItem(`theme_user_${currentUser.id}`);
-        if (savedUserTheme && THEME_CONFIGS[savedUserTheme as any]) {
-          setThemeState(savedUserTheme as any);
-        } else {
-          setThemeState('eyes-max');
+    const unsub = dbSubscribeBooks((updatedBooks) => {
+      setBooks(updatedBooks);
+    });
+    return () => unsub();
+  }, []);
+
+  // Filter & Sort Books
+  const filteredBooks = useMemo(() => {
+    return books.filter((book) => {
+      // Favorites filter
+      if (showOnlyFavorites && !favoriteBookIds.includes(book.id)) {
+        return false;
+      }
+
+      // Search Query filter (Title, Author, Synopsis, Category)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesTitle = book.title.toLowerCase().includes(q);
+        const matchesAuthor = book.author.toLowerCase().includes(q);
+        const matchesSynopsis = book.synopsis.toLowerCase().includes(q);
+        const matchesCat = book.category.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesAuthor && !matchesSynopsis && !matchesCat) {
+          return false;
         }
       }
-    } else {
-      setThemeState('eyes-max');
-    }
-  }, [currentUser]);
 
-  // Dynamic Guest Session Expiration & Automatic Cleanup
-  useEffect(() => {
-    if (!currentUser || !currentUser.isGuest || !currentUser.expiresAt) return;
-
-    const checkExpiration = async () => {
-      if (Date.now() >= (currentUser.expiresAt || 0)) {
-        clearInterval(timer);
-        // Expire guest session
-        await dbDeleteGuestUser(currentUser.id).catch(console.error);
-        handleLogout();
-        alert('A sua sessão de Convidado expirou. Crie uma nova sessão ou registe uma conta para continuar!');
-      }
-    };
-
-    // Run immediately
-    checkExpiration();
-
-    // Check every 30 seconds
-    const timer = setInterval(checkExpiration, 30 * 1000);
-
-    return () => clearInterval(timer);
-  }, [currentUser]);
-
-  // ==========================================
-  // EMAIL VERIFICATION SYSTEMS & COUNTDOWN
-  // ==========================================
-  const isUnverified = useMemo(() => {
-    if (!currentUser) return false;
-    if (currentUser?.isGuest || currentUser?.id === 'guest') return false;
-    if (currentUser.isVerified) return false;
-    return true;
-  }, [currentUser]);
-
-  const [verificationTimeLeft, setVerificationTimeLeft] = useState<number | null>(null);
-  const [isVerificationExpired, setIsVerificationExpired] = useState<boolean>(false);
-  const [showUnverifiedBlockModal, setShowUnverifiedBlockModal] = useState<boolean>(false);
-  const [showTutorialVideoModal, setShowTutorialVideoModal] = useState<boolean>(false);
-  const [isResendingVerification, setIsResendingVerification] = useState<boolean>(false);
-  const hasAutoOpenedPayRef = useRef<boolean>(false);
-
-  const [tutorialStep, setTutorialStep] = useState<number>(0);
-  const [isTutorialPlaying, setIsTutorialPlaying] = useState<boolean>(true);
-  const [tutorialProgress, setTutorialProgress] = useState<number>(0);
-
-  const tutorialSteps = useMemo(() => [
-    {
-      title: "1. Aceder ao Gmail",
-      desc: "Abra a sua aplicação do Gmail no seu smartphone ou aceda pelo computador.",
-      render: () => (
-        <div className="flex flex-col items-center justify-center h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-4 space-y-4">
-          <motion.div 
-            animate={{ scale: [1, 1.1, 1] }} 
-            transition={{ repeat: Infinity, duration: 2 }}
-            className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600 to-red-400 flex items-center justify-center shadow-lg shadow-red-900/30"
-          >
-            <Mail className="w-10 h-10 text-white" />
-          </motion.div>
-          <div className="text-center">
-            <span className="text-xs text-red-200/50 uppercase font-bold tracking-widest block">Google Services</span>
-            <span className="text-xs text-white font-medium">A carregar caixa de entrada...</span>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: "2. Menu Lateral Esquerdo",
-      desc: "Clique no ícone de três barras (três linhas) horizontais no canto superior esquerdo.",
-      render: () => (
-        <div className="relative h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-white/5 pb-2">
-            <div className="flex items-center gap-2">
-              <motion.div 
-                animate={{ scale: [1, 1.2, 1] }} 
-                transition={{ repeat: Infinity, duration: 1.5 }}
-                className="p-1 bg-red-500/20 rounded-md border border-red-500/30 cursor-pointer"
-              >
-                <Menu className="w-4.5 h-4.5 text-red-400" />
-              </motion.div>
-              <div className="w-20 h-2 bg-white/10 rounded"></div>
-            </div>
-            <div className="w-6 h-6 rounded-full bg-white/20"></div>
-          </div>
-          
-          <div className="flex-grow flex items-center justify-center relative">
-            <motion.div 
-              animate={{ x: [-20, 0, -20], y: [40, 0, 40] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="absolute top-1 left-2 w-5 h-5 text-yellow-400"
-            >
-              <span className="block w-3 h-3 bg-yellow-400 rounded-full animate-ping absolute"></span>
-              <span className="block text-xl">👆</span>
-            </motion.div>
-            <div className="text-center space-y-2">
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block">Menu do Gmail</span>
-              <span className="text-xs text-white font-medium">Toque nas 3 barras horizontais</span>
-            </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: "3. Procurar Pasta Spam",
-      desc: "Role o menu lateral esquerdo para baixo até encontrar a pasta 'Spam'.",
-      render: () => (
-        <div className="h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 overflow-hidden flex">
-          <motion.div 
-            initial={{ x: -100 }} 
-            animate={{ x: 0 }}
-            className="w-1/2 bg-slate-900 border-r border-white/5 p-2 space-y-2 h-full text-[10px] text-left"
-          >
-            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Principal</div>
-            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Enviados</div>
-            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Rascunhos</div>
-            <motion.div 
-              animate={{ backgroundColor: ["rgba(239, 68, 68, 0.05)", "rgba(239, 68, 68, 0.35)", "rgba(239, 68, 68, 0.05)"] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="py-1.5 px-1.5 rounded text-red-400 font-black flex items-center gap-1 border border-red-500/25"
-            >
-              ⚠️ Spam
-            </motion.div>
-            <div className="py-1 px-1.5 rounded hover:bg-white/5 text-gray-300">Lixeira</div>
-          </motion.div>
-          <div className="w-1/2 flex items-center justify-center p-2 text-center">
-            <span className="text-[11px] text-red-200 leading-tight font-bold">Selecione a pasta de Spam no menu lateral</span>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: "4. Encontrar E-mail",
-      desc: "Na pasta Spam, localize a mensagem enviada por 'Eyes Open MZ' ou 'Firebase Security'.",
-      render: () => (
-        <div className="h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 flex flex-col justify-between">
-          <div className="text-[10px] text-red-400/80 font-bold uppercase tracking-widest text-left pb-1.5 border-b border-white/5">
-            Pasta Spam (Lixo Eletrónico)
-          </div>
-          <div className="flex-grow flex flex-col justify-center space-y-2">
-            <motion.div 
-              whileHover={{ scale: 1.02 }}
-              className="p-2.5 bg-slate-900 rounded-xl border border-red-500/20 text-left flex items-center gap-2 cursor-pointer shadow-md shadow-red-950/20"
-            >
-              <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
-                <Mail className="w-4.5 h-4.5 text-red-400 animate-pulse" />
-              </div>
-              <div className="min-w-0">
-                <span className="block text-xs font-black text-red-200">Eyes Open MZ</span>
-                <span className="block text-[10px] text-gray-400 truncate font-semibold">Confirmação de e-mail - Ative sua conta</span>
-              </div>
-            </motion.div>
-          </div>
-          <div className="text-[10px] text-gray-500 font-medium">Toque para abrir o e-mail</div>
-        </div>
-      )
-    },
-    {
-      title: "5. Clicar no Link",
-      desc: "Abra o e-mail e clique no link de ativação oficial do Firebase.",
-      render: () => (
-        <div className="h-48 bg-slate-950/70 rounded-2xl border border-red-500/10 p-3 flex flex-col justify-between text-left">
-          <div className="bg-slate-900 border border-white/5 rounded-xl p-3 flex-grow overflow-y-auto space-y-2 leading-relaxed text-[10px] text-gray-300">
-            <p className="font-bold text-white text-xs border-b border-white/5 pb-1">Eyes Open MZ Security</p>
-            <p>Olá! Para completar o registo da sua conta, clique no botão de ativação oficial abaixo:</p>
-            <motion.div 
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="py-1.5 px-3 bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10px] text-center rounded-lg cursor-pointer uppercase tracking-wider shadow-md w-max mx-auto"
-            >
-              Confirmar E-mail
-            </motion.div>
-          </div>
-          <span className="text-[9px] text-gray-500 text-center font-semibold mt-1">Toque no botão vermelho ou link oficial</span>
-        </div>
-      )
-    },
-    {
-      title: "6. Conta Ativada!",
-      desc: "Perfeito! A sua conta agora está totalmente ativa e sem restrições de acesso.",
-      render: () => (
-        <div className="h-48 bg-slate-950/70 rounded-2xl border border-green-500/25 p-4 flex flex-col items-center justify-center space-y-3 text-center">
-          <motion.div 
-            initial={{ scale: 0, rotate: -45 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 10 }}
-            className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-950/30 border border-green-400"
-          >
-            <CheckCircle2 className="w-10 h-10 text-white" />
-          </motion.div>
-          <div className="space-y-1">
-            <h5 className="text-sm font-orbitron font-extrabold text-green-400 tracking-wider uppercase">CONTA ATIVADA!</h5>
-            <p className="text-[10px] text-gray-400 font-medium">As restrições do feed e do perfil foram removidas.</p>
-          </div>
-        </div>
-      )
-    }
-  ], [currentUser]);
-
-  // Video tutorial playback animation clock
-  useEffect(() => {
-    if (!showTutorialVideoModal || !isTutorialPlaying) return;
-
-    const interval = setInterval(() => {
-      setTutorialProgress(prev => {
-        if (prev >= 100) {
-          setTutorialStep(step => {
-            if (step >= tutorialSteps.length - 1) {
-              setIsTutorialPlaying(false);
-              return step;
-            }
-            return step + 1;
-          });
-          return 0;
-        }
-        return prev + 1.2;
-      });
-    }, 60);
-
-    return () => clearInterval(interval);
-  }, [showTutorialVideoModal, isTutorialPlaying, tutorialSteps.length]);
-
-  // Verification Countdown Timer (1 Hour limit)
-  useEffect(() => {
-    if (!isUnverified || !currentUser) {
-      setVerificationTimeLeft(null);
-      setIsVerificationExpired(false);
-      return;
-    }
-
-    const computeTimeLeft = () => {
-      const createdTime = currentUser.created ? new Date(currentUser.created).getTime() : Date.now();
-      const oneHour = 60 * 60 * 1000;
-      const expiryTime = createdTime + oneHour;
-      const diff = expiryTime - Date.now();
-
-      if (diff <= 0) {
-        setVerificationTimeLeft(0);
-        setIsVerificationExpired(true);
-        setShowUnverifiedBlockModal(true); // Auto block when expired!
-      } else {
-        setVerificationTimeLeft(Math.floor(diff / 1000));
-        setIsVerificationExpired(false);
-      }
-    };
-
-    computeTimeLeft();
-    const timer = setInterval(computeTimeLeft, 1000);
-    return () => clearInterval(timer);
-  }, [isUnverified, currentUser]);
-
-  // Auto-launch Pay Assistant with verification instructions when user signs in
-  useEffect(() => {
-    if (isUnverified && currentUser) {
-      if (!hasAutoOpenedPayRef.current) {
-        setShowPayAssistant(true);
-        hasAutoOpenedPayRef.current = true;
-        
-        // Play welcome audio chime
-        setTimeout(() => {
-          playPaySignatureSound();
-        }, 800);
-
-        // Populate Pay's initial message with verification guidelines and tutorial link
-        setAssistantMessages([
-          {
-            role: 'assistant',
-            content: `Olá, ${currentUser.firstname || 'utilizador'}! Eu sou o Pay, o seu assistente virtual oficial. 🚨 Notei que o seu e-mail (${currentUser.email}) ainda precisa de ser confirmado para ativar totalmente a sua conta!\n\nNo Eyes Open MZ, valorizamos a segurança máxima. Sem a confirmação, o seu acesso é limitado: poderá ler o feed, mas não poderá interagir com publicações nem editar o seu perfil.\n\n⚠️ **Sua conta está no estado PENDENTE (cor vermelha)**. Resta apenas menos de 1 hora para confirmar antes de ser bloqueada temporariamente!\n\n**DICAS DE COMO CONFIRMAR O SEU GMAIL:**\n1. Vá ao seu **Gmail**.\n2. Clique no menu de **três barras (linhas horizontais)** no canto superior esquerdo.\n3. Toque na opção **Spam**.\n4. Verá a mensagem de ativação do **Eyes Open MZ**. Clique nela e confirme o e-mail!\n\n[TUTORIAL_VIDEO]`
-          }
-        ]);
-      }
-    } else {
-      hasAutoOpenedPayRef.current = false;
-    }
-  }, [isUnverified, currentUser]);
-
-  const handleCheckVerification = async () => {
-    try {
-      const { auth, db } = await import('./lib/firebase');
-      if (auth.currentUser) {
-        await auth.currentUser.reload();
-        if (auth.currentUser.emailVerified) {
-          const { doc, updateDoc } = await import('firebase/firestore');
-          await updateDoc(doc(db, 'users', currentUser!.id), { isVerified: true });
-          
-          setCurrentUser(prev => prev ? { ...prev, isVerified: true } : null);
-          const stored = localStorage.getItem('currentUser');
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              parsed.isVerified = true;
-              localStorage.setItem('currentUser', JSON.stringify(parsed));
-            } catch (e) {}
-          }
-          
-          triggerToast('Sucesso! O seu e-mail foi confirmado e o seu perfil está totalmente ativo!');
-          setShowUnverifiedBlockModal(false);
-          setAssistantMessages(prev => [
-            ...prev,
-            { role: 'assistant', content: 'Parabéns! Verifiquei o seu estado e o seu e-mail está agora confirmado com sucesso! Todas as restrições da sua conta foram levantadas. Aproveite a plataforma ao máximo! 🎉' }
-          ]);
-          return;
+      // Category filter
+      if (selectedCategory !== 'todas') {
+        const targetCategoryObj = BOOK_CATEGORIES.find(c => c.slug === selectedCategory);
+        if (targetCategoryObj && book.category.toLowerCase() !== targetCategoryObj.name.toLowerCase()) {
+          return false;
         }
       }
-      triggerToast('Ainda não confirmou o seu e-mail no Gmail. Por favor, verifique a pasta de Spam e tente novamente!');
-    } catch (err: any) {
-      console.error('[Verification Check Error]', err);
-      // Fallback: If it's a mock or evaluation without real connection, let's offer a visual bypass to keep presentation perfect
-      triggerToast('A verificar ligação com o Firebase Auth...');
-    }
-  };
 
-  const handleResendVerification = async () => {
-    if (isResendingVerification) return;
-    setIsResendingVerification(true);
-    try {
-      const { auth } = await import('./lib/firebase');
-      if (auth.currentUser) {
-        const { sendEmailVerification } = await import('firebase/auth');
-        await sendEmailVerification(auth.currentUser);
-        triggerToast('E-mail de verificação reenviado com sucesso! Verifique a pasta Spam.');
-        setAssistantMessages(prev => [
-          ...prev,
-          { role: 'assistant', content: `Acabei de disparar um novo e-mail de verificação para ${currentUser?.email}. Vá à sua aplicação do Gmail, abra o menu esquerdo (três barras), entre na pasta **Spam** e confirme a sua conta!` }
-        ]);
-      } else {
-        triggerToast('Utilizador não detetado natively. Por favor, faça login novamente.');
-      }
-    } catch (err: any) {
-      console.error('[Resend Verification Error]', err);
-      triggerToast('Falha ao reenviar e-mail: ' + (err.message || 'Verifique as restrições de domínio do Firebase.'));
-    } finally {
-      setIsResendingVerification(false);
-    }
-  };
-
-  // Simulated activation bypass for development / evaluation ease
-  const handleSimulatedVerification = async () => {
-    try {
-      const { db } = await import('./lib/firebase');
-      const { doc, updateDoc } = await import('firebase/firestore');
-      if (currentUser) {
-        await updateDoc(doc(db, 'users', currentUser.id), { isVerified: true });
-        setCurrentUser(prev => prev ? { ...prev, isVerified: true } : null);
-        const stored = localStorage.getItem('currentUser');
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            parsed.isVerified = true;
-            localStorage.setItem('currentUser', JSON.stringify(parsed));
-          } catch (e) {}
-        }
-        triggerToast('Ativação de teste efetuada com sucesso!');
-        setShowUnverifiedBlockModal(false);
-        setAssistantMessages(prev => [
-          ...prev,
-          { role: 'assistant', content: 'Simulação concluída! A sua conta do Eyes Open MZ foi ativada localmente para fins de demonstração.' }
-        ]);
-      }
-    } catch (e: any) {
-      console.error('Bypass failed:', e);
-    }
-  };
-
-  // Eyes Max Special Theme & Virtual Assistant "Pay" states
-  const [eyesMaxDownloaded, setEyesMaxDownloaded] = useState<boolean>(() => {
-    return localStorage.getItem('eyesMaxDownloaded') === 'true';
-  });
-  const [showEyesMaxDownloadModal, setShowEyesMaxDownloadModal] = useState<boolean>(false);
-  const [showGuestRestrictionModal, setShowGuestRestrictionModal] = useState<boolean>(false);
-
-  const checkGuestRestriction = (): boolean => {
-    if (currentUser?.isGuest || currentUser?.id === 'guest') {
-      setShowGuestRestrictionModal(true);
       return true;
-    }
-    return false;
+    }).sort((a, b) => {
+      if (sortBy === 'recent') {
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      }
+      if (sortBy === 'downloads') {
+        return (b.downloadCount || 0) - (a.downloadCount || 0);
+      }
+      if (sortBy === 'rating') {
+        return (b.ratingAverage || 0) - (a.ratingAverage || 0);
+      }
+      if (sortBy === 'title') {
+        return a.title.localeCompare(b.title);
+      }
+      return 0;
+    });
+  }, [books, searchQuery, selectedCategory, sortBy, showOnlyFavorites, favoriteBookIds]);
+
+  // Featured book for Hero Banner
+  const featuredBook = useMemo(() => {
+    return books.find(b => b.isFeatured) || books[0];
+  }, [books]);
+
+  // Favorite Books List
+  const favoriteBooks = useMemo(() => {
+    return books.filter(b => favoriteBookIds.includes(b.id));
+  }, [books, favoriteBookIds]);
+
+  // Toggle favorite
+  const handleToggleFavorite = (bookId: string) => {
+    setFavoriteBookIds(prev => {
+      if (prev.includes(bookId)) {
+        return prev.filter(id => id !== bookId);
+      } else {
+        return [...prev, bookId];
+      }
+    });
   };
-  const [isDownloadingEyesMax, setIsDownloadingEyesMax] = useState<boolean>(false);
-  const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
-  const [isApplyingEyesMax, setIsApplyingEyesMax] = useState<boolean>(false);
-  const [applyProgress, setApplyProgress] = useState<number>(0);
-  const [showEyesMaxWelcome, setShowEyesMaxWelcome] = useState<boolean>(false);
-
-  const [showPayAssistant, setShowPayAssistant] = useState<boolean>(false);
-  const [assistantMessages, setAssistantMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
-    { role: 'assistant', content: 'Olá! Sou o Pay, o assistente virtual oficial do site "Eyes Open MZ". Seja muito bem-vindo ao luxuoso ecossistema do tema EYES MAX! Como posso ajudar-te hoje? podes perguntar-me sobre o site, o tema EYES MAX ou qualquer outra dúvida!' }
-  ]);
-  const [assistantInput, setAssistantInput] = useState<string>('');
-  const [isAssistantTyping, setIsAssistantTyping] = useState<boolean>(false);
-
-  const playPaySignatureSound = () => {
-    if (typeof window === 'undefined') return;
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
+  // Open External PDF / Gestor de Ficheiros
+  const handleOpenExternalPdf = (book: Book) => {
     try {
-      const ctx = new AudioContextClass();
-      const now = ctx.currentTime;
-      
-      const playTone = (freq: number, start: number, duration: number, type: 'triangle' | 'sine' = 'sine') => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, start);
-        
-        gain.gain.setValueAtTime(0, start);
-        gain.gain.linearRampToValueAtTime(0.15, start + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.start(start);
-        osc.stop(start + duration);
-      };
-      
-      // Luxurious golden chime arpeggio: C5 -> E5 -> G5 -> C6
-      playTone(523.25, now, 1.2, 'triangle');
-      playTone(659.25, now + 0.12, 1.0, 'sine');
-      playTone(783.99, now + 0.24, 0.8, 'sine');
-      playTone(1046.50, now + 0.36, 1.5, 'sine');
+      const link = document.createElement('a');
+      link.href = book.pdfUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (e) {
-      console.warn('Audio signature failed to play:', e);
+      window.open(book.pdfUrl, '_blank');
     }
   };
 
-  const triggerDownloadEyesMax = () => {
-    setIsDownloadingEyesMax(true);
-    setDownloadProgress(0);
-    const interval = setInterval(() => {
-      setDownloadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsDownloadingEyesMax(false);
-            setEyesMaxDownloaded(true);
-            localStorage.setItem('eyesMaxDownloaded', 'true');
-          }, 300);
-          return 100;
-        }
-        return prev + Math.floor(Math.random() * 15) + 5;
-      });
-    }, 150);
-  };
+  // Download PDF handler with progress simulation & gestor tracking
+  const handleDownloadBook = async (book: Book) => {
+    setIsDownloadsModalOpen(true);
 
-  const triggerApplyEyesMaxFlow = () => {
-    setIsApplyingEyesMax(true);
-    setApplyProgress(0);
-    const interval = setInterval(() => {
-      setApplyProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsApplyingEyesMax(false);
-            setThemeState('eyes-max');
-            localStorage.setItem('theme', 'eyes-max');
-            if (currentUser && currentUser.id !== 'guest') {
-              localStorage.setItem(`theme_user_${currentUser.id}`, 'eyes-max');
-            }
-            setAdaptiveControls(false);
-            // Play brand sound signature
-            playPaySignatureSound();
-            // Automatically launch "Pay" assistant
-            setShowPayAssistant(true);
-            setShowEyesMaxWelcome(true);
-          }, 600);
-          return 100;
-        }
-        return prev + Math.floor(Math.random() * 10) + 4;
-      });
-    }, 120);
-  };
+    const existing = downloadedItems.find(i => i.bookId === book.id);
+    if (existing && existing.status === 'completed') {
+      return;
+    }
 
-  const getLocalAssistantReply = (message: string): string => {
-    const msg = message.toLowerCase();
-    if (msg.includes('olá') || msg.includes('oi') || msg.includes('bom dia') || msg.includes('boa tarde') || msg.includes('boa noite') || msg.includes('hey')) {
-      return 'Olá! Eu sou o Pay, o assistente virtual oficial do Eyes Open MZ! Estou aqui ligado e pronto para te ajudar. O que gostarias de saber sobre o site, os temas ou a tua conta?';
-    }
-    if (msg.includes('senha') || msg.includes('password') || msg.includes('palavra-passe') || msg.includes('recuperar')) {
-      return 'Para gerir ou alterar a tua palavra-passe:\n1. Podes recuperar a senha no ecrã de Login usando o botão "Esqueceu a Palavra-passe?".\n2. Para alterar estando ligado, vai a "A Minha Conta" -> "Alterar Palavra-passe".\n3. Usa senhas fortes com números, maiúsculas e símbolos para máxima proteção!';
-    }
-    if (msg.includes('hack') || msg.includes('segurança') || msg.includes('cyber') || msg.includes('seguro') || msg.includes('proteger')) {
-      return 'No Eyes Open MZ, a tua segurança é levada ao mais alto nível! Todas as sessões usam encriptação JWT e tokens seguros. As tuas credenciais de acesso ficam protegidas e as tuas informações regionais mantêm-se estritamente confidenciais.';
-    }
-    if (msg.includes('moçambique') || msg.includes('mz') || msg.includes('província') || msg.includes('maputo') || msg.includes('quelimane') || msg.includes('zambézia')) {
-      return 'O Eyes Open MZ foi desenhado especialmente para Moçambique! Conectamos todas as 11 províncias, de Maputo a Cabo Delgado e Zambézia, com baixa latência, feeds regionais e um ecossistema adaptado à nossa cultura.';
-    }
-    if (msg.includes('tema') || msg.includes('eyes max') || msg.includes('cor') || msg.includes('celular') || msg.includes('marca')) {
-      return 'O Eyes Open MZ possui um sistema de temas inovador! Além do tema "EYES MAX" de alto luxo (âmbar e chocolate sem neons), o ecrã de Login reconhece automaticamente a marca do teu celular (Samsung, Apple, Xiaomi, Huawei, Tecno, Motorola, Pixel, OnePlus) e muda de cor para combinar perfeitamente com o teu telemóvel!';
-    }
-    if (msg.includes('publicar') || msg.includes('post') || msg.includes('foto') || msg.includes('vídeo') || msg.includes('publicação')) {
-      return 'Para criar uma nova publicação:\n1. Clica no botão "+" ou "Publicar" na navegação principal.\n2. Escolhe a categoria (Geral, Cultura, Notícias, Eventos).\n3. Adiciona foto ou texto e clica em "Publicar". A tua publicação ficará visível em tempo real no feed!';
-    }
-    if (msg.includes('quem') || msg.includes('criou') || msg.includes('dono') || msg.includes('desenvolvedor') || msg.includes('oficio') || msg.includes('rachide')) {
-      return 'O Eyes Open MZ e eu (Pay) fomos criados e desenvolvidos pelo Engenheiro Ofício Faustino Rachide, concebido para oferecer a melhor experiência digital e segura em Moçambique!';
-    }
-    return `Compreendido! Em relação a "${message}", estou à disposição para ajudar-te. Podes perguntar-me sobre a tua conta, publicação de fotos, troca de temas, verificação de e-mail ou funcionalidades do ecossistema Eyes Open MZ!`;
-  };
+    const itemId = `dl_${book.id}_${Date.now()}`;
+    const newItem: DownloadedItem = {
+      id: itemId,
+      bookId: book.id,
+      book,
+      downloadedAt: Date.now(),
+      progress: 15,
+      status: 'downloading',
+      fileSizeFormatted: book.fileSizeFormatted || '3.5 MB'
+    };
 
-  const handleSendAssistantMessage = async () => {
-    if (!assistantInput.trim()) return;
-    const userMsg = assistantInput;
-    setAssistantInput('');
-    setAssistantMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setIsAssistantTyping(true);
+    setDownloadedItems(prev => [newItem, ...prev.filter(i => i.bookId !== book.id)]);
 
+    // Increment downloads in Firestore right away
     try {
-      const response = await fetch('/api/assistant/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userMsg,
-          history: assistantMessages
-        })
-      });
-      const data = await response.json();
-      if (data && data.reply) {
-        setAssistantMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
-      } else {
-        const fallbackReply = getLocalAssistantReply(userMsg);
-        setAssistantMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
-      }
-    } catch (err) {
-      console.warn('Chat Assistant API error, falling back to local chat:', err);
-      const fallbackReply = getLocalAssistantReply(userMsg);
-      setAssistantMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
-    } finally {
-      setIsAssistantTyping(false);
-    }
-  };
-
-  const setTheme = (newTheme: 'lite' | 'noite' | 'luz' | 'esmeralda' | 'vinho' | 'ciano' | 'crepusculo' | 'neon-cyber' | 'glass-minimalist' | 'eyes-max') => {
-    if (newTheme === 'eyes-max') {
-      if (!eyesMaxDownloaded) {
-        setShowEyesMaxDownloadModal(true);
-        return;
-      } else {
-        triggerApplyEyesMaxFlow();
-        return;
-      }
-    }
-    setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
-    if (currentUser && currentUser.id !== 'guest') {
-      localStorage.setItem(`theme_user_${currentUser.id}`, newTheme);
-    }
-    // Manual selection overrides adaptive controls
-    setAdaptiveControls(false);
-  };
-
-  // Adaptive Controls & Sensors
-  const [adaptiveControls, setAdaptiveControls] = useState<boolean>(() => {
-    const saved = localStorage.getItem('adaptiveControls');
-    return saved === null ? false : saved === 'true';
-  });
-
-  const [uiMode, setUiMode] = useState<'performance' | 'immersive'>(() => {
-    const saved = localStorage.getItem('uiMode');
-    return (saved === 'performance' || saved === 'immersive') ? saved : 'immersive';
-  });
-
-  const [interfaceSounds, setInterfaceSounds] = useState<boolean>(() => {
-    return localStorage.getItem('eo_interface_sounds_enabled') !== 'false';
-  });
-
-  const [simulatedBattery, setSimulatedBattery] = useState<number>(100);
-  const [actualBattery, setActualBattery] = useState<number | null>(null);
-  const [isUltraSaver, setIsUltraSaver] = useState<boolean>(false);
-  const [currentThemeConfig, setCurrentThemeConfig] = useState<ThemeConfig>(THEME_CONFIGS['noite']);
-
-  // Sync adaptiveControls & uiMode to localStorage
-  useEffect(() => {
-    localStorage.setItem('adaptiveControls', String(adaptiveControls));
-  }, [adaptiveControls]);
-
-  useEffect(() => {
-    localStorage.setItem('uiMode', uiMode);
-  }, [uiMode]);
-
-  useEffect(() => {
-    localStorage.setItem('eo_interface_sounds_enabled', String(interfaceSounds));
-  }, [interfaceSounds]);
-
-  // Sync physical battery level if supported
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('getBattery' in navigator)) return;
-
-    let batteryInstance: any = null;
-    const updateBatteryStatus = () => {
-      if (batteryInstance) {
-        setActualBattery(Math.round(batteryInstance.level * 100));
-      }
-    };
-
-    (navigator as any).getBattery().then((battery: any) => {
-      batteryInstance = battery;
-      updateBatteryStatus();
-      battery.addEventListener('levelchange', updateBatteryStatus);
-    });
-
-    return () => {
-      if (batteryInstance) {
-        batteryInstance.removeEventListener('levelchange', updateBatteryStatus);
-      }
-    };
-  }, []);
-
-  const effectiveBatteryLevel = actualBattery !== null && actualBattery < simulatedBattery ? actualBattery : simulatedBattery;
-
-  // Manage Ultra Saver Mode transition and notifications
-  useEffect(() => {
-    const isLow = effectiveBatteryLevel < 20;
-    if (isLow && !isUltraSaver && adaptiveControls) {
-      setIsUltraSaver(true);
-      triggerToast('Modo de economia ativado para poupar bateria');
-      
-      const lowBatteryNotif: Notification = {
-        id: 'notif_battery_' + Date.now(),
-        recipientId: currentUser?.id || 'guest',
-        title: 'Modo Ultra Economia 🔋',
-        text: 'A bateria está abaixo de 20%. O Eyes Open MZ ativou automaticamente o tema preto puro, reduziu as animações e simplificou as grelhas para poupar energia.',
-        type: 'system',
-        sender: {
-          id: 'system',
-          name: 'Gestor de Bateria',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
-        },
-        read: false,
-        targetId: 'config',
-        targetView: 'notificacoes',
-        timestamp: Date.now()
-      };
-      
-      if (currentUser && currentUser.id !== 'guest') {
-        dbCreateNotification(lowBatteryNotif).catch(console.error);
-      } else {
-        setNotifications(prev => [lowBatteryNotif, ...prev]);
-      }
-    } else if ((!isLow || !adaptiveControls) && isUltraSaver) {
-      setIsUltraSaver(false);
-      triggerToast('Bateria normalizada. Modo de economia desativado.');
-    }
-  }, [effectiveBatteryLevel, adaptiveControls, currentUser?.id, isUltraSaver]);
-
-  // Live swap CSS properties & compute current theme config
-  useEffect(() => {
-    let resolvedThemeId = theme;
-
-    if (adaptiveControls) {
-      if (effectiveBatteryLevel < 20) {
-        // Battery mode forces amoled black variable overrides in injectThemeVariables
-      } else if (theme === 'luz' || theme === 'noite') {
-        // Circadian Clock switching: Day (06:00 to 18:00) vs Night (18:01 to 05:59)
-        const hour = new Date().getHours();
-        const isDay = hour >= 6 && hour < 18;
-        resolvedThemeId = isDay ? 'luz' : 'noite';
-      }
+      const updatedDownloads = await dbIncrementBookDownloads(book.id);
+      setBooks(prev => prev.map(b => b.id === book.id ? { ...b, downloadCount: updatedDownloads } : b));
+    } catch (e) {
+      console.error(e);
     }
 
-    const config = THEME_CONFIGS[resolvedThemeId] || THEME_CONFIGS['eyes-max'];
-    setCurrentThemeConfig(config);
-
-    // Inject styles instantly to documentElement
-    injectThemeVariables(config, uiMode, isUltraSaver && adaptiveControls);
-  }, [theme, adaptiveControls, effectiveBatteryLevel, uiMode, isUltraSaver]);
-
-  // Heartbeat to keep active user status "Online" in Firestore
-  useEffect(() => {
-    if (!currentUser || currentUser.id === 'guest') return;
-
-    dbUpdateUser({
-      ...currentUser,
-      isOnline: true,
-      lastActive: Date.now()
-    } as any).catch(console.error);
-
+    // Animate download progress smoothly: 15% -> 45% -> 75% -> 95% -> 100%
+    let curProgress = 15;
     const interval = setInterval(() => {
-      const latestUser = currentUserRef.current;
-      if (latestUser && latestUser.id !== 'guest') {
-        dbUpdateUser({
-          ...latestUser,
-          isOnline: true,
-          lastActive: Date.now()
-        } as any).catch(console.error);
-      }
-    }, 20000);
+      curProgress += Math.floor(Math.random() * 25) + 15;
+      if (curProgress >= 100) {
+        curProgress = 100;
+        clearInterval(interval);
 
-    const handleUnload = () => {
-      const latestUser = currentUserRef.current;
-      if (latestUser && latestUser.id !== 'guest') {
-        dbUpdateUser({
-          ...latestUser,
-          isOnline: false,
-          lastActive: Date.now()
-        } as any).catch(console.error);
-      }
-    };
-    window.addEventListener('beforeunload', handleUnload);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('beforeunload', handleUnload);
-      // Only set offline if they actually changed ID or logged out
-      const latestUser = currentUserRef.current;
-      if (!latestUser || latestUser.id !== currentUser.id) {
-        dbUpdateUser({
-          ...currentUser,
-          isOnline: false,
-          lastActive: Date.now()
-        } as any).catch(console.error);
-      }
-    };
-  }, [currentUser?.id]);
-
-  const isUserOnline = (mem: User): boolean => {
-    if (mem.id === currentUser?.id) return true;
-    const isOnlineField = (mem as any).isOnline === true;
-    const lastActiveTime = (mem as any).lastActive || 0;
-    const isRecent = (Date.now() - lastActiveTime) < 45000;
-    return isOnlineField && isRecent;
-  };
-
-  // App core persistent states
-  const [posts, setPosts] = useState<Post[]>(() => {
-    try {
-      const stored = localStorage.getItem('eo_cached_posts');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return SEED_POSTS;
-  });
-
-  const [stories, setStories] = useState<Story[]>(() => {
-    try {
-      const stored = localStorage.getItem('eo_cached_stories');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return SEED_STORIES;
-  });
-  const [friendships, setFriendships] = useState<Friendship[]>([]);
-  const [chatPermissions, setChatPermissions] = useState<ChatPermission[]>([]);
-  const [selectedCommunityUser, setSelectedCommunityUser] = useState<User | null>(null);
-  const [initialSelectedChatId, setInitialSelectedChatId] = useState<string | undefined>(undefined);
-  
-  // Real-time message thread and notification states
-  const [messages, setMessages] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [autoOpenPostId, setAutoOpenPostId] = useState<string | undefined>(undefined);
-  
-  // Navigation states
-  const [activeView, setActiveView] = useState<ViewType>('feed');
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  
-  // Auxiliary micro-interaction toast state
-  const [successToast, setSuccessToast] = useState('');
-  
-  // Global float-sheet search state
-  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
-
-  // Lazy loading state for community list
-  const [visibleUsersLimit, setVisibleUsersLimit] = useState(6);
-
-  // Unread badge counters (real-time synced with active timestamps)
-  const unreadChatsCount = currentUser && currentUser.id !== 'guest'
-    ? messages.filter(m => m.sender.id !== currentUser.id && m.timestamp > (currentUser.lastReadChatTimestamp || 0)).length
-    : 0;
-
-  const unreadNotificationsCount = currentUser
-    ? notifications.filter(n => !n.read && n.type !== 'message' && n.type !== 'chat' && n.type !== 'conversa' && n.type !== 'chat_request' && n.type !== 'chat_accepted').length
-    : 0;
-
-  const resolvedPosts = useMemo(() => {
-    const mapped = posts.map(post => {
-      const authorUser = users.find(u => u.id === post.author.id);
-      const resolvedComments = (post.comments || []).map(comment => {
-        const commentAuthor = users.find(u => u.id === comment.author.id);
-        return {
-          ...comment,
-          author: {
-            id: comment.author.id,
-            name: commentAuthor ? commentAuthor.fullname : comment.author.name,
-            avatar: commentAuthor ? commentAuthor.avatar : comment.author.avatar,
-            nickname: commentAuthor ? commentAuthor.nickname : (comment.author as any).nickname,
+        setDownloadedItems(prev => prev.map(item => {
+          if (item.id === itemId) {
+            return { ...item, progress: 100, status: 'completed' };
           }
-        };
-      });
-      return {
-        ...post,
-        author: {
-          id: post.author.id,
-          name: authorUser ? authorUser.fullname : post.author.name,
-          avatar: authorUser ? authorUser.avatar : post.author.avatar,
-          nickname: authorUser ? authorUser.nickname : (post.author as any).nickname,
-          province: authorUser?.province || '',
-        },
-        comments: resolvedComments
-      };
-    });
+          return item;
+        }));
 
-    if (!currentUser || currentUser.id === 'guest') {
-      return mapped;
-    }
-
-    const userProvince = (currentUser.province || '').trim().toLowerCase();
-    if (!userProvince) {
-      return mapped;
-    }
-
-    // Geographic Prioritization Algorithm
-    // Priority 1: Publications matching user's registered province (post location OR author province)
-    // Priority 2: Other provinces or national publications, ordered chronologically
-    return [...mapped].sort((a, b) => {
-      const aLocationMatch = a.location && a.location.trim().toLowerCase().includes(userProvince);
-      const aAuthorMatch = (a.author as any).province && (a.author as any).province.trim().toLowerCase().includes(userProvince);
-      const isAPriority = !!(aLocationMatch || aAuthorMatch);
-
-      const bLocationMatch = b.location && b.location.trim().toLowerCase().includes(userProvince);
-      const bAuthorMatch = (b.author as any).province && (b.author as any).province.trim().toLowerCase().includes(userProvince);
-      const isBPriority = !!(bLocationMatch || bAuthorMatch);
-
-      if (isAPriority && !isBPriority) {
-        return -1;
-      }
-      if (!isAPriority && isBPriority) {
-        return 1;
-      }
-
-      // Maintain chronological order for same-priority items
-      const timeA = a.timestamp || 0;
-      const timeB = b.timestamp || 0;
-      return timeB - timeA;
-    });
-  }, [posts, users, currentUser]);
-
-  const resolvedStories = useMemo(() => {
-    return stories.map(story => {
-      const authorUser = users.find(u => u.id === story.author.id);
-      return {
-        ...story,
-        author: {
-          id: story.author.id,
-          name: authorUser ? authorUser.fullname : story.author.name,
-          avatar: authorUser ? authorUser.avatar : story.author.avatar,
-          nickname: authorUser ? authorUser.nickname : (story.author as any).nickname,
-        }
-      };
-    });
-  }, [stories, users]);
-
-  // Keep selectedCommunityUser synced with loaded users to prevent stale data when updated
-  useEffect(() => {
-    if (selectedCommunityUser) {
-      const latest = users.find(u => u.id === selectedCommunityUser.id);
-      if (latest && JSON.stringify(latest) !== JSON.stringify(selectedCommunityUser)) {
-        setSelectedCommunityUser(latest);
-      }
-    }
-  }, [users, selectedCommunityUser]);
-
-  // 1. Initial State Loading and Seeding with real-time Firestore Subscriptions
-  useEffect(() => {
-    // 1. First trigger seeding of the database if collections are completely blank
-    seedDatabaseIfEmpty();
-    
-    // Cleanup expired guest accounts on startup
-    dbDeleteExpiredGuests().catch(console.error);
-
-    // 2. Load cached current user session (including JWT validation against server)
-    const token = localStorage.getItem('eo_jwt_token');
-    if (token) {
-      authVerify(token)
-      .then((data) => {
-        if (data.user) {
-          setCurrentUser(data.user);
-          localStorage.setItem('currentUser', JSON.stringify(data.user));
-        } else {
-          // Clears stale local sessions if backend verification fails
-          localStorage.removeItem('eo_jwt_token');
-          localStorage.removeItem('currentUser');
-          setCurrentUser(null);
-        }
-      })
-      .catch(() => {
-        // Fallback to local cache if server is offline during load
-        const stored = localStorage.getItem('currentUser');
-        if (stored) {
-          try {
-            setCurrentUser(JSON.parse(stored));
-          } catch (e) {}
-        }
-      });
-    } else {
-      const stored = localStorage.getItem('currentUser');
-      if (stored) {
+        // Trigger browser file download
         try {
-          setCurrentUser(JSON.parse(stored));
-        } catch (e) {}
-      }
-    }
-
-    // 3. Subscribe to real-time Users
-    const unsubUsers = subscribeUsers((loadedUsers) => {
-      setUsers(loadedUsers);
-      
-      // Keep active user session in sync with database profile modifications
-      const stored = localStorage.getItem('currentUser');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          const masterUser = loadedUsers.find(u => u.id === parsed.id);
-          if (masterUser) {
-            setCurrentUser(masterUser);
-            localStorage.setItem('currentUser', JSON.stringify(masterUser));
+          const link = document.createElement('a');
+          link.href = book.pdfUrl;
+          link.download = `${book.title.replace(/\s+/g, '_')}_AlaX.pdf`;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setDownloadedItems(prev => prev.map(item => {
+          if (item.id === itemId) {
+            return { ...item, progress: curProgress };
           }
-        } catch (e) {}
+          return item;
+        }));
       }
-    });
-
-    // 4. Subscribe to real-time Posts
-    const unsubPosts = subscribePosts((loadedPosts) => {
-      setPosts(loadedPosts);
-    });
-
-    // 5. Subscribe to real-time Stories
-    const unsubStories = subscribeStories((loadedStories) => {
-      setStories(loadedStories);
-    });
-
-    // 6. Subscribe to real-time chats for unread count calculations
-    const unsubChats = subscribeChats((loadedMsgs) => {
-      setMessages(loadedMsgs);
-    });
-
-    // 7. Subscribe to real-time friendships
-    const unsubFriendships = subscribeFriendships((loadedFriendships) => {
-      setFriendships(loadedFriendships);
-    });
-
-    // 8. Subscribe to real-time chat permissions
-    const unsubChatPerms = subscribeChatPermissions((loadedChatPerms) => {
-      setChatPermissions(loadedChatPerms);
-    });
-
-    return () => {
-      unsubUsers();
-      unsubPosts();
-      unsubStories();
-      unsubChats();
-      unsubFriendships();
-      unsubChatPerms();
-    };
-  }, []);
-
-  // Listen to active notifications for current user
-  useEffect(() => {
-    if (!currentUser) {
-      setNotifications([]);
-      return;
-    }
-    let isFirstRun = true;
-    const unsubNotifs = subscribeNotifications(currentUser.id, (loadedNotifs) => {
-      // Exclude notifications triggered by the user themselves
-      const filtered = loadedNotifs.filter(n => n.sender.id !== currentUser.id);
-      
-      // Play notification sound on new unread notification (not on initial snapshot)
-      if (!isFirstRun && filtered.some(n => !n.read)) {
-        const unreadNew = filtered.filter(n => !n.read);
-        const hasRecentUnread = unreadNew.some(n => (Date.now() - n.timestamp) < 10000);
-        if (hasRecentUnread) {
-          playNotificationSound();
-        }
-      }
-      isFirstRun = false;
-      setNotifications(filtered);
-    });
-    return () => unsubNotifs();
-  }, [currentUser?.id]);
-
-  const triggerToast = (msg: string) => {
-    setSuccessToast(msg);
-    setTimeout(() => setSuccessToast(''), 3000);
+    }, 450);
   };
 
-  // 2. Authentication handlers
-  const handleLoginSuccess = (user: User, token: string, rememberMe?: boolean) => {
-    setCurrentUser(user);
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('eo_jwt_token', token);
-    
-    if (rememberMe) {
-      try {
-        const raw = JSON.stringify(user);
-        const b64 = btoa(encodeURIComponent(raw));
-        localStorage.setItem('eo_secure_keychain_token', `EO_KEYCHAIN_SECURE_${b64}`);
-      } catch (e) {}
-    } else {
-      localStorage.removeItem('eo_secure_keychain_token');
-    }
-    setActiveView('feed');
-    triggerToast(`Sessão iniciada! Bem-vindo, ${user.nickname}`);
+  const handleRemoveDownloadedItem = (id: string) => {
+    setDownloadedItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const handleRegisterSuccess = async (newUser: User, token: string) => {
-    // Save JWT token
-    localStorage.setItem('eo_jwt_token', token);
-
-    // 1. Create personal Welcome Notification for the new user (the owner)
-    const welcomeNotif: Notification = {
-      id: 'notif_welcome_' + Math.random().toString(36).substring(2, 9),
-      recipientId: newUser.id,
-      title: 'Boas-vindas ao Eyes Open MZ! 🎉🇲🇿',
-      text: `Olá ${newUser.firstname}! Registou-se com sucesso. Clique aqui para ler o Guia de Introdução e saber como a nossa comunidade funciona!`,
-      type: 'system',
-      sender: {
-        id: 'system',
-        name: 'Equipa Open MZ',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
-      },
-      read: false,
-      targetId: 'welcome_guide',
-      targetView: 'notificacoes',
-      timestamp: Date.now()
-    };
-    await dbCreateNotification(welcomeNotif).catch(console.error);
-
-    // 2. Create friendship suggestion notification for all other community users individually
-    const otherUsers = users.filter(u => u.id !== newUser.id && u.id !== 'guest');
-    for (const u of otherUsers) {
-      const suggestionNotif: Notification = {
-        id: 'notif_reg_' + u.id + '_' + Math.random().toString(36).substring(2, 9),
-        recipientId: u.id,
-        title: 'Sugestão de Vínculo 🤝',
-        text: `${newUser.fullname} (@${newUser.nickname}) acabou de criar uma conta, quer interagir com ele? Solicite-o!`,
-        type: 'system',
-        sender: {
-          id: newUser.id,
-          name: newUser.nickname,
-          avatar: newUser.avatar
-        },
-        read: false,
-        targetId: newUser.id,
-        targetView: 'comunidade',
-        timestamp: Date.now()
-      };
-      await dbCreateNotification(suggestionNotif).catch(console.error);
-    }
-
-    setCurrentUser(newUser);
-    localStorage.setItem('currentUser', JSON.stringify(newUser));
-    setActiveView('feed');
-    triggerToast(`Registo completo! Bem-vindo, ${newUser.nickname}`);
-  };
-
-  const logoutSeguro = () => {
-    localStorage.clear();
-    sessionStorage.clear();
-    window.location.reload();
-  };
-
-  const handleLogout = () => {
-    logoutSeguro();
-  };
-
-  const handleUpdateUser = async (updatedUser: User) => {
-    await dbUpdateUser(updatedUser);
-    setCurrentUser(updatedUser);
-    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-    triggerToast('Perfil atualizado com sucesso!');
-  };
-
-  const handleDeleteAccount = async (userId: string) => {
-    if (confirm('Atenção: Esta ação é irreversível. Deseja realmente eliminar o seu perfil do Eyes Open MZ?')) {
-      await dbDeleteUser(userId);
-      
-      // Purge posts and stories from this user for security
-      const postsToDelete = posts.filter(p => p.author.id === userId);
-      for (const p of postsToDelete) {
-        await dbDeletePost(p.id);
-      }
-
-      const storiesToDelete = stories.filter(s => s.author.id === userId);
-      for (const s of storiesToDelete) {
-        await dbDeleteStory(s.id);
-      }
-
-      handleLogout();
-    }
-  };
-
-  // 3. Post interactions (Like, View, Post, Delete, Comment)
-  const handleLikePost = async (postId: string) => {
-    if (checkGuestRestriction()) return;
-    const p = posts.find(x => x.id === postId);
-    if (!p) return;
-
-    const starredBy = p.starredBy ? { ...p.starredBy } : {};
-    const hasStarred = !!starredBy[currentUser.id];
-    const nextStarred = !hasStarred;
-    starredBy[currentUser.id] = nextStarred;
-
-    const updatedRatings = p.ratings ? { ...p.ratings } : {};
-    if (nextStarred) {
-      if (!updatedRatings[currentUser.id]) {
-        updatedRatings[currentUser.id] = 5;
-      }
-    } else {
-      delete updatedRatings[currentUser.id];
-    }
-
-    const nextStars = Object.keys(updatedRatings).length || Object.values(starredBy).filter(Boolean).length;
-
-    const updated: Post = {
-      ...p,
-      starredBy,
-      starred: nextStarred,
-      stars: nextStars,
-      ratings: updatedRatings
-    };
-
-    // Synchronously update local React state and local storage cache so UI never drops stars
-    setPosts(prev => {
-      const newPosts = prev.map(item => item.id === postId ? updated : item);
-      try {
-        localStorage.setItem('eo_cached_posts', JSON.stringify(newPosts));
-      } catch (e) {}
-      return newPosts;
-    });
-
-    await dbUpdatePost(updated);
-
-    if (currentUser && nextStarred && p.author.id !== currentUser.id) {
-      const notif: Notification = {
-        id: 'notif_like_' + Math.random().toString(36).substring(2, 9),
-        recipientId: p.author.id,
-        title: 'Nova Estrela ⭐',
-        text: `${currentUser.nickname} deu uma estrela à sua publicação: "${p.text ? p.text.substring(0, 30) : 'foto'}..."`,
-        type: 'star',
-        sender: {
-          id: currentUser.id,
-          name: currentUser.nickname,
-          avatar: currentUser.avatar
-        },
-        read: false,
-        targetId: p.id,
-        targetView: 'feed',
-        timestamp: Date.now()
-      };
-      await dbCreateNotification(notif).catch(console.error);
-    }
-  };
-
-  const handleRatePost = async (postId: string, ratingValue: number) => {
-    if (!currentUser) return;
-    if (checkGuestRestriction()) return;
-
+  const handleLogoutAction = async () => {
     try {
-      const p = posts.find(x => x.id === postId);
-      if (!p) return;
-
-      const updatedRatings = p.ratings ? { ...p.ratings } : {};
-      updatedRatings[currentUser.id] = ratingValue;
-
-      const starredBy = p.starredBy ? { ...p.starredBy } : {};
-      starredBy[currentUser.id] = true;
-
-      const nextStars = Object.keys(updatedRatings).length;
-
-      const updatedPost: Post = {
-        ...p,
-        ratings: updatedRatings,
-        starredBy,
-        stars: nextStars,
-        starred: true
-      };
-
-      // 1. Synchronously update local React state and local storage cache so UI keeps stars when exiting detail view
-      setPosts(prev => {
-        const newPosts = prev.map(item => item.id === postId ? updatedPost : item);
-        try {
-          localStorage.setItem('eo_cached_posts', JSON.stringify(newPosts));
-        } catch (e) {}
-        return newPosts;
-      });
-
-      // 2. Persist vote in Firestore
-      const locationVal = p.location || '';
-      await dbCreateUserVote(currentUser.id, postId, locationVal, ratingValue);
-
-      // 3. Persist post update in Firestore
-      await dbUpdatePost(updatedPost);
-
-      // Optional sound effect
-      try {
-        playStarSound();
-      } catch (e) {}
-
-      // Send a notification to the author
-      if (p.author.id !== currentUser.id) {
-        const notif: Notification = {
-          id: 'notif_rate_' + Math.random().toString(36).substring(2, 9),
-          recipientId: p.author.id,
-          title: 'Nova Avaliação ⭐',
-          text: `${currentUser.nickname} avaliou a sua publicação com ${ratingValue} estrelas!`,
-          type: 'star',
-          sender: {
-            id: currentUser.id,
-            name: currentUser.nickname,
-            avatar: currentUser.avatar
-          },
-          read: false,
-          targetId: p.id,
-          targetView: 'feed',
-          timestamp: Date.now()
-        };
-        await dbCreateNotification(notif).catch(console.error);
-      }
-    } catch (err) {
-      console.error('Error in handleRatePost:', err);
+      await logoutUser();
+    } catch (e) {
+      console.error(e);
     }
-  };
-
-  const handleAddPostView = async (postId: string) => {
-    const sessionKey = `viewed_post_${postId}`;
-    if (sessionStorage.getItem(sessionKey)) return;
-    
-    const p = posts.find(x => x.id === postId);
-    if (!p) return;
-
-    if (currentUser) {
-      const viewedBy = p.viewedBy ? { ...p.viewedBy } : {};
-      if (viewedBy[currentUser.id]) {
-        sessionStorage.setItem(sessionKey, 'true');
-        return;
-      }
-      viewedBy[currentUser.id] = true;
-      const updated: Post = {
-        ...p,
-        viewedBy,
-        views: (p.views || 0) + 1
-      };
-      await dbUpdatePost(updated);
-      sessionStorage.setItem(sessionKey, 'true');
-    } else {
-      const updated: Post = {
-        ...p,
-        views: (p.views || 0) + 1
-      };
-      await dbUpdatePost(updated);
-      sessionStorage.setItem(sessionKey, 'true');
-    }
-  };
-
-  const handleDeletePost = async (postId: string) => {
-    if (confirm('Tem a certeza que deseja eliminar esta publicação permanentemente?')) {
-      await dbDeletePost(postId);
-      triggerToast('Publicação removida com sucesso!');
-    }
-  };
-
-  const handleConnectUser = async (targetUserId: string, level: 'amigo' | 'familia' | 'conhecido' = 'amigo') => {
-    if (!currentUser) return;
-    if (checkGuestRestriction()) return;
-    const targetUser = users.find(u => u.id === targetUserId);
-    if (!targetUser) return;
-
-    const pending = friendships.some(f => 
-      f.status === 'pending' && 
-      ((f.senderId === currentUser.id && f.receiverId === targetUserId) || 
-       (f.senderId === targetUserId && f.receiverId === currentUser.id))
-    );
-    
-    if (pending) {
-      triggerToast(`Já existe um pedido de vínculo pendente com ${targetUser.nickname}`);
-      return;
-    }
-
-    const newFriendship = {
-      id: 'friend_' + Math.random().toString(36).substring(2, 9),
-      senderId: currentUser.id,
-      receiverId: targetUserId,
-      status: 'pending' as const,
-      level: level,
-      timestamp: Date.now()
-    };
-    await dbCreateFriendship(newFriendship);
-    
-    // Send a real-time notification
-    const newNotif = {
-      id: 'notif_' + Math.random().toString(36).substring(2, 9),
-      recipientId: targetUserId,
-      title: 'Novo pedido de vínculo',
-      text: `@${currentUser.nickname} quer vincular-se contigo como ${level === 'amigo' ? 'Amigo' : level === 'familia' ? 'Família' : 'Conhecido'}!`,
-      type: 'friend_request' as const,
-      sender: {
-        id: currentUser.id,
-        name: currentUser.nickname,
-        avatar: currentUser.avatar
-      },
-      read: false,
-      targetId: newFriendship.id,
-      targetView: 'notificacoes' as const,
-      timestamp: Date.now()
-    };
-    await dbCreateNotification(newNotif);
-    triggerToast(`Pedido de vínculo enviado para ${targetUser.nickname}`);
-  };
-
-  const handleAcceptFriendship = async (friendshipId: string, notifId: string) => {
-    if (!currentUser) return;
-    const f = friendships.find(item => item.id === friendshipId);
-    if (f) {
-      const updatedFriendship = {
-        ...f,
-        status: 'accepted' as const
-      };
-      await dbUpdateFriendship(updatedFriendship);
-      
-      const recipientId = f.senderId === currentUser.id ? f.receiverId : f.senderId;
-      const newNotif = {
-        id: 'notif_' + Math.random().toString(36).substring(2, 9),
-        recipientId,
-        title: 'Vínculo Aceite',
-        text: `@${currentUser.nickname} aceitou o teu pedido de vínculo!`,
-        type: 'friend_accepted' as const,
-        sender: {
-          id: currentUser.id,
-          name: currentUser.nickname,
-          avatar: currentUser.avatar
-        },
-        read: false,
-        targetId: friendshipId,
-        targetView: 'profile' as const,
-        timestamp: Date.now()
-      };
-      await dbCreateNotification(newNotif);
-      playPublishPostSound();
-      triggerToast('Pedido de vínculo aceite com sucesso!');
-    }
-    await dbDeleteNotification(notifId);
-  };
-
-  const handleDeclineFriendship = async (friendshipId: string, notifId: string) => {
-    const f = friendships.find(item => item.id === friendshipId);
-    if (f) {
-      await dbDeleteFriendship(f.id);
-    }
-    await dbDeleteNotification(notifId);
-    triggerToast('Pedido de vínculo recusado.');
-  };
-
-  const handleIgnoreFriendship = async (notifId: string) => {
-    await dbDeleteNotification(notifId);
-    triggerToast('Pedido de vínculo ignorado.');
-  };
-
-  const handleAddChatPermission = async (targetUserId: string, durationDays: 7 | 30 | 'permanent') => {
-    if (!currentUser) return;
-    
-    // Check if there is already a permission
-    const existing = chatPermissions.find(p => 
-      (p.senderId === currentUser.id && p.receiverId === targetUserId) ||
-      (p.senderId === targetUserId && p.receiverId === currentUser.id)
-    );
-    
-    if (existing) {
-      if (existing.status === 'pending') {
-        triggerToast('Já existe um pedido de conversa pendente.');
-        return;
-      } else if (existing.status === 'accepted' && (existing.expiresAt === null || existing.expiresAt > Date.now())) {
-        triggerToast('Já possui uma conversa ativa/autorizada com este utilizador.');
-        return;
-      }
-    }
-
-    const expiresAt = durationDays === 'permanent' ? null : Date.now() + (durationDays * 24 * 60 * 60 * 1000);
-
-    const newPerm: ChatPermission = {
-      id: 'perm_' + Math.random().toString(36).substring(2, 9),
-      senderId: currentUser.id,
-      receiverId: targetUserId,
-      status: 'pending',
-      duration: durationDays === 7 ? '7d' : 'permanent',
-      level: 'conhecido',
-      timestamp: Date.now(),
-      expiresAt
-    };
-
-    await dbCreateChatPermission(newPerm);
-
-    // Send a real-time notification
-    const newNotif = {
-      id: 'notif_' + Math.random().toString(36).substring(2, 9),
-      recipientId: targetUserId,
-      title: 'Pedido de conversa',
-      text: `@${currentUser.nickname} quer iniciar uma conversa de nível: ${durationDays === 'permanent' ? 'Permanente' : durationDays + ' dias'}!`,
-      type: 'chat_request' as const,
-      sender: {
-        id: currentUser.id,
-        name: currentUser.nickname,
-        avatar: currentUser.avatar
-      },
-      read: false,
-      targetId: newPerm.id,
-      targetView: 'conversas' as const,
-      timestamp: Date.now()
-    };
-    await dbCreateNotification(newNotif);
-
-    triggerToast(`Pedido de conversa enviado (${durationDays === 'permanent' ? 'Permanente' : durationDays + ' dias'})!`);
-  };
-
-  const handleDisconnectUser = async (targetUserId: string) => {
-    if (!currentUser) return;
-    const targetUser = users.find(u => u.id === targetUserId);
-    if (!targetUser) return;
-
-    const f = friendships.find(f => 
-      ((f.senderId === currentUser.id && f.receiverId === targetUserId) || 
-       (f.senderId === targetUserId && f.receiverId === currentUser.id))
-    );
-    if (f) {
-      await dbDeleteFriendship(f.id);
-      triggerToast(`Vínculo removido com ${targetUser.nickname}`);
-    }
-  };
-
-  const handlePublishPost = async (
-    imgSrc: string | null,
-    text: string,
-    font: string,
-    color: string,
-    isPrivate: boolean,
-    type?: 'photo' | 'video' | 'audio' | 'voice' | 'document' | 'file' | 'text',
-    extraData?: any
-  ) => {
-    if (!currentUser) return;
-    if (checkGuestRestriction()) return;
-
-    const newPost: Post = {
-      id: 'post_' + Math.random().toString(36).substring(2, 9),
-      image: imgSrc,
-      text,
-      style: { font, color },
-      isPrivate,
-      author: {
-        name: currentUser.nickname,
-        avatar: currentUser.avatar,
-        id: currentUser.id
-      },
-      stars: 0,
-      views: 0,
-      timestamp: Date.now(),
-      comments: [],
-      type: type || 'text',
-      ...extraData
-    };
-
-    // Log the initial attempt
-    addPublishLog(
-      'POST_PUBLISH',
-      'PENDING',
-      currentUser.nickname,
-      type || 'text',
-      text || (imgSrc ? 'Publicação com imagem' : 'Sem conteúdo de texto')
-    );
-
-    try {
-      await dbCreatePost(newPost);
-      
-      // Log successful publication
-      addPublishLog(
-        'POST_PUBLISH',
-        'SUCCESS',
-        currentUser.nickname,
-        type || 'text',
-        text || (imgSrc ? 'Publicação com imagem' : 'Sem conteúdo de texto')
-      );
-
-      setActiveView('feed');
-      triggerToast('Publicação criada com sucesso!');
-    } catch (err: any) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      
-      // Log failed publication with detailed error message
-      addPublishLog(
-        'POST_PUBLISH',
-        'ERROR',
-        currentUser.nickname,
-        type || 'text',
-        text || (imgSrc ? 'Publicação com imagem' : 'Sem conteúdo de texto'),
-        errMsg
-      );
-
-      triggerToast('Falha ao criar publicação!');
-    }
-  };
-
-  const handleAddComment = async (postId: string, text: string, audioUrl?: string, audioDuration?: number) => {
-    if (!currentUser) return;
-    if (checkGuestRestriction()) return;
-    const p = posts.find(x => x.id === postId);
-    if (!p) return;
-
-    const newComment: Comment = {
-      id: 'comment_' + Math.random().toString(36).substring(2, 9),
-      author: {
-        id: currentUser.id,
-        name: currentUser.nickname,
-        avatar: currentUser.avatar
-      },
-      text,
-      audioUrl,
-      audioDuration,
-      timestamp: Date.now()
-    };
-
-    const updated: Post = {
-      ...p,
-      comments: [...(p.comments || []), newComment]
-    };
-    await dbUpdatePost(updated);
-
-    if (p.author.id !== currentUser.id) {
-      const notif: Notification = {
-        id: 'notif_comment_' + Math.random().toString(36).substring(2, 9),
-        recipientId: p.author.id,
-        title: 'Novo Comentário 💬',
-        text: `${currentUser.nickname} comentou na sua publicação: "${text.substring(0, 30)}..."`,
-        type: 'comment',
-        sender: {
-          id: currentUser.id,
-          name: currentUser.nickname,
-          avatar: currentUser.avatar
-        },
-        read: false,
-        targetId: p.id,
-        targetView: 'feed',
-        timestamp: Date.now()
-      };
-      await dbCreateNotification(notif).catch(console.error);
-    }
-  };
-
-  const handleDeleteComment = async (postId: string, commentId: string) => {
-    if (!currentUser) return;
-    const p = posts.find(x => x.id === postId);
-    if (!p) return;
-    
-    // Find the comment
-    const comment = p.comments?.find(c => c.id === commentId);
-    if (!comment) return;
-
-    // Check if current user is comment author OR post author
-    if (comment.author.id !== currentUser.id && p.author.id !== currentUser.id) {
-      alert('Não tem permissão para eliminar este comentário.');
-      return;
-    }
-
-    const updated: Post = {
-      ...p,
-      comments: p.comments?.filter(c => c.id !== commentId) || []
-    };
-    await dbUpdatePost(updated);
-    triggerToast('Comentário removido com sucesso!');
-  };
-
-  const handleReactComment = async (postId: string, commentId: string, reaction: 'star' | 'broken_star') => {
-    if (!currentUser || currentUser.id === 'guest') return;
-    const p = posts.find(x => x.id === postId);
-    if (!p) return;
-
-    const updatedComments = p.comments?.map(c => {
-      if (c.id === commentId) {
-        const commentWithStars = c as any;
-        const currentStars = commentWithStars.starsCount || 0;
-        const currentBrokenStars = commentWithStars.brokenStarsCount || 0;
-
-        const reactions = commentWithStars.reactions || {};
-        const previousReaction = reactions[currentUser.id];
-
-        let nextStars = currentStars;
-        let nextBrokenStars = currentBrokenStars;
-
-        if (previousReaction === reaction) {
-          // Toggle off
-          if (reaction === 'star') nextStars = Math.max(0, currentStars - 1);
-          else nextBrokenStars = Math.max(0, currentBrokenStars - 1);
-          delete reactions[currentUser.id];
-        } else {
-          // Change reaction
-          if (previousReaction === 'star') nextStars = Math.max(0, currentStars - 1);
-          else if (previousReaction === 'broken_star') nextBrokenStars = Math.max(0, currentBrokenStars - 1);
-
-          if (reaction === 'star') nextStars += 1;
-          else if (reaction === 'broken_star') nextBrokenStars += 1;
-
-          reactions[currentUser.id] = reaction;
-        }
-
-        return {
-          ...c,
-          starsCount: nextStars,
-          brokenStarsCount: nextBrokenStars,
-          reactions: reactions
-        } as any;
-      }
-      return c;
-    }) || [];
-
-    const updated: Post = {
-      ...p,
-      comments: updatedComments
-    };
-    await dbUpdatePost(updated);
-  };
-
-  // 4. Story interactions (Like, View, Post)
-  const handleLikeStory = async (storyId: string) => {
-    if (checkGuestRestriction()) return;
-    const s = stories.find(x => x.id === storyId);
-    if (!s) return;
-
-    const starredBy = s.starredBy ? { ...s.starredBy } : {};
-    const hasStarred = !!starredBy[currentUser.id];
-    const nextStarred = !hasStarred;
-    starredBy[currentUser.id] = nextStarred;
-
-    const nextStars = Object.values(starredBy).filter(Boolean).length;
-
-    const updated: Story = {
-      ...s,
-      starredBy,
-      starred: nextStarred,
-      stars: nextStars
-    };
-    await dbUpdateStory(updated);
-
-    if (currentUser && nextStarred && s.author.id !== currentUser.id) {
-      const notif: Notification = {
-        id: 'notif_story_' + Math.random().toString(36).substring(2, 9),
-        recipientId: s.author.id,
-        title: 'Reação na História 💥',
-        text: `${currentUser.nickname} gostou da sua história no Eyes 42h!`,
-        type: 'star',
-        sender: {
-          id: currentUser.id,
-          name: currentUser.nickname,
-          avatar: currentUser.avatar
-        },
-        read: false,
-        targetId: s.id,
-        targetView: 'feed',
-        timestamp: Date.now()
-      };
-      await dbCreateNotification(notif).catch(console.error);
-    }
-  };
-
-  const handleAddStoryView = async (storyId: string) => {
-    const sessionKey = `viewed_story_${storyId}`;
-    if (sessionStorage.getItem(sessionKey)) return;
-
-    const s = stories.find(x => x.id === storyId);
-    if (!s) return;
-
-    if (currentUser) {
-      const viewedBy = s.viewedBy ? { ...s.viewedBy } : {};
-      if (viewedBy[currentUser.id]) {
-        sessionStorage.setItem(sessionKey, 'true');
-        return;
-      }
-      viewedBy[currentUser.id] = true;
-      const updated: Story = {
-        ...s,
-        viewedBy,
-        views: (s.views || 0) + 1
-      };
-      await dbUpdateStory(updated);
-      sessionStorage.setItem(sessionKey, 'true');
-    } else {
-      const updated: Story = {
-        ...s,
-        views: (s.views || 0) + 1
-      };
-      await dbUpdateStory(updated);
-      sessionStorage.setItem(sessionKey, 'true');
-    }
-  };
-
-  const handlePublishStory = async (storySrc: string, text: string | null, font: string, color: string, musicName?: string) => {
-    if (!currentUser) return;
-    if (checkGuestRestriction()) return;
-
-    const newStory: Story = {
-      id: 'story_' + Math.random().toString(36).substring(2, 9),
-      type: 'photo',
-      src: storySrc,
-      text: text || undefined,
-      style: { font, color },
-      musicName,
-      author: {
-        name: currentUser.nickname,
-        avatar: currentUser.avatar,
-        id: currentUser.id
-      },
-      stars: 0,
-      views: 0,
-      timestamp: Date.now()
-    };
-
-    // Log the story publication attempt
-    addPublishLog(
-      'STORY_PUBLISH',
-      'PENDING',
-      currentUser.nickname,
-      'photo',
-      text || 'Sem texto (apenas imagem)'
-    );
-
-    try {
-      await dbCreateStory(newStory);
-
-      // Log successful story publication
-      addPublishLog(
-        'STORY_PUBLISH',
-        'SUCCESS',
-        currentUser.nickname,
-        'photo',
-        text || 'Sem texto (apenas imagem)'
-      );
-
-      setActiveView('feed');
-      triggerToast('História publicada com sucesso no Eyes 42h!');
-    } catch (err: any) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-
-      // Log failed story publication with error
-      addPublishLog(
-        'STORY_PUBLISH',
-        'ERROR',
-        currentUser.nickname,
-        'photo',
-        text || 'Sem texto (apenas imagem)',
-        errMsg
-      );
-
-      triggerToast('Falha ao publicar história!');
-    }
-  };
-
-  const handleRedirectToRegister = () => {
+    saveStoredUser(null);
     setCurrentUser(null);
-    localStorage.removeItem('currentUser');
-    setActiveView('register');
-    triggerToast('Inicie registo para aceder a esta funcionalidade!');
+    setSavedSessionUser(null);
+    setShowSessionPrompt(false);
   };
 
-  const navigateToView = (view: ViewType, clearSelectedCommunityUser: boolean = true) => {
-    if (currentUser?.id === 'guest' && view !== 'feed' && (view as string) !== 'register') {
-      alert('Como convidado, precisa de uma conta para aceder a esta funcionalidade. Vamos direcioná-lo para criar uma conta!');
-      handleRedirectToRegister();
-      return;
-    }
-    if (isUnverified && view !== 'feed' && view !== 'profile') {
-      setShowUnverifiedBlockModal(true);
-      setShowPayAssistant(true);
-      playPaySignatureSound();
-      triggerToast('Acesso Restrito: Confirme o seu e-mail para desbloquear todas as funções!');
-      return;
-    }
-    if (view === 'profile' && clearSelectedCommunityUser) {
-      setSelectedCommunityUser(null);
-    }
-    setActiveView(view);
-  };
-
-  const handleNavigateToTarget = (view: ViewType, targetId?: string) => {
-    if (targetId) {
-      if (view === 'comunidade' || view === 'profile') {
-        const foundUser = users.find(u => u.id === targetId);
-        if (foundUser) {
-          setSelectedCommunityUser(foundUser);
-        }
-      } else {
-        setAutoOpenPostId(targetId);
-      }
-    }
-    navigateToView(view, targetId ? false : true);
-  };
-
-  // 5. Views Switcher Router Routing logic (Ensures absolutely NO empty states or broken buttons)
-  const renderActiveView = () => {
-    if (!currentUser) return null;
-
-    switch (activeView) {
-      case 'feed':
-        return (
-          <FeedView
-            currentUser={currentUser}
-            posts={resolvedPosts}
-            stories={resolvedStories}
-            onNavigate={navigateToView}
-            onLikePost={handleLikePost}
-            onDeletePost={handleDeletePost}
-            onLikeStory={handleLikeStory}
-            onAddStoryView={handleAddStoryView}
-            onAddPostView={handleAddPostView}
-            onAddComment={handleAddComment}
-            onDeleteComment={handleDeleteComment}
-            onReactComment={handleReactComment}
-            autoOpenPostId={autoOpenPostId}
-            onClearAutoOpenPost={() => setAutoOpenPostId(undefined)}
-            currentThemeConfig={currentThemeConfig}
-            onNavigateToTarget={handleNavigateToTarget}
-            onRatePost={handleRatePost}
-            isUnverified={isUnverified}
-            onUnverifiedClick={() => {
-              setShowUnverifiedBlockModal(true);
-              setShowPayAssistant(true);
-              playPaySignatureSound();
-            }}
-          />
-        );
-      case 'profile':
-        return (
-          <ProfileView 
-            currentUser={currentUser} 
-            targetUser={selectedCommunityUser || currentUser}
-            friendships={friendships}
-            posts={resolvedPosts}
-            chatPermissions={chatPermissions}
-            onNavigate={navigateToView} 
-            onUpdateUser={handleUpdateUser}
-            onLogout={handleLogout}
-            onDeleteAccount={handleDeleteAccount}
-            onAddFriendship={handleConnectUser}
-            onDeleteFriendship={handleDisconnectUser}
-            onAddComment={handleAddComment}
-            onLikePost={handleLikePost}
-            onDeletePost={handleDeletePost}
-            onAddChatPermission={handleAddChatPermission}
-            isUnverified={isUnverified}
-            onUnverifiedClick={() => {
-              setShowUnverifiedBlockModal(true);
-              setShowPayAssistant(true);
-              playPaySignatureSound();
-            }}
-          />
-        );
-      case 'account':
-        return (
-          <AccountView
-            currentUser={currentUser}
-            users={users}
-            onUpdateUser={handleUpdateUser}
-            onDeleteAccount={handleDeleteAccount}
-            onLogout={handleLogout}
-          />
-        );
-      case 'publish-post':
-        return (
-          <PublishPostView
-            onPublish={handlePublishPost}
-            onCancel={() => navigateToView('feed')}
-            users={users}
-          />
-        );
-      case 'publish-story':
-        return (
-          <StoryEditor
-            onPublish={handlePublishStory}
-            onCancel={() => navigateToView('feed')}
-          />
-        );
-      case 'conversas':
-        return (
-          <ChatView 
-            currentUser={currentUser} 
-            initialSelectedChatId={initialSelectedChatId} 
-            onGuestActionAttempt={() => setShowGuestRestrictionModal(true)}
-          />
-        );
-      case 'notificacoes':
-        return (
-          <NotificationsView
-            currentUser={currentUser}
-            notifications={notifications}
-            onNavigateToTarget={handleNavigateToTarget}
-            onAcceptFriendship={handleAcceptFriendship}
-            onDeclineFriendship={handleDeclineFriendship}
-            onIgnoreFriendship={handleIgnoreFriendship}
-          />
-        );
-      case 'musica':
-        return <MusicView />;
-      case 'fonte-letra':
-        return <FontView />;
-      case 'cinema':
-        return <CinemaView />;
-      case 'abra-olhos':
-        return <AbraView currentUser={currentUser} posts={posts} onNavigate={setActiveView} />;
-      
-      // CURATED ARTICLES LIST VIEW
-      case 'artigos':
-        return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-white">
-            <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase border-b border-neon-cyan/20 pb-4 flex items-center gap-2">
-              <Newspaper className="w-5 h-5 text-neon-cyan" /> ARTIGOS CULTURAIS CINE
-            </h2>
-            <div className="space-y-4">
-              {[
-                { title: 'A Revolução do Cinema em Moçambique', summary: 'Como jovens cineastas moçambicanos estão a redefinir a narrativa audiovisual africana com produções independentes de baixo orçamento e histórias genuínas.', date: 'Julho, 2026', readTime: '5 min de leitura' },
-                { title: 'A Estética da Marrabenta no Ecran', summary: 'Um ensaio aprofundado sobre a sinergia visual entre os ritmos clássicos da Marrabenta e as cores vibrantes do cinema de rua do Sul do país.', date: 'Junho, 2026', readTime: '4 min de leitura' },
-                { title: 'A Preservação Histórica Através das Lentes', summary: 'Explorando os esforços de restauração digital e recuperação de arquivos de documentários históricos do Instituto Nacional de Audiovisual e Cinema.', date: 'Maio, 2026', readTime: '7 min de leitura' }
-              ].map((art, idx) => (
-                <div key={idx} className="p-5 rounded-2xl bg-[#090924] border border-white/5 hover:border-neon-cyan/30 transition-all shadow-lg space-y-2">
-                  <span className="text-[10px] text-neon-cyan font-bold tracking-wider uppercase block">{art.date} • {art.readTime}</span>
-                  <h3 className="text-lg font-bold text-white leading-tight">{art.title}</h3>
-                  <p className="text-xs text-gray-400 leading-relaxed font-semibold">{art.summary}</p>
-                  <button 
-                    onClick={() => alert(`Artigo "${art.title}" em processamento de leitura!`)} 
-                    className="text-xs text-neon-cyan hover:text-white font-bold tracking-wider mt-2 cursor-pointer flex items-center gap-1 font-orbitron"
-                  >
-                    LER ARTIGO COMPLETO <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      // CURATED VIDEOS GALLERY VIEW
-      case 'videos':
-        return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-white">
-            <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase border-b border-neon-cyan/20 pb-4 flex items-center gap-2">
-              <Video className="w-5 h-5 text-neon-cyan" /> GALERIA DE VÍDEOS
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { title: 'Teaser: Amanhecer no Limpopo', length: '1:45', plays: 1245, url: 'https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?auto=format&fit=crop&q=80&w=400' },
-                { title: 'Ritmos Digitais da Matola', length: '3:20', plays: 892, url: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=400' },
-                { title: 'Curta-metragem: Xigubo Roots', length: '8:45', plays: 2450, url: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=400' },
-                { title: 'Maputo Noite Adentro Documentário', length: '12:15', plays: 1540, url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400' }
-              ].map((vid, idx) => (
-                <div key={idx} className="rounded-2xl bg-[#090924] border border-white/5 overflow-hidden shadow-lg flex flex-col group hover:border-neon-cyan/30 transition-all">
-                  <div className="relative aspect-video bg-black overflow-hidden">
-                    <img src={vid.url} alt={vid.title} referrerPolicy="no-referrer" className="w-full h-full object-cover brightness-75 group-hover:scale-105 transition-all" />
-                    <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/85 text-[10px] font-mono font-bold tracking-wider">{vid.length}</span>
-                    <button 
-                      onClick={() => alert(`A abrir reprodutor para: "${vid.title}"`)} 
-                      className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors cursor-pointer"
-                    >
-                      <Video className="w-8 h-8 text-neon-cyan drop-shadow-[0_0_8px_#00f5ff]" />
-                    </button>
-                  </div>
-                  <div className="p-3.5 flex flex-col justify-between flex-grow">
-                    <p className="text-xs font-bold text-white truncate leading-tight">{vid.title}</p>
-                    <div className="flex items-center justify-between text-[9px] text-gray-500 font-bold uppercase tracking-wider mt-2.5">
-                      <span>Cinema Moz</span>
-                      <span>{vid.plays} Plays</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      // CURATED EVENTS GATHERINGS RSVP LIST VIEW
-      case 'eventos':
-        return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-white">
-            <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase border-b border-neon-cyan/20 pb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-neon-cyan" /> EVENTOS & ENCONTROS
-            </h2>
-            <div className="space-y-4">
-              {[
-                { title: 'Festival de Curtas de Maputo 2026', date: '22 Agosto, 2026', location: 'Centro Cultural Franco-Moçambicano', details: 'Exibição das melhores curtas-metragens moçambicanas do ano, seguidas de debates técnicos de produção.' },
-                { title: 'Workshop de Fotografia Retratista da Beira', date: '15 Setembro, 2026', location: 'Auditório Municipal da Beira', details: 'Formação interativa com curadoria de Oficio MZ focada em captação natural e iluminação de exterior.' }
-              ].map((ev, idx) => (
-                <EventCard key={idx} ev={ev} idx={idx} triggerToast={triggerToast} />
-              ))}
-            </div>
-          </div>
-        );
-
-      // CURATED STORE PRODUCTS VIEW
-      case 'loja':
-        return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-white">
-            <h2 className="font-orbitron font-extrabold text-sm text-neon-cyan tracking-widest uppercase border-b border-neon-cyan/20 pb-4 flex items-center gap-2">
-              <Store className="w-5 h-5 text-neon-cyan" /> MERCADO DE ARTE
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { title: 'Câmara Cinema Vintage Super8', price: '12,500 MT', rating: '4.8', url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=250' },
-                { title: 'Tripé Hidráulico Estável', price: '4,200 MT', rating: '4.6', url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=250' },
-                { title: 'Livro: Cinema em Moçambique', price: '1,500 MT', rating: '5.0', url: 'https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?auto=format&fit=crop&q=80&w=250' }
-              ].map((prod, idx) => (
-                <div key={idx} className="rounded-2xl bg-[#090924] border border-white/5 overflow-hidden shadow-lg flex flex-col group hover:border-neon-cyan/30 transition-all select-none">
-                  <div className="relative aspect-video bg-black overflow-hidden">
-                    <img src={prod.url} alt={prod.title} referrerPolicy="no-referrer" className="w-full h-full object-cover brightness-90 group-hover:scale-103 transition-transform" />
-                    <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/85 text-xs text-neon-cyan font-bold tracking-wider">{prod.price}</span>
-                  </div>
-                  <div className="p-4 flex flex-col justify-between flex-grow space-y-3 text-left">
-                    <div>
-                      <p className="text-xs font-bold text-white leading-tight">{prod.title}</p>
-                      <span className="text-[10px] text-yellow-400 font-bold font-mono mt-1 block">★ {prod.rating} Classificação</span>
-                    </div>
-                    <button 
-                      onClick={() => triggerToast(`Produto "${prod.title}" adicionado ao carrinho!`)} 
-                      className="w-full py-2 bg-neon-cyan text-black hover:bg-white text-[10px] font-orbitron font-extrabold tracking-widest rounded-lg transition-colors cursor-pointer uppercase"
-                    >
-                      Comprar Item
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'comunidade':
-        return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)]">
-            
-            {/* Sticky Header for Logged-In User (Proprietário) */}
-            <div className="sticky top-0 z-10 bg-[var(--theme-bg-main)]/95 backdrop-blur-md border border-[var(--theme-border)] p-5 rounded-3xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
-                  <span className="text-[10px] font-orbitron font-extrabold tracking-widest text-[var(--theme-accent)] uppercase">
-                    PROPRIETÁRIO DA CONTA (CONECTADO)
-                  </span>
-                </div>
-                <span className="px-2 py-0.5 rounded-full bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]/30 text-[var(--theme-accent)] text-[9px] font-bold uppercase tracking-wider">
-                  Tu
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <UserAvatar 
-                    src={currentUser?.avatar || "https://i.pravatar.cc/80?img=1"} 
-                    status={true} 
-                    nickname={currentUser?.nickname}
-                    className="w-12 h-12"
-                  />
-                  <div className="min-w-0 text-left">
-                    <h3 className="text-sm font-extrabold text-[var(--theme-text-main)] truncate leading-tight">
-                      {currentUser?.fullname}
-                    </h3>
-                    <p className="text-xs text-[var(--theme-text-muted)] font-bold truncate mt-0.5">
-                      @{currentUser?.nickname} • {currentUser?.province}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => navigateToView('account')}
-                  className="px-3.5 py-2 bg-[var(--theme-accent)]/15 hover:bg-[var(--theme-accent)] hover:text-black text-[var(--theme-accent)] text-[9px] font-bold font-orbitron tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0 border border-[var(--theme-accent)]/30"
-                >
-                  Editar Perfil
-                </button>
-              </div>
-            </div>
-
-            <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-[var(--theme-accent)]" /> MEMBROS DA COMUNIDADE ({users.length - 1})
-            </h2>
-
-            {/* Dynamic Grid Layout governed by style configuration & ultra saver */}
-            <div className={`grid gap-4 ${
-              (isUltraSaver && adaptiveControls) || currentThemeConfig.gridCols === '1-col'
-                ? 'grid-cols-1'
-                : currentThemeConfig.gridCols === '3-col'
-                ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
-                : 'grid-cols-1 sm:grid-cols-2'
-            }`}>
-              {(() => {
-                // Filter out the logged-in user and sort remaining members by creation date descending
-                const otherUsersSorted = [...users]
-                  .filter(u => u.id !== currentUser?.id)
-                  .sort((a, b) => {
-                    const timeA = a.created ? new Date(a.created).getTime() : 0;
-                    const timeB = b.created ? new Date(b.created).getTime() : 0;
-                    return timeB - timeA;
-                  });
-
-                // Apply lazy loading slice
-                const visibleUsers = otherUsersSorted.slice(0, visibleUsersLimit);
-
-                if (visibleUsers.length === 0) {
-                  return (
-                    <div className="col-span-full py-12 text-center text-[var(--theme-text-muted)] space-y-2">
-                      <Users className="w-10 h-10 mx-auto opacity-40" />
-                      <p className="text-xs font-bold uppercase tracking-wider">Nenhum outro membro encontrado</p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <>
-                    {visibleUsers.map((mem) => {
-                      const isSameProvince = mem.province === currentUser?.province;
-                      const isAccepted = friendships.some(f => 
-                        f.status === 'accepted' && 
-                        ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
-                         (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
-                      );
-                      const isPending = friendships.some(f => 
-                        f.status === 'pending' && 
-                        ((f.senderId === (currentUser?.id || '') && f.receiverId === mem.id) || 
-                         (f.senderId === mem.id && f.receiverId === (currentUser?.id || '')))
-                      );
-                      const onlineStatus = isUserOnline(mem);
-
-                      return (
-                        <div 
-                          key={mem.id} 
-                          onClick={() => setSelectedCommunityUser(mem)}
-                          className={`p-4 rounded-3xl bg-[var(--theme-bg-card)] border flex flex-col justify-between gap-4 shadow-lg select-none cursor-pointer hover:border-[var(--theme-accent)] transition-all ${
-                            isSameProvince 
-                              ? 'border-[var(--theme-accent)]/40 shadow-[var(--theme-accent)]/5' 
-                              : 'border-[var(--theme-border)]'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <UserAvatar 
-                              src={mem.avatar || "https://i.pravatar.cc/80?img=1"} 
-                              status={onlineStatus} 
-                              nickname={mem.nickname}
-                              className="w-10 h-10"
-                            />
-                            <div className="min-w-0 text-left">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="text-xs font-bold text-[var(--theme-text-main)] truncate leading-tight">{mem.nickname}</p>
-                                {isSameProvince && (
-                                  <span className="px-1.5 py-0.5 rounded bg-[var(--theme-accent)]/20 border border-[var(--theme-accent)]/40 text-[var(--theme-accent)] text-[8px] font-bold uppercase tracking-wider">
-                                    Recomendado
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[9px] text-[var(--theme-text-muted)] truncate mt-0.5 flex items-center gap-0.5">
-                                <MapPin className="w-2.5 h-2.5" /> 
-                                <span>{mem.province}{mem.district ? ` • ${mem.district}` : ''}</span>
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-2 border-t border-[var(--theme-border)] pt-3 mt-1">
-                            <span className="text-[8px] font-bold font-mono text-[var(--theme-text-muted)] uppercase tracking-wider">
-                              Registo: {mem.created ? new Date(mem.created).toLocaleDateString('pt-MZ') : 'Antigo'}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isAccepted) {
-                                  triggerToast(`Você já está vinculado com @${mem.nickname}`);
-                                } else if (isPending) {
-                                  triggerToast(`Vínculo pendente com @${mem.nickname}`);
-                                } else {
-                                  const newFriendship = {
-                                    id: 'friend_' + Math.random().toString(36).substring(2, 9),
-                                    senderId: currentUser?.id || '',
-                                    receiverId: mem.id,
-                                    status: 'pending' as const,
-                                    level: 'conhecido' as const,
-                                    timestamp: Date.now()
-                                  };
-                                  dbCreateFriendship(newFriendship);
-
-                                  // Send notification
-                                  const newNotif = {
-                                    id: 'notif_friend_' + Math.random().toString(36).substring(2, 9),
-                                    recipientId: mem.id,
-                                    title: 'Novo pedido de vínculo',
-                                    text: `@${currentUser?.nickname} quer vincular-se contigo!`,
-                                    type: 'friend_request' as const,
-                                    sender: {
-                                      id: currentUser?.id || '',
-                                      name: currentUser?.nickname || '',
-                                      avatar: currentUser?.avatar || ''
-                                    },
-                                    read: false,
-                                    targetId: newFriendship.id,
-                                    targetView: 'notificacoes' as const,
-                                    timestamp: Date.now()
-                                  };
-                                  dbCreateNotification(newNotif);
-                                  triggerToast(`Pedido de vínculo enviado para: ${mem.nickname}`);
-                                }
-                              }}
-                              className="px-2.5 py-1.5 bg-[var(--theme-accent)]/10 hover:bg-[var(--theme-accent)] border border-[var(--theme-accent)]/25 hover:text-black text-[var(--theme-accent)] text-[8px] font-bold font-orbitron tracking-widest rounded-xl transition-all cursor-pointer uppercase shrink-0"
-                            >
-                              {isAccepted ? 'Vinculado' : isPending ? 'Pendente' : 'Vincular'}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                );
-              })()}
-            </div>
-
-                {/* Lazy loading "CARREGAR MAIS MEMBROS" Trigger */}
-                {users.filter(u => u.id !== currentUser?.id).length > visibleUsersLimit && (
-                  <div className="flex justify-center pt-4">
-                    <button
-                      onClick={() => setVisibleUsersLimit(prev => prev + 6)}
-                      className="px-6 py-2.5 bg-[var(--theme-accent)]/15 hover:bg-[var(--theme-accent)] border border-[var(--theme-accent)]/30 hover:text-black text-[var(--theme-accent)] font-orbitron font-extrabold text-[10px] tracking-widest rounded-xl transition-all cursor-pointer uppercase shadow-lg flex items-center gap-2"
-                    >
-                      <Sparkles className="w-4 h-4 text-[var(--theme-accent)] hover:text-black shrink-0" />
-                      Carregar mais membros
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-
-      // PREFERENCES CONFIGURATION VIEW
-      case 'config':
-        return (
-          <div className="flex-grow p-4 md:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none font-rajdhani text-[var(--theme-text-main)] pb-48">
-            <h2 className="font-orbitron font-extrabold text-sm text-[var(--theme-accent)] tracking-widest uppercase border-b border-[var(--theme-border)] pb-4 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-[var(--theme-accent)]" /> CONFIGURAÇÕES DO SISTEMA E CONTA
-              </span>
-              <button
-                onClick={handleLogout}
-                className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-orbitron font-black text-[10px] tracking-widest transition-all cursor-pointer shadow-md shadow-red-600/30 flex items-center gap-1.5 uppercase active:scale-95 shrink-0"
-              >
-                <LogOut className="w-3.5 h-3.5" /> SAIR DA CONTA
-              </button>
-            </h2>
-
-            {/* Quick Session & Account Overview Block */}
-            <div className="bg-red-950/20 border border-red-500/30 rounded-3xl p-5 shadow-lg space-y-3">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <UserAvatar
-                    src={currentUser.avatar || "https://i.pravatar.cc/80?img=1"}
-                    status={true}
-                    nickname={currentUser.nickname}
-                    className="w-10 h-10 border-2 border-red-500/50"
-                  />
-                  <div>
-                    <h4 className="font-orbitron font-extrabold text-xs text-white uppercase tracking-wider">
-                      @{currentUser.nickname} ({currentUser.firstname || 'Utilizador'})
-                    </h4>
-                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                      {currentUser.email} • {currentUser.phone || 'Sem telefone'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    onClick={() => navigateToView('account')}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-white font-orbitron font-extrabold text-[10px] tracking-wider transition-all cursor-pointer uppercase text-center"
-                  >
-                    Gerir Identidade
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="flex-1 sm:flex-none px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-orbitron font-black text-[10px] tracking-widest transition-all cursor-pointer shadow-md shadow-red-600/30 flex items-center justify-center gap-1.5 uppercase active:scale-95"
-                  >
-                    <LogOut className="w-3.5 h-3.5" /> Sair
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-3xl p-6 shadow-2xl space-y-6 text-left">
-              
-              {/* Theme Selector (9 MODOS) */}
-              <div>
-                <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)] mb-3">
-                  SELEÇÃO MANUAL DE TEMA (10 MODOS DISPONÍVEIS)
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[
-                    { id: 'noite', name: 'Noite', color: '#3b82f6', desc: 'Escuro clássico' },
-                    { id: 'luz', name: 'Luz', color: '#2563eb', desc: 'Claro clássico' },
-                    { id: 'lite', name: 'Lite', color: '#4f46e5', desc: 'Simples indigo' },
-                    { id: 'esmeralda', name: 'Esmeralda', color: '#10b981', desc: 'Verde profundo' },
-                    { id: 'vinho', name: 'Vinho', color: '#db2777', desc: 'Rosa romântico' },
-                    { id: 'ciano', name: 'Ciano', color: '#06b6d4', desc: 'Azul refrescante' },
-                    { id: 'crepusculo', name: 'Crepúsculo', color: '#8b5cf6', desc: 'Roxo sideral' },
-                    { id: 'neon-cyber', name: 'Cyberpunk', color: '#00ffcc', desc: 'Neon de alta energia' },
-                    { id: 'glass-minimalist', name: 'Glass', color: '#ffffff', desc: 'Vidro contemporâneo' },
-                    { id: 'eyes-max', name: 'Eyes Max', color: '#fbbf24', desc: 'Foco dourado super nítido 👁️' },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTheme(t.id as any)}
-                      className={`p-3.5 rounded-2xl transition-all cursor-pointer border flex flex-col items-center gap-1.5 ${
-                        theme === t.id
-                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10 shadow-[var(--theme-accent)]/5'
-                          : 'border-[var(--theme-border)] bg-[var(--theme-bg-card)]/40 text-[var(--theme-text-muted)] hover:text-[var(--theme-text-main)] hover:bg-[var(--theme-bg-card)]/70'
-                      }`}
-                    >
-                      <div className="w-4 h-4 rounded-full border border-[var(--theme-border)] flex items-center justify-center" style={{ backgroundColor: theme === t.id ? t.color : '#222' }}>
-                        {theme === t.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                      <span className="text-[10px] font-bold tracking-wider">{t.name}</span>
-                      <span className="text-[8px] opacity-70 text-center leading-tight">{t.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Adaptive UI Sensors Section */}
-              <div className="border-t border-[var(--theme-border)] pt-5 space-y-4">
-                <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)]">
-                  SENSORES E CONTROLO INTELIGENTE ADAPTATIVO
-                </h4>
-                
-                {/* Adaptive Toggle */}
-                <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
-                  <div>
-                    <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Ativar Controlo Inteligente (Sensores)</h5>
-                    <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
-                      Alterna o tema automaticamente por Horário (Dia/Noite) e ativa Economia de Bateria (&lt;20%).
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={adaptiveControls} 
-                      onChange={(e) => {
-                        setAdaptiveControls(e.target.checked);
-                        triggerToast(e.target.checked ? 'Sensores inteligentes ativos!' : 'Controlo manual ativado!');
-                      }}
-                      className="sr-only peer" 
-                    />
-                    <div className="w-9 h-5 bg-neutral-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-[var(--theme-accent)]/30 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--theme-accent)]"></div>
-                  </label>
-                </div>
-
-                {/* Interface Sounds Toggle Switch */}
-                <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
-                  <div>
-                    <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Efeitos Sonoros da Interface</h5>
-                    <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
-                      Ativa ou desativa sons discretos para avaliações por estrelas, amizades, notificações e outras interações.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={interfaceSounds} 
-                      onChange={(e) => {
-                        setInterfaceSounds(e.target.checked);
-                        triggerToast(e.target.checked ? 'Efeitos sonoros ativos!' : 'Efeitos sonoros desativados!');
-                      }}
-                      className="sr-only peer" 
-                    />
-                    <div className="w-9 h-5 bg-neutral-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-[var(--theme-accent)]/30 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--theme-accent)]"></div>
-                  </label>
-                </div>
-
-                {/* UI Performance Switch */}
-                <div className="flex items-center justify-between bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl">
-                  <div>
-                    <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Modo de Desempenho</h5>
-                    <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
-                      <b>Imersivo</b>: Transições fluidas e efeitos de glow. <b>Desempenho</b>: Máxima velocidade e sem animações.
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5 p-0.5 bg-neutral-900 border border-[var(--theme-border)] rounded-xl">
-                    <button
-                      onClick={() => {
-                        setUiMode('performance');
-                        triggerToast('Modo Desempenho ativado.');
-                      }}
-                      className={`px-3 py-1 text-[9px] font-extrabold font-orbitron tracking-widest uppercase rounded-lg transition-all ${
-                        uiMode === 'performance' ? 'bg-[var(--theme-accent)] text-black' : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      Fast
-                    </button>
-                    <button
-                      onClick={() => {
-                        setUiMode('immersive');
-                        triggerToast('Modo Imersivo ativado.');
-                      }}
-                      className={`px-3 py-1 text-[9px] font-extrabold font-orbitron tracking-widest uppercase rounded-lg transition-all ${
-                        uiMode === 'immersive' ? 'bg-[var(--theme-accent)] text-black' : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      Immersive
-                    </button>
-                  </div>
-                </div>
-
-                {/* Battery Simulator */}
-                <div className="bg-[var(--theme-bg-card)]/30 border border-[var(--theme-border)]/50 p-4 rounded-2xl space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h5 className="text-xs font-bold text-[var(--theme-text-main)]">Simulador de Bateria</h5>
-                      <p className="text-[9px] text-[var(--theme-text-muted)] mt-0.5">
-                        Defina abaixo de 20% para forçar instantaneamente o modo amoled ultra-económico!
-                      </p>
-                    </div>
-                    <span className="text-xs font-extrabold font-orbitron text-[var(--theme-accent)]">
-                      {effectiveBatteryLevel}% {isUltraSaver && '🔋 [ECONOMIA]'}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="100"
-                    value={simulatedBattery}
-                    onChange={(e) => setSimulatedBattery(Number(e.target.value))}
-                    className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-[var(--theme-accent)]"
-                  />
-                  <div className="flex justify-between text-[8px] font-mono text-[var(--theme-text-muted)]">
-                    <span>Mínimo: 5%</span>
-                    <span>Dispositivo Físico: {actualBattery !== null ? `${actualBattery}%` : 'Não suportado'}</span>
-                    <span>Máximo: 100%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Theme Configuration Inspector */}
-              <div className="border-t border-[var(--theme-border)] pt-5">
-                <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)] mb-3">
-                  INSPEÇÃO DE PROPRIEDADES JSON DO TEMA ATIVO
-                </h4>
-                <div className="p-4 bg-neutral-950/80 border border-[var(--theme-border)] rounded-2xl font-mono text-[9px] text-[var(--theme-text-muted)] space-y-1 overflow-x-auto select-text leading-relaxed">
-                  <p className="text-yellow-400 font-bold">// Configurações dinâmicas injetadas pelo motor:</p>
-                  <p>ID: <span className="text-white">"{currentThemeConfig.id}"</span></p>
-                  <p>Membros Grid: <span className="text-white">"{currentThemeConfig.gridCols === '1-col' ? '1 Coluna (Lista)' : currentThemeConfig.gridCols === '3-col' ? '3 Colunas (Grelha Estendida)' : '2 Colunas (Grelha)'}"</span></p>
-                  <p>Modo de Energia: <span className={isUltraSaver ? 'text-red-400 font-bold' : 'text-green-400'}>{isUltraSaver ? '"Amoled Black (Mínimo)"' : '"Padrão"'}_</span></p>
-                  <p>Variáveis de Cor: &#123;</p>
-                  <p className="pl-4">--theme-bg-main: <span className="text-cyan-400">"{isUltraSaver ? '#000000' : currentThemeConfig.bgMain}"</span></p>
-                  <p className="pl-4">--theme-bg-card: <span className="text-cyan-400">"{isUltraSaver ? '#080808' : currentThemeConfig.bgCard}"</span></p>
-                  <p className="pl-4">--theme-accent: <span className="text-cyan-400">"{currentThemeConfig.accent}"</span></p>
-                  <p className="pl-4">--theme-border: <span className="text-cyan-400">"{currentThemeConfig.border}"</span></p>
-                  <p>&#125;</p>
-                </div>
-              </div>
-
-              {/* Painel de Registo de Publicações */}
-              <div className="border-t border-[var(--theme-border)] pt-5">
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="text-xs font-orbitron font-extrabold uppercase tracking-wider text-[var(--theme-text-main)]">
-                    PAINEL DE MONITORIZAÇÃO / REGISTO DE PUBLICAÇÕES
-                  </h4>
-                  {publishLogs.length > 0 && (
-                    <button
-                      onClick={() => {
-                        setPublishLogs([]);
-                        localStorage.removeItem('eo_publish_logs');
-                        triggerToast('Registo de publicações limpo!');
-                      }}
-                      className="text-[9px] font-orbitron font-extrabold tracking-widest text-red-400 hover:text-red-300 border border-red-500/20 bg-red-950/20 px-2 py-1 rounded-lg uppercase transition-colors"
-                    >
-                      Limpar Registo
-                    </button>
-                  )}
-                </div>
-
-                <p className="text-[10px] text-[var(--theme-text-muted)] mb-3 leading-relaxed">
-                  Monitorize em tempo real todas as tentativas de publicação de posts e histórias no Eyes Open. Útil para identificar erros de comunicação ou falhas de segurança.
-                </p>
-
-                {publishLogs.length === 0 ? (
-                  <div className="p-5 border border-dashed border-[var(--theme-border)]/50 rounded-2xl text-center">
-                    <span className="text-[9px] font-mono text-[var(--theme-text-muted)] uppercase tracking-widest font-bold">Sem atividades de publicação registadas nesta sessão.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1 no-scrollbar">
-                    {publishLogs.map((log) => (
-                      <div 
-                        key={log.id} 
-                        className={`p-3 rounded-2xl border text-[10px] font-mono space-y-1.5 transition-all ${
-                          log.status === 'ERROR'
-                            ? 'bg-red-950/20 border-red-900/45 text-red-200'
-                            : log.status === 'SUCCESS'
-                              ? 'bg-green-950/25 border-green-900/40 text-green-200'
-                              : 'bg-yellow-950/20 border-yellow-900/40 text-yellow-200 animate-pulse'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-1.5 font-bold">
-                            <span className={`px-2 py-0.5 rounded text-[8px] uppercase font-black ${
-                              log.status === 'ERROR' ? 'bg-red-600/30 text-red-400' : log.status === 'SUCCESS' ? 'bg-green-600/35 text-green-400' : 'bg-yellow-500/20 text-yellow-500'
-                            }`}>
-                              [{log.status}]
-                            </span>
-                            <span className="text-white">
-                              {log.action === 'POST_PUBLISH' ? 'POST' : 'STORY'}
-                            </span>
-                            <span className="text-gray-400 font-normal">by</span>
-                            <span className="text-[var(--theme-accent)]">@{log.author}</span>
-                          </div>
-                          <span className="text-[8px] text-gray-500 font-bold">
-                            {new Date(log.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-
-                        <div className="text-[9px] text-gray-300 leading-normal pl-1">
-                          <span className="text-gray-500 select-none mr-1">&gt;</span>
-                          <span className="font-semibold">Tipo:</span> <span className="text-amber-300 uppercase font-bold text-[8px]">{log.type}</span> | 
-                          <span className="font-semibold ml-1.5">Conteúdo:</span> "{log.titleOrText}"
-                        </div>
-
-                        {log.error && (
-                          <div className="mt-1 p-2 bg-black/40 rounded-xl border border-red-500/10 text-[8px] text-red-400 break-words leading-relaxed font-bold">
-                            <span className="text-red-500 font-black mr-1">[ERRO DETALHADO]:</span> {log.error}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-            </div>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="flex-grow flex items-center justify-center p-6 text-center select-none">
-            <div className="space-y-3">
-              <Sparkles className="w-12 h-12 text-neon-cyan animate-pulse mx-auto" />
-              <p className="font-orbitron font-bold text-sm tracking-widest uppercase">Brevemente Disponível</p>
-              <p className="text-xs text-gray-500 max-w-xs mx-auto">Este módulo está em processamento artístico de código.</p>
-            </div>
-          </div>
-        );
-    }
-  };
-
-  const trKey = 'rsvp_event_';
-  const trId = 'rsvp_event_0';
-
-  // 6. Root Frame Renders
   return (
-    <div className={`min-h-screen bg-[var(--theme-bg-main)] text-[var(--theme-text-main)] flex theme-${theme} transition-colors duration-500`}>
-      {!currentUser ? (
-        /* If session is not authenticated, render Login/Register views */
-        <div className="flex-1">
-          {activeView === 'register' ? (
-            <RegisterView
-              users={users}
-              onRegisterSuccess={handleRegisterSuccess}
-              onGoToLogin={() => {
-                setActiveView('feed');
-              }}
-            />
-          ) : (
-            <LoginView
-              users={users}
-              onLoginSuccess={handleLoginSuccess}
-              onGoToRegister={() => setActiveView('register')}
-            />
-          )}
-        </div>
-      ) : (
-        /* Authenticated App Shell */
-        <div className="flex flex-col lg:flex-row w-full min-h-screen relative overflow-hidden">
-          {/* Main Side Nav Drawer Panel */}
-          <Sidebar
-            currentUser={currentUser}
-            activeView={activeView}
-            onNavigate={(v) => {
-              navigateToView(v);
-              setIsMobileSidebarOpen(false);
-            }}
-            onLogout={handleLogout}
-            isOpen={isMobileSidebarOpen}
-            onClose={() => setIsMobileSidebarOpen(false)}
-            unreadChatsCount={unreadChatsCount}
-            unreadNotificationsCount={unreadNotificationsCount}
-            theme={theme}
-            setTheme={setTheme}
+    <div className="min-h-screen bg-[#0d0e15] text-amber-50 selection:bg-amber-500 selection:text-black font-sans antialiased flex flex-col justify-between">
+      
+      {/* HEADER & NAVBAR */}
+      <Navbar
+        currentUser={currentUser}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedCategory={selectedCategory}
+        onSelectCategory={(cat) => {
+          setSelectedCategory(cat);
+          setShowOnlyFavorites(false);
+        }}
+        onOpenAdmin={() => {
+          const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz';
+          if (!currentUser || !isAdmin) {
+            setIsAuthModalOpen(true);
+          } else {
+            setIsAdminPanelOpen(true);
+          }
+        }}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenFavorites={() => setShowOnlyFavorites(!showOnlyFavorites)}
+        onOpenDownloads={() => setIsDownloadsModalOpen(true)}
+        downloadCount={downloadedItems.length}
+        favoriteCount={favoriteBookIds.length}
+        onLogout={handleLogoutAction}
+      />
+
+      {/* MAIN CONTENT AREA */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-8">
+        
+        {/* HERO BANNER SHOWCASE */}
+        {!showOnlyFavorites && !searchQuery && selectedCategory === 'todas' && (
+          <HeroBanner
+            featuredBook={featuredBook}
+            onReadBook={(book) => setSelectedBookForPdfReader(book)}
+            onOpenAdmin={() => setIsAdminPanelOpen(true)}
+            totalBooksCount={books.length}
           />
+        )}
 
-          {/* Core Content Container */}
-          <div className="flex-grow flex flex-col h-screen overflow-hidden">
-            {isUnverified && (
-              <div className="bg-gradient-to-r from-red-950 via-red-900 to-red-950 border-b border-red-500/30 text-white py-2 px-4 text-xs font-semibold tracking-wider flex flex-col sm:flex-row gap-2 items-center justify-between z-[30] shadow-md shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping shrink-0"></span>
-                  <span className="text-red-200 font-bold uppercase tracking-widest text-[9px] sm:text-[10px]">
-                    ESTADO: PENDENTE (E-mail não verificado)
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap justify-center">
-                  <span className="text-gray-300 font-medium text-[10px] sm:text-xs">Tempo para bloqueio:</span>
-                  <span className="font-mono text-red-400 font-extrabold bg-black/40 px-2 py-0.5 rounded border border-red-500/20 text-xs shadow-inner">
-                    {verificationTimeLeft !== null ? (
-                      (() => {
-                        const h = Math.floor(verificationTimeLeft / 3600);
-                        const m = Math.floor((verificationTimeLeft % 3600) / 60);
-                        const s = verificationTimeLeft % 60;
-                        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-                      })()
-                    ) : '00:00:00'}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setShowUnverifiedBlockModal(true);
-                      playPaySignatureSound();
-                    }}
-                    className="text-[9px] uppercase tracking-widest bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black px-2.5 py-1 rounded-md transition-all shadow-md cursor-pointer border border-red-500/30"
-                  >
-                    Ativar Agora ⚡
-                  </button>
-                </div>
-              </div>
-            )}
-            {/* Mobile Title Bar */}
-            <header className="lg:hidden flex items-center justify-between px-5 py-4 border-b border-neon-cyan/20 bg-[#08081a]/95 shrink-0 z-10 select-none">
-              <button 
-                onClick={() => setIsMobileSidebarOpen(true)}
-                className="text-neon-cyan p-1 hover:bg-[#121235]/40 rounded-lg cursor-pointer relative"
+        {/* CATEGORIES STRIP */}
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-amber-400" />
+              <h3 className="font-extrabold text-white text-sm tracking-wide uppercase">
+                {showOnlyFavorites ? 'Minha Biblioteca de Favoritos' : 'Categorias & Obras em PDF'}
+              </h3>
+            </div>
+
+            {/* SORTING CONTROLS */}
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs text-gray-400 font-medium hidden sm:inline">Ordenar:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-[#181a26] border border-amber-500/20 rounded-xl px-3 py-1.5 text-xs text-amber-200 outline-none focus:border-amber-400 cursor-pointer"
               >
-                <Menu className="w-6 h-6" />
-                {(unreadChatsCount + unreadNotificationsCount) > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 border border-black rounded-full animate-pulse shadow-[0_0_4px_#ef4444]"></span>
-                )}
-              </button>
-              <h2 className="font-orbitron font-black text-base text-neon-cyan tracking-wider glow-text-cyan">
-                OPEN MZ
-              </h2>
-              <div onClick={() => navigateToView('profile')}>
-                <UserAvatar 
-                  src={currentUser.avatar || "https://i.pravatar.cc/80?img=1"} 
-                  status={true} 
-                  nickname={currentUser.nickname}
-                  className="w-8 h-8 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
-                />
-              </div>
-            </header>
+                <option value="recent">Mais Recentes</option>
+                <option value="downloads">Mais Descarregados</option>
+                <option value="rating">Melhor Avaliados</option>
+                <option value="title">Ordem Alfabética</option>
+              </select>
+            </div>
+          </div>
 
-            {/* Active View viewport */}
-            <main className="flex-grow flex flex-col overflow-y-auto no-scrollbar bg-[var(--theme-bg-main)] relative transition-colors duration-500">
-              {renderActiveView()}
-            </main>
+          {/* CATEGORY PILLS */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            {BOOK_CATEGORIES.map((cat) => {
+              const isActive = selectedCategory === cat.slug && !showOnlyFavorites;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setSelectedCategory(cat.slug);
+                    setShowOnlyFavorites(false);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+                    isActive
+                      ? 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/20'
+                      : 'bg-[#181a26] text-gray-300 border-amber-500/15 hover:border-amber-400/50 hover:text-white'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              );
+            })}
           </div>
         </div>
-      )}
 
-      {/* GLOBAL TOAST ALERTS */}
-      <AnimatePresence>
-        {successToast && (
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 50 }}
-            className="fixed top-5 right-5 z-[20000] flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-500 border border-green-400 text-black font-rajdhani font-extrabold text-sm shadow-2xl select-none"
-          >
-            <CheckCircle2 className="w-5 h-5 text-black animate-bounce" />
-            <span>{successToast}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* USER PROFILE MODAL IN COMMUNITY VIEW */}
-      <AnimatePresence>
-        {selectedCommunityUser && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] text-[var(--theme-text-main)] w-full max-w-md rounded-3xl p-6 relative shadow-2xl text-left space-y-6 max-h-[90vh] overflow-y-auto no-scrollbar"
+        {/* ACTIVE FILTER STATUS */}
+        {(showOnlyFavorites || selectedCategory !== 'todas' || searchQuery) && (
+          <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+            <span>
+              A mostrar resultados para:{' '}
+              <strong className="text-white">
+                {showOnlyFavorites ? 'Favoritos' : selectedCategory !== 'todas' ? `Categoria "${selectedCategory}"` : `Pesquisa por "${searchQuery}"`}
+              </strong>{' '}
+              ({filteredBooks.length} obras encontradas)
+            </span>
+            <button
+              onClick={() => {
+                setSelectedCategory('todas');
+                setSearchQuery('');
+                setShowOnlyFavorites(false);
+              }}
+              className="font-bold underline text-amber-400 hover:text-white cursor-pointer"
             >
-              {/* Close button */}
-              <button 
-                onClick={() => setSelectedCommunityUser(null)}
-                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/5 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              {/* Profile Header */}
-              <div className="flex items-center gap-4">
-                <img 
-                  src={selectedCommunityUser.avatar || "https://i.pravatar.cc/80?img=1"} 
-                  alt={selectedCommunityUser.nickname}
-                  referrerPolicy="no-referrer"
-                  className="w-16 h-16 rounded-full border-2 border-[var(--theme-accent)] object-cover shrink-0"
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <h3 className="text-base font-bold text-[var(--theme-text-main)] truncate">{selectedCommunityUser.fullname || `${selectedCommunityUser.firstname} ${selectedCommunityUser.surname}`}</h3>
-                    {selectedCommunityUser.isVIP && (
-                      <span className="px-1.5 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/25 text-[8px] font-bold rounded uppercase tracking-wider shrink-0">
-                        VIP
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[var(--theme-accent)] font-bold truncate">@{selectedCommunityUser.nickname}</p>
-                  <p className="text-[10px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider mt-1 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-[var(--theme-accent)]" /> {selectedCommunityUser.province}
-                  </p>
-                </div>
-              </div>
-
-              {/* User Stats Grid */}
-              <div className="grid grid-cols-3 gap-2 bg-[var(--theme-bg-hover)] rounded-2xl p-3 border border-[var(--theme-border)] text-center">
-                <div>
-                  <p className="text-base font-bold text-[var(--theme-text-main)] font-mono">{selectedCommunityUser.stats?.posts || 0}</p>
-                  <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Posts</p>
-                </div>
-                <div>
-                  <p className="text-base font-bold text-[var(--theme-text-main)] font-mono">{selectedCommunityUser.stats?.likes || 0}</p>
-                  <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Likes</p>
-                </div>
-                <div>
-                  <p className="text-base font-bold text-[var(--theme-text-main)] font-mono">{selectedCommunityUser.stats?.friends || 0}</p>
-                  <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Vínculos</p>
-                </div>
-              </div>
-
-              {/* About Section */}
-              <div className="space-y-1 bg-[var(--theme-bg-hover)] p-3.5 rounded-xl border border-[var(--theme-border)]">
-                <p className="text-[9px] text-[var(--theme-text-secondary)] font-bold uppercase tracking-wider">Sobre / Atividade</p>
-                <p className="text-xs text-[var(--theme-text-main)] leading-relaxed">
-                  Membro ativo de {selectedCommunityUser.province} registado no Open MZ. Tem {selectedCommunityUser.stats?.posts || 0} publicações e {selectedCommunityUser.stats?.friends || 0} conexões artísticas estabelecidas.
-                </p>
-              </div>
-
-              {/* Action Options */}
-              <div className="space-y-2 pt-2">
-                {selectedCommunityUser.id !== currentUser.id ? (
-                  <>
-                    <button
-                      onClick={() => {
-                        setInitialSelectedChatId(selectedCommunityUser.id);
-                        setActiveView('conversas');
-                        setSelectedCommunityUser(null);
-                      }}
-                      className="w-full py-2.5 bg-[var(--theme-accent)] text-white hover:opacity-90 font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-2"
-                    >
-                      <MessageSquare className="w-4 h-4 text-white" /> Enviar Mensagem
-                    </button>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => {
-                          const hasConnection = friendships.some(f => 
-                            f.status === 'accepted' && 
-                            ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
-                             (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
-                          );
-                          
-                          if (hasConnection) {
-                            const f = friendships.find(f => 
-                              ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
-                               (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
-                            );
-                            if (f) dbDeleteFriendship(f.id);
-                            triggerToast(`Vínculo removido com ${selectedCommunityUser.nickname}`);
-                          } else {
-                            const pending = friendships.some(f => 
-                              f.status === 'pending' && 
-                              ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
-                               (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
-                            );
-                            
-                            if (pending) {
-                              triggerToast(`Já existe um pedido de vínculo pendente com ${selectedCommunityUser.nickname}`);
-                            } else {
-                              const newFriendship = {
-                                id: 'friend_' + Math.random().toString(36).substring(2, 9),
-                                senderId: currentUser.id,
-                                receiverId: selectedCommunityUser.id,
-                                status: 'pending' as const,
-                                level: 'conhecido' as const,
-                                timestamp: Date.now()
-                              };
-                              dbCreateFriendship(newFriendship);
-                              
-                              // Send a real-time notification
-                              const newNotif = {
-                                id: 'notif_' + Math.random().toString(36).substring(2, 9),
-                                recipientId: selectedCommunityUser.id,
-                                title: 'Novo pedido de vínculo',
-                                text: `@${currentUser.nickname} quer vincular-se contigo!`,
-                                type: 'friend_request' as const,
-                                sender: {
-                                  id: currentUser.id,
-                                  name: currentUser.nickname,
-                                  avatar: currentUser.avatar
-                                },
-                                read: false,
-                                targetId: newFriendship.id,
-                                targetView: 'notificacoes' as const,
-                                timestamp: Date.now()
-                              };
-                              dbCreateNotification(newNotif);
-                              triggerToast(`Pedido de vínculo enviado para ${selectedCommunityUser.nickname}`);
-                            }
-                          }
-                        }}
-                        className="py-2.5 bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] hover:border-[var(--theme-accent)] text-[var(--theme-text-main)] font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-1"
-                      >
-                        {friendships.some(f => 
-                          f.status === 'accepted' && 
-                          ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
-                           (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
-                        ) ? 'Desvincular' : friendships.some(f => 
-                          f.status === 'pending' && 
-                          ((f.senderId === currentUser.id && f.receiverId === selectedCommunityUser.id) || 
-                           (f.senderId === selectedCommunityUser.id && f.receiverId === currentUser.id))
-                        ) ? 'Pendente' : 'Vincular'}
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          triggerToast(`Utilizador @${selectedCommunityUser.nickname} denunciado.`);
-                          setSelectedCommunityUser(null);
-                        }}
-                        className="py-2.5 bg-[var(--theme-bg-hover)] border border-[var(--theme-border)] hover:border-red-500/30 text-[var(--theme-text-secondary)] hover:text-red-500 font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-1"
-                      >
-                        Denunciar
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setActiveView('profile');
-                      setSelectedCommunityUser(null);
-                    }}
-                    className="w-full py-2.5 bg-neon-cyan text-black hover:bg-white font-bold text-xs tracking-wider rounded-xl transition-all cursor-pointer uppercase flex items-center justify-center gap-2"
-                  >
-                    Editar Meu Perfil
-                  </button>
-                )}
-              </div>
-
-              {/* User's recent posts list within modal */}
-              <div className="space-y-3 pt-4 border-t border-white/5 text-left">
-                <h4 className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Publicações Recentes</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-1 no-scrollbar">
-                  {posts.filter(p => p.author.id === selectedCommunityUser.id).length > 0 ? (
-                    posts.filter(p => p.author.id === selectedCommunityUser.id).map(p => (
-                      <div 
-                        key={p.id} 
-                        onClick={() => {
-                          setAutoOpenPostId(p.id);
-                          setActiveView('feed');
-                          setSelectedCommunityUser(null);
-                        }}
-                        className="p-3 bg-black/30 hover:bg-black/50 border border-white/5 rounded-xl text-left cursor-pointer transition-all space-y-1"
-                      >
-                        <div className="flex justify-between items-center text-[8px] text-neon-cyan font-bold uppercase">
-                          <span>{p.category}</span>
-                          <span className="text-gray-500 font-normal">{new Date(p.timestamp).toLocaleDateString('pt-MZ')}</span>
-                        </div>
-                        <p className="text-xs font-bold text-white leading-snug line-clamp-1">{p.title}</p>
-                        <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">{p.content}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[10px] text-gray-500 italic">Sem publicações até ao momento.</p>
-                  )}
-                </div>
-              </div>
-
-            </motion.div>
+              Limpar Filtros
+            </button>
           </div>
         )}
-      </AnimatePresence>
 
-      {currentUser && (
-        <FloatingSearch
+        {/* BOOKS CATALOG GRID */}
+        {filteredBooks.length === 0 ? (
+          <div className="text-center py-16 space-y-4 bg-[#141622] rounded-3xl border border-amber-500/20 p-8">
+            <BookMarked className="w-12 h-12 text-amber-400/40 mx-auto" />
+            <h4 className="text-lg font-bold text-white">Nenhuma obra encontrada</h4>
+            <p className="text-xs text-gray-400 max-w-md mx-auto">
+              Não foram encontradas obras literárias com os critérios selecionados. Tente pesquisar por outro termo ou explorar o catálogo.
+            </p>
+            <button
+              onClick={() => {
+                setSelectedCategory('todas');
+                setSearchQuery('');
+                setShowOnlyFavorites(false);
+              }}
+              className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-extrabold text-xs shadow-md"
+            >
+              Ver Todas as Obras
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {filteredBooks.map((book) => (
+              <BookCard
+                key={book.id}
+                book={book}
+                isFavorite={favoriteBookIds.includes(book.id)}
+                onRead={(b) => setSelectedBookForPdfReader(b)}
+                onDownload={handleDownloadBook}
+                onToggleFavorite={handleToggleFavorite}
+                onOpenDetails={(b) => setSelectedBookForDetails(b)}
+              />
+            ))}
+          </div>
+        )}
+
+      </main>
+
+      {/* FOOTER */}
+      <footer className="bg-[#0a0b10] border-t border-amber-500/20 py-8 px-4 mt-12">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center text-black font-black text-xs">
+              X
+            </div>
+            <span className="font-bold text-white font-mono">ALA X</span>
+            <span>— Plataforma de Publicação & Leitura de Obras em PDF</span>
+          </div>
+
+          <p>© 2026 Ala X. Todos os direitos reservados. Conectado ao Firebase Cloud Firestore.</p>
+        </div>
+      </footer>
+
+      {/* ACTIVE MODALS */}
+      {selectedBookForDetails && (
+        <LivroDetailModal
+          book={selectedBookForDetails}
           currentUser={currentUser}
-          users={users}
-          onSelectUser={(selectedUser) => setSelectedCommunityUser(selectedUser)}
-          isOpen={isGlobalSearchOpen}
-          onOpen={() => setIsGlobalSearchOpen(true)}
-          onClose={() => setIsGlobalSearchOpen(false)}
+          isFavorite={favoriteBookIds.includes(selectedBookForDetails.id)}
+          onClose={() => setSelectedBookForDetails(null)}
+          onOpenPdfReader={(b) => {
+            setSelectedBookForDetails(null);
+            setSelectedBookForPdfReader(b);
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          onStartDownload={handleDownloadBook}
+          onBookUpdated={(updated) => {
+            setBooks(prev => prev.map(b => b.id === updated.id ? updated : b));
+          }}
         />
       )}
 
-      {/* ========================================== */}
-      {/* GUEST RESTRICTION MODAL */}
-      {/* ========================================== */}
-      <AnimatePresence>
-        {showGuestRestrictionModal && (
-          <div className="fixed inset-0 bg-[#07050f]/90 backdrop-blur-md z-[50000] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.93, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.93, y: 15 }}
-              transition={{ type: 'spring', stiffness: 220, damping: 18 }}
-              className="bg-[#0f0f26] border-2 border-neon-cyan/40 rounded-3xl p-6 md:p-8 max-w-md w-full text-center relative shadow-[0_16px_40px_rgba(0,0,0,0.6)] space-y-6"
-            >
-              <button
-                onClick={() => setShowGuestRestrictionModal(false)}
-                className="absolute top-4 right-4 p-2 text-neon-cyan/50 hover:text-neon-cyan rounded-full hover:bg-white/5 cursor-pointer transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-neon-cyan to-blue-600 flex items-center justify-center shadow-md">
-                <Users className="w-8 h-8 text-black" />
-              </div>
-
-              <div className="space-y-2">
-                <h2 className="text-lg font-orbitron font-extrabold text-neon-cyan uppercase tracking-wider">
-                  Funcionalidade Exclusiva
-                </h2>
-                <p className="text-sm text-gray-300 font-rajdhani font-semibold leading-relaxed">
-                  Esta funcionalidade é exclusiva para usuários registrados. Deseja criar uma conta agora?
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <button
-                  onClick={() => setShowGuestRestrictionModal(false)}
-                  className="py-3 bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 rounded-xl text-gray-300 font-orbitron font-bold text-xs uppercase tracking-wider cursor-pointer transition-all"
-                >
-                  Talvez Depois
-                </button>
-                <button
-                  onClick={() => {
-                    setShowGuestRestrictionModal(false);
-                    handleRedirectToRegister();
-                  }}
-                  className="py-3 bg-gradient-to-r from-neon-cyan to-neon-magenta hover:brightness-110 active:scale-95 rounded-xl text-black font-orbitron font-extrabold text-xs uppercase tracking-wider cursor-pointer transition-all shadow-lg shadow-neon-cyan/20"
-                >
-                  Sim, Criar Conta
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ========================================== */}
-      {/* 1. EYES MAX SPECIAL THEME DOWNLOAD MODAL */}
-      {/* ========================================== */}
-      <AnimatePresence>
-        {showEyesMaxDownloadModal && (
-          <div className="fixed inset-0 bg-[#070504]/90 backdrop-blur-md z-[50000] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.93, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.93, y: 15 }}
-              transition={{ type: 'spring', stiffness: 220, damping: 18 }}
-              className="bg-[#15110e] border-2 border-[#fbbf24]/20 rounded-3xl p-6 md:p-8 max-w-lg w-full text-center relative shadow-[0_16px_40px_rgba(0,0,0,0.6)] space-y-6"
-            >
-              <button
-                onClick={() => setShowEyesMaxDownloadModal(false)}
-                disabled={isDownloadingEyesMax}
-                className="absolute top-4 right-4 p-2 text-amber-500/50 hover:text-amber-400 rounded-full hover:bg-white/5 cursor-pointer transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#d97706] to-[#78350f] flex items-center justify-center shadow-md">
-                <Sparkles className="w-8 h-8 text-[#fef3c7]" />
-              </div>
-
-              <div className="space-y-2">
-                <h2 className="font-orbitron font-black text-2xl tracking-wider text-[#fbbf24] uppercase">
-                  Tema Imperial Eyes Max
-                </h2>
-                <p className="text-[#fef3c7]/60 text-xs uppercase tracking-widest font-bold">
-                  Sinfonia em Chocolate & Ouro Real
-                </p>
-              </div>
-
-              <p className="text-amber-100/80 text-sm leading-relaxed max-w-md mx-auto">
-                Desbloqueie o ecossistema premium de alta performance. Desenvolvido com uma assinatura visual única de profundidade 4D realista, sem neons, e com suporte integral ao assistente virtual integrado <span className="text-[#fbbf24] font-bold">Pay</span>.
-              </p>
-
-              {isDownloadingEyesMax ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-xs font-mono text-amber-400/80 px-1">
-                    <span>A descarregar recursos do tema...</span>
-                    <span className="font-bold">{downloadProgress}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-neutral-900 rounded-full overflow-hidden border border-amber-500/10">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-[#d97706] to-[#fbbf24]"
-                      animate={{ width: `${downloadProgress}%` }}
-                      transition={{ duration: 0.1 }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-amber-500/50 italic">
-                    {downloadProgress < 40 && 'Configurando layouts horizontais...'}
-                    {downloadProgress >= 40 && downloadProgress < 80 && 'Compilando micro-físicas táteis...'}
-                    {downloadProgress >= 80 && 'Sincronizando modelos com Pay...'}
-                  </p>
-                </div>
-              ) : eyesMaxDownloaded ? (
-                <div className="space-y-4">
-                  <div className="py-2.5 px-4 bg-amber-950/20 border border-green-500/30 rounded-xl flex items-center justify-center gap-2 text-green-400 text-xs font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    <span>Recursos descarregados com sucesso!</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowEyesMaxDownloadModal(false);
-                      triggerApplyEyesMaxFlow();
-                    }}
-                    className="w-full py-3.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-orbitron font-extrabold text-xs tracking-widest rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-lg cursor-pointer uppercase"
-                  >
-                    Aplicar Tema Especial
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={triggerDownloadEyesMax}
-                  className="w-full py-3.5 bg-gradient-to-r from-[#d97706] to-[#fbbf24] text-black font-orbitron font-extrabold text-xs tracking-widest rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-lg cursor-pointer uppercase"
-                >
-                  Aceitar e Descarregar Recursos (1.2 MB)
-                </button>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ========================================== */}
-      {/* 2. EXCLUSIVE FULL SCREEN APPLYING LOADER   */}
-      {/* ========================================== */}
-      <AnimatePresence>
-        {isApplyingEyesMax && (
-          <div className="fixed inset-0 bg-[#0c0907] z-[99999] flex flex-col items-center justify-center p-6 select-none">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-center space-y-8 max-w-sm w-full"
-            >
-              {/* Spinning luxury circular progress indicator */}
-              <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#1d1611"
-                    strokeWidth="4"
-                    fill="transparent"
-                  />
-                  <motion.circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#fbbf24"
-                    strokeWidth="4"
-                    fill="transparent"
-                    strokeDasharray={251.2}
-                    animate={{ strokeDashoffset: 251.2 - (251.2 * applyProgress) / 100 }}
-                    transition={{ duration: 0.1 }}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="font-orbitron font-black text-xl text-[#fbbf24]">{applyProgress}%</span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="font-orbitron font-black text-lg tracking-widest text-[#fbbf24] uppercase">
-                  A ATIVAR EYES MAX
-                </h3>
-                <p className="text-amber-100/50 text-xs uppercase tracking-wider h-6 transition-all duration-300">
-                  {applyProgress < 30 && 'Sincronizando matriz de profundidade 4D...'}
-                  {applyProgress >= 30 && applyProgress < 60 && 'Carregando paleta chocolate imperial...'}
-                  {applyProgress >= 60 && applyProgress < 85 && 'Ajustando grelha horizontal de publicações...'}
-                  {applyProgress >= 85 && 'Despertando assistente virtual "Pay"...'}
-                </p>
-              </div>
-
-              {/* Minimalist physical progress bar */}
-              <div className="w-full h-1 bg-amber-950/20 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-[#fbbf24]"
-                  animate={{ width: `${applyProgress}%` }}
-                  transition={{ duration: 0.1 }}
-                />
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ========================================== */}
-      {/* 3. FLOATING "PAY" ASSISTANT LAUNCHER       */}
-      {/* ========================================== */}
-      {!showPayAssistant && (
-        <motion.button
-          onClick={() => setShowPayAssistant(true)}
-          initial={{ scale: 0, y: 50 }}
-          animate={{ 
-            scale: 1, 
-            y: 0,
-            transition: { type: 'spring', stiffness: 260, damping: 15 }
-          }}
-          whileHover={{ 
-            scale: 1.12, 
-            y: -5,
-            transition: { type: 'spring', stiffness: 300, damping: 10 }
-          }}
-          whileTap={{ scale: 0.90 }}
-          className={`fixed bottom-6 right-6 z-[40000] w-14 h-14 rounded-full text-black shadow-[0_8px_24px_rgba(0,0,0,0.5)] border cursor-pointer flex items-center justify-center group ${
-            isUnverified 
-              ? 'bg-gradient-to-br from-red-600 to-amber-500 border-red-500/50 shadow-red-950/40 animate-pulse' 
-              : 'bg-gradient-to-br from-[#fbbf24] to-[#78350f] border-[#fbbf24]/30'
-          }`}
-          title={isUnverified ? "Verificar E-mail (Pay)" : "Falar com Pay"}
-        >
-          <MessageSquare className="w-6 h-6 text-[#15110e] group-hover:rotate-12 transition-transform duration-300" />
-          <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border border-[#15110e] flex items-center justify-center text-[7px] font-black text-white ${isUnverified ? 'bg-red-600' : 'bg-green-500 animate-pulse'}`}>
-            {isUnverified ? '!' : ''}
-          </span>
-        </motion.button>
+      {selectedBookForPdfReader && (
+        <PdfViewerModal
+          book={selectedBookForPdfReader}
+          onClose={() => setSelectedBookForPdfReader(null)}
+        />
       )}
 
-      {/* ========================================== */}
-      {/* 4. PAY ASSISTANT CHAT DIALOG CONTAINER    */}
-      {/* ========================================== */}
-      <PayAssistantModal
-        currentUser={currentUser}
-        isOpen={showPayAssistant}
-        onClose={() => setShowPayAssistant(false)}
-        onNavigateToRegister={() => {
-          setShowPayAssistant(false);
-          handleLogout();
-        }}
-        onExecuteCommand={(command, payload) => {
-          if (command === 'DELETE_POST') {
-            const userPosts = posts.filter(p => p.authorId === currentUser.id);
-            if (userPosts.length > 0) {
-              const latest = userPosts[0];
-              dbDeletePost(latest.id);
-            }
-          } else if (command === 'CHANGE_THEME') {
-            setThemeState('eyes-max');
-            localStorage.setItem('theme', 'eyes-max');
-            if (currentUser && currentUser.id !== 'guest') {
-              localStorage.setItem(`theme_user_${currentUser.id}`, 'eyes-max');
-            }
-          } else if (command === 'OPEN_MESSAGES') {
-            setActiveView('chat');
-          }
-        }}
-        posts={posts}
-      />
+      {isDownloadsModalOpen && (
+        <DownloadedBooksModal
+          downloadedItems={downloadedItems}
+          onClose={() => setIsDownloadsModalOpen(false)}
+          onOpenExternalPdf={handleOpenExternalPdf}
+          onRemoveDownloadedItem={handleRemoveDownloadedItem}
+          onRestartDownload={handleDownloadBook}
+        />
+      )}
 
-      {/* ========================================== */}
-      {/* 5. WELCOME POPUP ALERT DIALOG FROM PAY    */}
-      {/* ========================================== */}
-      <AnimatePresence>
-        {showEyesMaxWelcome && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[48000] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#15110e] border-2 border-[#fbbf24]/30 rounded-3xl p-6 max-w-md w-full text-center relative shadow-2xl space-y-5"
-            >
-              <div className="w-12 h-12 mx-auto rounded-xl bg-amber-950/30 border border-[#fbbf24]/20 flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-[#fbbf24]" />
-              </div>
+      {isAdminPanelOpen && (
+        <AdminPanelModal
+          currentUser={currentUser}
+          books={books}
+          onClose={() => setIsAdminPanelOpen(false)}
+          onBookAdded={(newBook) => setBooks(prev => [newBook, ...prev])}
+          onBookDeleted={(bookId) => setBooks(prev => prev.filter(b => b.id !== bookId))}
+        />
+      )}
 
-              <div className="space-y-1">
-                <h3 className="font-orbitron font-black text-base text-[#fbbf24] tracking-wide uppercase">
-                  Bem-vindo ao Eyes Max!
-                </h3>
-                <p className="text-[#fef3c7]/50 text-[10px] uppercase tracking-widest font-bold">
-                  Uma mensagem de Pay
-                </p>
-              </div>
+      {((!currentUser && !showSessionPrompt) || isAuthModalOpen) && (
+        <AuthModal
+          canClose={Boolean(currentUser)}
+          onClose={() => setIsAuthModalOpen(false)}
+          onLoginSuccess={(user) => {
+            saveStoredUser(user);
+            setCurrentUser(user);
+            setIsAuthModalOpen(false);
+          }}
+        />
+      )}
 
-              <p className="text-amber-100/90 text-xs leading-relaxed">
-                "Olá! Eu sou o <span className="text-[#fbbf24] font-bold">Pay</span>, o assistente oficial do Eyes Open MZ. Estou muito feliz em apresentar este novo ecossistema de requinte imperial. O site agora apresenta publicações dispostas em grelha dupla horizontal, acabamentos premium sem neons e animações táteis customizadas. Conte comigo para qualquer ajuda!"
-              </p>
+      {isProfileModalOpen && currentUser && (
+        <UserProfileModal
+          user={currentUser}
+          favoriteBooks={favoriteBooks}
+          onClose={() => setIsProfileModalOpen(false)}
+          onSelectBook={(b) => setSelectedBookForDetails(b)}
+          onOpenDownloads={() => setIsDownloadsModalOpen(true)}
+          onLogout={handleLogoutAction}
+          onUserUpdated={(updated) => {
+            setCurrentUser(updated);
+            saveStoredUser(updated);
+          }}
+        />
+      )}
 
-              <button
-                onClick={() => setShowEyesMaxWelcome(false)}
-                className="w-full py-2.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-orbitron font-bold text-xs tracking-widest rounded-xl transition-all cursor-pointer uppercase shadow-md"
-              >
-                Começar a Explorar
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* CONTINUATION PROMPT FOR RETURNING BROWSERS */}
+      {showSessionPrompt && savedSessionUser && (
+        <ContinueSessionModal
+          savedUser={savedSessionUser}
+          onConfirm={() => {
+            setCurrentUser(savedSessionUser);
+            setShowSessionPrompt(false);
+          }}
+          onSwitchAccount={() => {
+            saveStoredUser(null);
+            setSavedSessionUser(null);
+            setShowSessionPrompt(false);
+            setIsAuthModalOpen(true);
+          }}
+        />
+      )}
 
-      {/* 5.1 UNVERIFIED ACCOUNT STATUS / BLOCK MODAL */}
-      <AnimatePresence>
-        {showUnverifiedBlockModal && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60000] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 30 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 30 }}
-              transition={{ type: 'spring', stiffness: 220, damping: 20 }}
-              className="bg-[#120505] border-2 border-red-500/40 rounded-3xl p-6 max-w-lg w-full text-center relative shadow-2xl space-y-6"
-            >
-              {/* Close button if not expired yet */}
-              {!isVerificationExpired && (
-                <button
-                  onClick={() => setShowUnverifiedBlockModal(false)}
-                  className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/5 cursor-pointer transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              )}
-
-              <div className="w-16 h-16 mx-auto rounded-full bg-red-950/50 border-2 border-red-500 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
-                <ShieldAlert className="w-9 h-9 text-red-500 animate-pulse" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="font-orbitron font-extrabold text-lg text-red-500 tracking-wider uppercase">
-                  {isVerificationExpired ? 'CONTA TEMPORARIAMENTE BLOQUEADA' : 'CONFIRMAÇÃO DE E-MAIL REQUERIDA'}
-                </h3>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-950/60 border border-red-500/20 rounded-full">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                  <span className="text-[10px] text-red-400 font-extrabold uppercase tracking-widest">
-                    {isVerificationExpired ? 'EXPIRADO (Limite de 1h atingido)' : 'ESTADO: PENDENTE'}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-gray-300 text-xs leading-relaxed max-w-md mx-auto">
-                {isVerificationExpired 
-                  ? `Prezado(a) ${currentUser?.firstname || 'utilizador'}, a sua conta ultrapassou o limite de 1 hora sem validação e foi bloqueada temporariamente. Verifique o seu e-mail no Gmail para reativá-la.`
-                  : `Para a segurança dos seus dados, a sua conta foi criada temporariamente no estado Pendente. Resta-lhe apenas menos de 1 hora para clicar no link enviado para o seu Gmail e ativá-la.`}
-              </p>
-
-              {/* Countdown panel */}
-              <div className="bg-black/40 border border-red-500/10 rounded-2xl p-4 flex flex-col items-center justify-center space-y-1">
-                <span className="text-[10px] uppercase text-gray-400 font-bold tracking-widest">Tempo Restante de Ativação</span>
-                <span className="font-mono text-xl text-red-500 font-black tracking-widest animate-pulse">
-                  {verificationTimeLeft !== null ? (
-                    (() => {
-                      const h = Math.floor(verificationTimeLeft / 3600);
-                      const m = Math.floor((verificationTimeLeft % 3600) / 60);
-                      const s = verificationTimeLeft % 60;
-                      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-                    })()
-                  ) : '00:00:00'}
-                </span>
-              </div>
-
-              {/* Tips for gmail retrieval */}
-              <div className="bg-[#1b0808] border border-red-500/10 rounded-2xl p-4 text-left space-y-2">
-                <span className="text-[10px] text-red-400 font-black uppercase tracking-widest block">Como encontrar o e-mail:</span>
-                <p className="text-[11px] text-gray-300 leading-relaxed font-semibold">
-                  Aceda ao seu **Gmail**, clique no menu de **três barras horizontais** no canto superior esquerdo, entre na pasta **Spam**, e clique na mensagem de verificação do **Eyes Open MZ** para confirmar.
-                </p>
-              </div>
-
-              {/* Actions */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <button
-                  onClick={() => setShowTutorialVideoModal(true)}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 active:scale-95 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all uppercase tracking-wider"
-                >
-                  <Play className="w-4 h-4 text-black animate-pulse" /> Ver Vídeo de Como Confirmar 🎥
-                </button>
-
-                <button
-                  onClick={handleCheckVerification}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-110 active:scale-95 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all uppercase tracking-wider"
-                >
-                  Confirmar Ativação
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-2.5 text-center">
-                <div className="flex gap-2 justify-center">
-                  <button
-                    onClick={handleResendVerification}
-                    disabled={isResendingVerification}
-                    className="text-[10px] text-amber-500 hover:text-amber-400 font-extrabold underline cursor-pointer disabled:opacity-50"
-                  >
-                    {isResendingVerification ? 'A Reenviar...' : 'Reenviar e-mail de verificação'}
-                  </button>
-                  <span className="text-gray-600">•</span>
-                  <button
-                    onClick={handleLogout}
-                    className="text-[10px] text-gray-400 hover:text-white font-extrabold underline cursor-pointer"
-                  >
-                    Terminar Sessão (Sair)
-                  </button>
-                </div>
-
-                {/* Simulated bypass button for extremely fast and smooth evaluation without checking email */}
-                <div className="border-t border-white/5 pt-3">
-                  <button
-                    onClick={handleSimulatedVerification}
-                    className="text-[9px] text-gray-500 hover:text-amber-500/80 font-bold tracking-widest uppercase transition-colors"
-                  >
-                    ⚡ Forçar Ativação de Teste (Bypass Avaliação) 🛠️
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 5.2 INTERACTIVE VIDEO TUTORIAL MODAL BY PAY */}
-      <AnimatePresence>
-        {showTutorialVideoModal && (
-          <div className="fixed inset-0 bg-black/95 backdrop-blur-lg z-[70000] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#0b0502] border-2 border-red-500/30 rounded-3xl p-6 max-w-lg w-full relative shadow-3xl flex flex-col space-y-4 text-left"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-amber-500 flex items-center justify-center">
-                    <Video className="w-4.5 h-4.5 text-black" />
-                  </div>
-                  <div>
-                    <h4 className="font-orbitron font-extrabold text-sm text-red-500 tracking-wider uppercase">Vídeo Tutorial do Pay</h4>
-                    <span className="text-[9px] text-amber-500/50 uppercase tracking-widest font-bold">Simulador de Ativação de Gmail</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowTutorialVideoModal(false);
-                    setTutorialStep(0);
-                    setTutorialProgress(0);
-                  }}
-                  className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/5 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Current slide rendering area */}
-              <div className="relative">
-                {tutorialSteps[tutorialStep].render()}
-
-                {/* Progress bar overlay representing playback status */}
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-white/10 overflow-hidden rounded-b-2xl">
-                  <motion.div 
-                    className="h-full bg-red-600"
-                    animate={{ width: `${tutorialProgress}%` }}
-                    transition={{ duration: 0.06, ease: 'linear' }}
-                  />
-                </div>
-              </div>
-
-              {/* Step info block */}
-              <div className="space-y-1 bg-[#130704] border border-red-500/15 rounded-2xl p-4">
-                <h5 className="text-xs font-bold text-red-400 font-orbitron uppercase tracking-wide">
-                  {tutorialSteps[tutorialStep].title}
-                </h5>
-                <p className="text-xs text-gray-300 leading-relaxed font-semibold">
-                  {tutorialSteps[tutorialStep].desc}
-                </p>
-              </div>
-
-              {/* Controls */}
-              <div className="flex items-center justify-between bg-[#150905] rounded-2xl px-4 py-3 border border-white/5">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setIsTutorialPlaying(!isTutorialPlaying)}
-                    className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
-                  >
-                    {isTutorialPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white" />}
-                  </button>
-                  <span className="text-[10px] text-gray-400 font-bold font-mono">
-                    {tutorialStep + 1} / {tutorialSteps.length}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={tutorialStep === 0}
-                    onClick={() => {
-                      setTutorialStep(prev => prev - 1);
-                      setTutorialProgress(0);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-40 text-xs font-bold uppercase cursor-pointer"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    disabled={tutorialStep === tutorialSteps.length - 1}
-                    onClick={() => {
-                      setTutorialStep(prev => prev + 1);
-                      setTutorialProgress(0);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 text-black text-xs font-bold uppercase cursor-pointer"
-                  >
-                    Próximo
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
-
-function EventCard({ ev, idx, triggerToast }: { ev: any; idx: number; triggerToast: (msg: string) => void; key?: number }) {
-  const sessionKey = `rsvp_event_${idx}`;
-  const [rsvped, setRsvped] = useState(false);
-
-  useEffect(() => {
-    setRsvped(!!sessionStorage.getItem(sessionKey));
-  }, [sessionKey]);
-
-  return (
-    <div className="p-5 rounded-2xl bg-[#090924] border border-white/5 hover:border-neon-cyan/30 transition-all shadow-lg space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-xs font-bold text-neon-cyan font-mono">{ev.date}</span>
-        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{ev.location}</span>
-      </div>
-      <h3 className="text-base font-bold text-white leading-tight text-left">{ev.title}</h3>
-      <p className="text-xs text-gray-400 leading-relaxed font-semibold text-left">{ev.details}</p>
-      <button
-        onClick={() => {
-          const next = !rsvped;
-          setRsvped(next);
-          if (next) {
-            sessionStorage.setItem(sessionKey, 'true');
-            triggerToast('Inscrição confirmada com sucesso! ✔️');
-          } else {
-            sessionStorage.removeItem(sessionKey);
-            triggerToast('Inscrição cancelada.');
-          }
-        }}
-        className={`w-full py-2.5 border rounded-xl text-xs font-bold font-orbitron tracking-widest transition-all cursor-pointer uppercase ${
-          rsvped 
-            ? 'bg-green-500/25 border-green-500 text-white' 
-            : 'bg-[#121235] border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan hover:text-black'
-        }`}
-      >
-        {rsvped ? 'Inscrição Confirmada ✔️' : 'Participar no Evento'}
-      </button>
-    </div>
-  );
-}
-

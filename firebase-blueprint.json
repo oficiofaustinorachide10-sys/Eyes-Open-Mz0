@@ -1,164 +1,79 @@
 {
   "entities": {
+    "Book": {
+      "title": "Book",
+      "description": "Obra literária ou publicação em PDF no Ala X",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "synopsis": { "type": "string" },
+        "category": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "pdfUrl": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "downloadCount": { "type": "number" },
+        "likesCount": { "type": "number" },
+        "ratingAverage": { "type": "number" },
+        "ratingCount": { "type": "number" },
+        "pageCount": { "type": "number" },
+        "language": { "type": "string" },
+        "publishedYear": { "type": "number" },
+        "isFeatured": { "type": "boolean" },
+        "uploadedBy": { "type": "string" }
+      },
+      "required": ["id", "title", "author", "synopsis", "category", "coverUrl", "pdfUrl", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Comentário e avaliação de uma obra",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "bookId", "userId", "userName", "rating", "comment", "createdAt"]
+    },
     "User": {
       "title": "User",
-      "description": "User profile in Eyes Open MZ",
+      "description": "Perfil individual e privado de utilizador no Ala X",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "phone": { "type": "string" },
+        "uid": { "type": "string" },
         "email": { "type": "string" },
-        "fullname": { "type": "string" },
-        "firstname": { "type": "string" },
-        "surname": { "type": "string" },
-        "nickname": { "type": "string" },
-        "password": { "type": "string" },
-        "province": { "type": "string" },
-        "district": { "type": "string" },
-        "created": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
         "avatar": { "type": "string" },
-        "stats": { "type": "object" },
-        "nameEditDate": { "type": "string" },
-        "isVIP": { "type": "boolean" },
-        "isVerified": { "type": "boolean" },
+        "photoURL": { "type": "string" },
         "bio": { "type": "string" },
-        "cover": { "type": "string" },
-        "privacySettings": { "type": "object" },
-        "accountStatus": { "type": "string" },
-        "lastReadChatTimestamp": { "type": "number" },
-        "lastReadNotificationsTimestamp": { "type": "number" },
-        "mutedNotifications": { "type": "boolean" }
+        "favoriteBookIds": { "type": "array" },
+        "readHistory": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "lastLogin": { "type": "number" }
       },
-      "required": ["id", "phone", "email", "fullname", "firstname", "surname", "nickname", "province", "created", "avatar", "stats"]
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "System or user notifications",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "recipientId": { "type": "string" },
-        "title": { "type": "string" },
-        "text": { "type": "string" },
-        "type": { "type": "string" },
-        "sender": { "type": "object" },
-        "read": { "type": "boolean" },
-        "targetId": { "type": "string" },
-        "targetView": { "type": "string" },
-        "timestamp": { "type": "number" }
-      },
-      "required": ["id", "recipientId", "title", "text", "type", "sender", "read", "timestamp"]
-    },
-    "Friendship": {
-      "title": "Friendship",
-      "description": "Friendship request or state",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "senderId": { "type": "string" },
-        "receiverId": { "type": "string" },
-        "status": { "type": "string" },
-        "level": { "type": "string" },
-        "timestamp": { "type": "number" }
-      },
-      "required": ["id", "senderId", "receiverId", "status", "level", "timestamp"]
-    },
-    "ChatPermission": {
-      "title": "ChatPermission",
-      "description": "Chat access control permission",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "senderId": { "type": "string" },
-        "receiverId": { "type": "string" },
-        "status": { "type": "string" },
-        "duration": { "type": "string" },
-        "acceptedAt": { "type": "number" },
-        "expiresAt": { "type": "number" },
-        "level": { "type": "string" },
-        "timestamp": { "type": "number" }
-      },
-      "required": ["id", "senderId", "receiverId", "status", "duration", "level", "timestamp"]
-    },
-    "Post": {
-      "title": "Post",
-      "description": "4D media feed publication",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "image": { "type": "string" },
-        "text": { "type": "string" },
-        "style": { "type": "object" },
-        "author": { "type": "object" },
-        "stars": { "type": "number" },
-        "views": { "type": "number" },
-        "starred": { "type": "boolean" },
-        "timestamp": { "type": "number" },
-        "comments": { "type": "array" }
-      },
-      "required": ["id", "author", "stars", "views", "timestamp"]
-    },
-    "Story": {
-      "title": "Story",
-      "description": "24h temporary media story",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "type": { "type": "string" },
-        "src": { "type": "string" },
-        "text": { "type": "string" },
-        "style": { "type": "object" },
-        "music": { "type": "string" },
-        "musicName": { "type": "string" },
-        "author": { "type": "object" },
-        "stars": { "type": "number" },
-        "views": { "type": "number" },
-        "starred": { "type": "boolean" },
-        "timestamp": { "type": "number" }
-      },
-      "required": ["id", "type", "src", "author", "timestamp"]
-    },
-    "Chat": {
-      "title": "Chat",
-      "description": "Real-time conversation messages",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "sender": { "type": "object" },
-        "text": { "type": "string" },
-        "timestamp": { "type": "number" }
-      },
-      "required": ["id", "sender", "text", "timestamp"]
+      "required": ["id", "uid", "email", "name", "role", "createdAt"]
     }
   },
   "firestore": {
+    "books/{bookId}": {
+      "schema": "Book",
+      "description": "Coleção principal de obras publicadas"
+    },
+    "reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Avaliações e comentários das obras"
+    },
     "users/{userId}": {
       "schema": "User",
-      "description": "User profiles"
-    },
-    "notifications/{notificationId}": {
-      "schema": "Notification",
-      "description": "System or user notifications"
-    },
-    "friendships/{friendshipId}": {
-      "schema": "Friendship",
-      "description": "Friendships"
-    },
-    "chat_permissions/{chatPermissionId}": {
-      "schema": "ChatPermission",
-      "description": "Chat access level and duration rules"
-    },
-    "posts/{postId}": {
-      "schema": "Post",
-      "description": "Publications"
-    },
-    "stories/{storyId}": {
-      "schema": "Story",
-      "description": "Temporary stories"
-    },
-    "chats/{chatId}": {
-      "schema": "Chat",
-      "description": "Chat room messages"
+      "description": "Perfis isolados por UID de leitores e administradores"
     }
   }
 }

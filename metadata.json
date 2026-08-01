@@ -1,6 +1,6 @@
 {
-  "name": "Eyes Open MZ",
-  "description": "Uma plataforma e campanha comunitária para o fomento de cinema digital, fotografia e artes independentes em Moçambique.",
+  "name": "Ala X",
+  "description": "Plataforma personalizada de publicação, leitura e biblioteca de obras literárias e científicas em PDF.",
   "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
