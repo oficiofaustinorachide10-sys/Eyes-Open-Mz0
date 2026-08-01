@@ -14,6 +14,7 @@ interface LivroDetailModalProps {
   book: Book;
   currentUser: User | null;
   isFavorite: boolean;
+  initialTab?: 'reviews' | 'comments';
   onClose: () => void;
   onOpenPdfReader: (book: Book) => void;
   onToggleFavorite: (bookId: string) => void;
@@ -25,12 +26,13 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   book,
   currentUser,
   isFavorite,
+  initialTab = 'reviews',
   onClose,
   onOpenPdfReader,
   onToggleFavorite,
   onStartDownload
 }) => {
-  const [activeTab, setActiveTab] = useState<'reviews' | 'comments'>('reviews');
+  const [activeTab, setActiveTab] = useState<'reviews' | 'comments'>(initialTab);
 
   // Real-time Firestore Reviews & Comments
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -100,11 +102,6 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   const handleSaveReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
-
-    if (!reviewText.trim()) {
-      setReviewError('Escreva a sua experiência... O comentário é obrigatório.');
-      return;
-    }
 
     setIsSubmittingReview(true);
     setReviewError('');
@@ -438,11 +435,10 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-amber-200">2. Escreva a sua experiência *</label>
+                    <label className="text-xs font-bold text-amber-200">2. Escreva a sua experiência (opcional)</label>
                     <textarea
                       rows={3}
-                      required
-                      placeholder="Escreva a sua experiência com a obra..."
+                      placeholder="Escreva a sua experiência com a obra (opcional)..."
                       value={reviewText}
                       onChange={(e) => setReviewText(e.target.value)}
                       className="w-full bg-[#12141f] border border-amber-500/30 rounded-xl p-3 text-xs text-amber-100 outline-none focus:border-amber-400 resize-none"

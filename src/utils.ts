@@ -36,7 +36,7 @@ export const SAMPLE_BOOKS: Book[] = [
     language: 'Português',
     publishedYear: 2025,
     isFeatured: true,
-    uploadedBy: 'Admin Ala X',
+    uploadedBy: 'Ofício Faustino Rachide',
     fileSizeFormatted: '2.4 MB'
   },
   {
@@ -56,7 +56,7 @@ export const SAMPLE_BOOKS: Book[] = [
     language: 'Português',
     publishedYear: 2026,
     isFeatured: true,
-    uploadedBy: 'Admin Ala X',
+    uploadedBy: 'Imperador Rachide',
     fileSizeFormatted: '3.8 MB'
   },
   {
@@ -76,7 +76,7 @@ export const SAMPLE_BOOKS: Book[] = [
     language: 'Português',
     publishedYear: 2024,
     isFeatured: false,
-    uploadedBy: 'Admin Ala X',
+    uploadedBy: 'Helena Vilanculos',
     fileSizeFormatted: '1.9 MB'
   },
   {
@@ -96,7 +96,7 @@ export const SAMPLE_BOOKS: Book[] = [
     language: 'Português',
     publishedYear: 2025,
     isFeatured: false,
-    uploadedBy: 'Admin Ala X',
+    uploadedBy: 'Sérgio Matusse',
     fileSizeFormatted: '1.2 MB'
   },
   {
@@ -116,7 +116,7 @@ export const SAMPLE_BOOKS: Book[] = [
     language: 'Português',
     publishedYear: 2026,
     isFeatured: true,
-    uploadedBy: 'Admin Ala X',
+    uploadedBy: 'Ofício F. Rachide',
     fileSizeFormatted: '4.5 MB'
   }
 ];
@@ -182,7 +182,7 @@ export const SAMPLE_COMMENTS: BookComment[] = [
 export const ADMIN_USER: User = {
   id: ADMIN_UID,
   email: 'admin@alax.mz',
-  name: 'Ofício Faustino (Admin Ala X)',
+  name: 'Ofício Faustino',
   role: 'admin',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
   favoriteBookIds: ['book-1', 'book-2', 'book-5'],

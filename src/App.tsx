@@ -43,7 +43,7 @@ export default function App() {
   });
 
   // Active Modals
-  const [selectedBookForDetails, setSelectedBookForDetails] = useState<Book | null>(null);
+  const [selectedBookForDetails, setSelectedBookForDetails] = useState<{ book: Book; initialTab?: 'reviews' | 'comments' } | null>(null);
   const [selectedBookForPdfReader, setSelectedBookForPdfReader] = useState<Book | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -287,6 +287,7 @@ export default function App() {
         {!showOnlyFavorites && !searchQuery && selectedCategory === 'todas' && (
           <HeroBanner
             featuredBook={featuredBook}
+            currentUser={currentUser}
             onReadBook={(book) => setSelectedBookForPdfReader(book)}
             onOpenAdmin={() => setIsAdminPanelOpen(true)}
             totalBooksCount={books.length}
@@ -396,7 +397,7 @@ export default function App() {
                 onRead={(b) => setSelectedBookForPdfReader(b)}
                 onDownload={handleDownloadBook}
                 onToggleFavorite={handleToggleFavorite}
-                onOpenDetails={(b) => setSelectedBookForDetails(b)}
+                onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
               />
             ))}
           </div>
@@ -422,9 +423,10 @@ export default function App() {
       {/* ACTIVE MODALS */}
       {selectedBookForDetails && (
         <LivroDetailModal
-          book={selectedBookForDetails}
+          book={selectedBookForDetails.book}
+          initialTab={selectedBookForDetails.initialTab}
           currentUser={currentUser}
-          isFavorite={favoriteBookIds.includes(selectedBookForDetails.id)}
+          isFavorite={favoriteBookIds.includes(selectedBookForDetails.book.id)}
           onClose={() => setSelectedBookForDetails(null)}
           onOpenPdfReader={(b) => {
             setSelectedBookForDetails(null);
@@ -470,7 +472,7 @@ export default function App() {
           currentUser={currentUser}
           books={books}
           onClose={() => setIsProfileModalOpen(false)}
-          onSelectBook={(b) => setSelectedBookForDetails(b)}
+          onSelectBook={(b) => setSelectedBookForDetails({ book: b })}
           onLogout={handleLogoutAction}
           onUserUpdated={(updated) => {
             setCurrentUser(updated);

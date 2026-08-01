@@ -1,9 +1,10 @@
 import React from 'react';
-import { BookOpen, Sparkles, Download, Shield, FileText, ArrowRight, Star } from 'lucide-react';
-import { Book } from '../types';
+import { BookOpen, Sparkles, Download, Shield, FileText, ArrowRight, Star, PlusCircle } from 'lucide-react';
+import { Book, User } from '../types';
 
 interface HeroBannerProps {
   featuredBook?: Book;
+  currentUser: User | null;
   onReadBook: (book: Book) => void;
   onOpenAdmin: () => void;
   totalBooksCount: number;
@@ -11,10 +12,13 @@ interface HeroBannerProps {
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
   featuredBook,
+  currentUser,
   onReadBook,
   onOpenAdmin,
   totalBooksCount
 }) => {
+  const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
+
   return (
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#12141f] via-[#1a1c29] to-[#12141f] border border-amber-500/30 p-6 sm:p-10 my-6 shadow-2xl">
       {/* BACKGROUND ACCENTS */}
@@ -52,7 +56,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#181a26] border border-amber-500/20 text-gray-300">
               <Shield className="w-4 h-4 text-amber-400" />
-              <span>Painel Admin Restrito</span>
+              <span>Plataforma Segura</span>
             </div>
           </div>
 
@@ -69,13 +73,15 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onOpenAdmin}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-[#181a26] border border-amber-500/30 text-amber-300 hover:text-white font-semibold text-xs sm:text-sm hover:border-amber-400/60 transition-all cursor-pointer"
-            >
-              <Shield className="w-4 h-4 text-amber-400" />
-              <span>Publicar como Admin</span>
-            </button>
+            {isPublisher && (
+              <button
+                onClick={onOpenAdmin}
+                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-[#181a26] border border-amber-500/30 text-amber-300 hover:text-white font-semibold text-xs sm:text-sm hover:border-amber-400/60 transition-all cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4 text-amber-400" />
+                <span>Nova Obra</span>
+              </button>
+            )}
           </div>
         </div>
 

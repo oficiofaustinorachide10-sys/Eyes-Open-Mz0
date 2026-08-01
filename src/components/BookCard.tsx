@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Download, Star, Heart, FileText, Share2, Calendar } from 'lucide-react';
+import { BookOpen, Download, Star, Heart, FileText, Share2, Calendar, MessageSquare } from 'lucide-react';
 import { Book } from '../types';
 
 interface BookCardProps {
@@ -8,7 +8,7 @@ interface BookCardProps {
   onRead: (book: Book) => void;
   onDownload: (book: Book) => void;
   onToggleFavorite: (bookId: string) => void;
-  onOpenDetails: (book: Book) => void;
+  onOpenDetails: (book: Book, initialTab?: 'reviews' | 'comments') => void;
 }
 
 export const BookCard: React.FC<BookCardProps> = ({
@@ -53,21 +53,42 @@ export const BookCard: React.FC<BookCardProps> = ({
           <Heart className={`w-4 h-4 ${isFavorite ? 'fill-white' : ''}`} />
         </button>
 
-        {/* RATING BADGE */}
-        <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md border border-amber-500/30 text-amber-300 text-xs font-bold">
+        {/* RATING BADGE & CLICK TO VIEW REVIEWS */}
+        <button
+          onClick={() => onOpenDetails(book, 'reviews')}
+          className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md border border-amber-500/30 text-amber-300 text-xs font-bold hover:bg-black/90 transition-all cursor-pointer"
+          title="Ver Avaliações"
+        >
           <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
           <span>{book.ratingAverage ? book.ratingAverage.toFixed(1) : '5.0'}</span>
           <span className="text-gray-400 text-[10px]">({book.ratingCount || 1})</span>
-        </div>
+        </button>
+
+        {/* COMMENTS BADGE & CLICK TO VIEW COMMENTS */}
+        <button
+          onClick={() => onOpenDetails(book, 'comments')}
+          className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md border border-amber-500/30 text-amber-300 text-xs font-bold hover:bg-black/90 transition-all cursor-pointer"
+          title="Ver Comentários"
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+          <span>Comentários</span>
+        </button>
 
         {/* HOVER QUICK READ OVERLAY BUTTON */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-xs p-4 gap-3">
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-xs p-4 gap-2">
           <button
             onClick={() => onRead(book)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black font-extrabold text-xs shadow-lg hover:scale-105 transition-transform cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 text-black font-extrabold text-xs shadow-lg hover:scale-105 transition-transform cursor-pointer"
           >
             <BookOpen className="w-4 h-4" />
-            <span>Ler PDF</span>
+            <span>Ler</span>
+          </button>
+          <button
+            onClick={() => onOpenDetails(book, 'comments')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1e202d] border border-amber-500/40 text-amber-300 font-bold text-xs shadow-lg hover:scale-105 transition-transform cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Comentar</span>
           </button>
         </div>
       </div>
@@ -76,7 +97,7 @@ export const BookCard: React.FC<BookCardProps> = ({
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
         <div className="space-y-1">
           <h3 
-            onClick={() => onOpenDetails(book)}
+            onClick={() => onOpenDetails(book, 'reviews')}
             className="font-bold text-white text-base hover:text-amber-300 cursor-pointer line-clamp-1 transition-colors"
           >
             {book.title}
@@ -105,18 +126,29 @@ export const BookCard: React.FC<BookCardProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             <button
               onClick={() => onRead(book)}
-              className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-300 hover:text-black font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              className="py-2 px-2 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-300 hover:text-black font-bold text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Ler PDF"
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Ler PDF</span>
+              <span>Ler</span>
+            </button>
+
+            <button
+              onClick={() => onOpenDetails(book, 'comments')}
+              className="py-2 px-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 font-bold text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Abrir Comentários"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+              <span>Opinar</span>
             </button>
 
             <button
               onClick={() => onDownload(book)}
-              className="w-full py-2 px-3 rounded-xl bg-[#1e202d] hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              className="py-2 px-2 rounded-xl bg-[#1e202d] hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 font-bold text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Baixar PDF"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Baixar</span>
