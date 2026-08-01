@@ -17,7 +17,7 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Book, Review, BookComment, User, AdminStats } from '../types';
+import { Book, Review, BookComment, User, AdminStats, AppNotification } from '../types';
 import { SAMPLE_BOOKS, SAMPLE_REVIEWS, SAMPLE_COMMENTS, compressBase64Image } from '../utils';
 
 // Helper to strip non-serializable fields
@@ -428,3 +428,77 @@ export async function dbFetchAdminStats(): Promise<AdminStats> {
     };
   }
 }
+
+// -------------------------------------------------------------
+// NOTIFICATIONS DATA LAYER (Real-time Firestore)
+// -------------------------------------------------------------
+
+export async function dbCreateNotification(notif: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'>): Promise<void> {
+  try {
+    const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const docRef = doc(db, 'notifications', notifId);
+    const payload: AppNotification = {
+      ...sanitizeDoc(notif),
+      id: notifId,
+      isRead: false,
+      createdAt: Date.now()
+    };
+    await setDoc(docRef, payload);
+  } catch (err) {
+    console.error('dbCreateNotification error:', err);
+  }
+}
+
+export function dbSubscribeNotifications(
+  userId: string,
+  isAdminUser: boolean,
+  onUpdate: (notifications: AppNotification[]) => void
+): () => void {
+  try {
+    const targetId = isAdminUser ? 'admin' : userId;
+    const q = query(collection(db, 'notifications'), where('userId', '==', targetId));
+    
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: AppNotification[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as AppNotification);
+        });
+        list.sort((a, b) => b.createdAt - a.createdAt);
+        onUpdate(list);
+      },
+      (err) => {
+        console.warn('Notifications subscription error:', err);
+        onUpdate([]);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('dbSubscribeNotifications failed:', err);
+    onUpdate([]);
+    return () => {};
+  }
+}
+
+export async function dbMarkNotificationAsRead(notifId: string): Promise<void> {
+  try {
+    const ref = doc(db, 'notifications', notifId);
+    await updateDoc(ref, { isRead: true });
+  } catch (err) {
+    console.error('dbMarkNotificationAsRead error:', err);
+  }
+}
+
+export async function dbMarkAllNotificationsAsRead(userId: string, isAdminUser: boolean): Promise<void> {
+  try {
+    const targetId = isAdminUser ? 'admin' : userId;
+    const q = query(collection(db, 'notifications'), where('userId', '==', targetId), where('isRead', '==', false));
+    const snap = await getDocs(q);
+    const promises = snap.docs.map(docSnap => updateDoc(docSnap.ref, { isRead: true }));
+    await Promise.all(promises);
+  } catch (err) {
+    console.error('dbMarkAllNotificationsAsRead error:', err);
+  }
+}
+

@@ -84,3 +84,22 @@ export interface AdminStats {
   totalUsers: number;
   totalReviews: number;
 }
+
+export interface AppNotification {
+  id: string;
+  userId: string; // Recipient user ID (e.g. 'admin' or user ID)
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  type: 'new_user' | 'new_review' | 'new_comment' | 'comment_reply' | 'user_mention';
+  title: string;
+  message: string;
+  bookId?: string;
+  bookTitle?: string;
+  commentId?: string;
+  reviewId?: string;
+  targetUserId?: string; // For opening user profiles
+  isRead: boolean;
+  createdAt: number;
+}
+

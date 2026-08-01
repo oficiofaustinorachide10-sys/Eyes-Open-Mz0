@@ -56,5 +56,18 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
+
+    // NOTIFICATIONS COLLECTION (Secured per recipient userId)
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        (resource.data.userId == 'admin' && isAdmin())
+      );
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        (resource.data.userId == 'admin' && isAdmin())
+      );
+    }
   }
 }

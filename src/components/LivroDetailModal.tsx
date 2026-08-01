@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Heart, Download, BookOpen, Star, MessageSquare, ThumbsUp, 
-  Send, Reply, Pin, Copy, Flag, Edit, Trash2, Check, Sparkles, User as UserIcon, MoreHorizontal
+  Send, Reply, Pin, Copy, Flag, Edit, Trash2, Check, Sparkles, User as UserIcon, MoreHorizontal, ArrowLeft, Maximize2
 } from 'lucide-react';
 import { Book, User, Review, BookComment } from '../types';
 import { 
   dbSubscribeReviews, dbAddOrUpdateReview, dbDeleteReview,
-  dbSubscribeComments, dbAddComment, dbUpdateComment, dbDeleteComment, dbToggleCommentLike, dbPinComment, dbReportComment
+  dbSubscribeComments, dbAddComment, dbUpdateComment, dbDeleteComment, dbToggleCommentLike, dbPinComment, dbReportComment,
+  dbCreateNotification
 } from '../lib/db';
 import { dbFetchAllUsers } from '../lib/authService';
+import { ImageViewerModal } from './ImageViewerModal';
 
 interface LivroDetailModalProps {
   book: Book;
   currentUser: User | null;
   isFavorite: boolean;
   initialTab?: 'reviews' | 'comments';
+  targetCommentId?: string;
   onClose: () => void;
   onOpenPdfReader: (book: Book) => void;
   onToggleFavorite: (bookId: string) => void;
@@ -27,12 +30,14 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   currentUser,
   isFavorite,
   initialTab = 'reviews',
+  targetCommentId,
   onClose,
   onOpenPdfReader,
   onToggleFavorite,
   onStartDownload
 }) => {
-  const [activeTab, setActiveTab] = useState<'reviews' | 'comments'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'reviews' | 'comments'>(targetCommentId ? 'comments' : initialTab);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
 
   // Real-time Firestore Reviews & Comments
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -59,15 +64,11 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   const [showMentionsList, setShowMentionsList] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
 
-  // Subscribe to real-time reviews & comments
+  // Subscribe to Reviews & Comments
   useEffect(() => {
-    const unsubRev = dbSubscribeReviews(book.id, (updatedReviews) => {
-      setReviews(updatedReviews);
-    });
-    const unsubComm = dbSubscribeComments(book.id, (updatedComments) => {
-      setComments(updatedComments);
-    });
-    dbFetchAllUsers().then(users => setSystemUsers(users));
+    const unsubRev = dbSubscribeReviews(book.id, setReviews);
+    const unsubComm = dbSubscribeComments(book.id, setComments);
+    dbFetchAllUsers().then(setSystemUsers).catch(() => {});
 
     return () => {
       unsubRev();
@@ -75,7 +76,20 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
     };
   }, [book.id]);
 
-  // Existing user review if any
+  // Target Comment Auto-Scroll & Highlight
+  useEffect(() => {
+    if (targetCommentId && comments.length > 0) {
+      setActiveTab('comments');
+      setTimeout(() => {
+        const el = document.getElementById(`comment-${targetCommentId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+    }
+  }, [targetCommentId, comments]);
+
+  // Existing User Review
   const userExistingReview = useMemo(() => {
     if (!currentUser) return null;
     return reviews.find(r => r.userId === (currentUser.uid || currentUser.id));
@@ -98,7 +112,7 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
     return { counts, total: total || (book.ratingCount || 1), average };
   }, [reviews, book]);
 
-  // Submit/Update Review Handler (Play Store style)
+  // Submit/Update Review Handler with Notification
   const handleSaveReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -119,6 +133,21 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
       };
 
       await dbAddOrUpdateReview(reviewPayload);
+
+      // Create Admin Notification for New Review
+      await dbCreateNotification({
+        userId: 'admin',
+        senderId: currentUser.uid || currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.photoURL || currentUser.avatar,
+        type: 'new_review',
+        title: 'Nova avaliação de obra',
+        message: `${currentUser.name} avaliou a obra "${book.title}" com ${selectedStars} estrela(s).`,
+        bookId: book.id,
+        bookTitle: book.title,
+        reviewId: reviewPayload.id
+      });
+
       setIsRatingFormOpen(false);
       setReviewText('');
     } catch (err: any) {
@@ -160,7 +189,7 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
     setShowMentionsList(false);
   };
 
-  // Submit Comment or Reply
+  // Submit Comment or Reply with Notifications
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !commentText.trim()) return;
@@ -181,6 +210,61 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
       };
 
       await dbAddComment(newComm);
+
+      // Notification 1: Admin Notification for new comment
+      await dbCreateNotification({
+        userId: 'admin',
+        senderId: currentUser.uid || currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.photoURL || currentUser.avatar,
+        type: 'new_comment',
+        title: 'Novo comentário em obra',
+        message: `${currentUser.name} comentou na obra "${book.title}".`,
+        bookId: book.id,
+        bookTitle: book.title,
+        commentId: newComm.id
+      });
+
+      // Notification 2: If reply, notify original comment author
+      if (replyingToCommentId) {
+        const parentComm = comments.find(c => c.id === replyingToCommentId);
+        if (parentComm && parentComm.userId !== (currentUser.uid || currentUser.id)) {
+          await dbCreateNotification({
+            userId: parentComm.userId,
+            senderId: currentUser.uid || currentUser.id,
+            senderName: currentUser.name,
+            senderAvatar: currentUser.photoURL || currentUser.avatar,
+            type: 'comment_reply',
+            title: 'Resposta ao seu comentário',
+            message: `${currentUser.name} respondeu ao seu comentário na obra "${book.title}".`,
+            bookId: book.id,
+            bookTitle: book.title,
+            commentId: newComm.id
+          });
+        }
+      }
+
+      // Notification 3: Check @mentions
+      systemUsers.forEach((u) => {
+        if (
+          u.id !== (currentUser.uid || currentUser.id) &&
+          commentText.toLowerCase().includes(`@${u.name.toLowerCase()}`)
+        ) {
+          dbCreateNotification({
+            userId: u.id,
+            senderId: currentUser.uid || currentUser.id,
+            senderName: currentUser.name,
+            senderAvatar: currentUser.photoURL || currentUser.avatar,
+            type: 'user_mention',
+            title: 'Mencionou você em um comentário',
+            message: `${currentUser.name} mencionou você na obra "${book.title}".`,
+            bookId: book.id,
+            bookTitle: book.title,
+            commentId: newComm.id
+          });
+        }
+      });
+
       setCommentText('');
       setReplyingToCommentId(null);
     } catch (e) {
@@ -223,24 +307,56 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   }, [comments, book, commentSortBy]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto p-6 sm:p-8 space-y-6">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 overflow-y-auto animate-fadeIn">
+      <div className="relative w-full max-w-4xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto p-4 sm:p-8 space-y-6">
         
-        {/* CLOSE BUTTON */}
-        <button
-          onClick={onClose}
-          className="absolute right-5 top-5 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer z-10"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* TOP APP BAR WITH BACK BUTTON (← Voltar) */}
+        <div className="w-full pb-4 border-b border-amber-500/20 flex items-center justify-between">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-300 hover:text-black font-extrabold text-xs sm:text-sm transition-all cursor-pointer shadow-md"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar</span>
+          </button>
+
+          <span className="text-xs font-bold text-amber-300/80 uppercase tracking-widest hidden sm:inline">
+            Publicação do Ala X
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onToggleFavorite(book.id)}
+              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                isFavorite
+                  ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'
+                  : 'bg-white/5 border-amber-500/20 text-gray-400 hover:text-rose-400'
+              }`}
+              title="Favoritar"
+            >
+              <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-400' : ''}`} />
+            </button>
+          </div>
+        </div>
 
         {/* BOOK HERO SHOWCASE */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <img
-            src={book.coverUrl}
-            alt={book.title}
-            className="w-full h-72 md:h-80 rounded-2xl object-cover border-2 border-amber-400/50 shadow-2xl"
-          />
+          
+          {/* COVER IMAGE WITH FULLSCREEN ZOOM TRIGGER */}
+          <div
+            onClick={() => setIsImageViewerOpen(true)}
+            className="relative group cursor-pointer overflow-hidden rounded-2xl border-2 border-amber-400/50 shadow-2xl"
+          >
+            <img
+              src={book.coverUrl}
+              alt={book.title}
+              className="w-full h-72 md:h-80 object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-amber-300 gap-2 p-4 text-center">
+              <Maximize2 className="w-8 h-8 animate-pulse" />
+              <span className="text-xs font-black uppercase tracking-wider">Toque para ampliar imagem</span>
+            </div>
+          </div>
 
           <div className="md:col-span-2 space-y-4 flex flex-col justify-between">
             <div className="space-y-2">
@@ -586,8 +702,11 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
                 return (
                   <div
                     key={comm.id}
+                    id={`comment-${comm.id}`}
                     className={`p-4 rounded-2xl border transition-all space-y-3 ${
-                      comm.pinned
+                      comm.id === targetCommentId
+                        ? 'bg-amber-500/25 border-amber-400 ring-4 ring-amber-500/40 shadow-2xl animate-pulse'
+                        : comm.pinned
                         ? 'bg-amber-500/10 border-amber-500/50 shadow-md'
                         : isWorkAuthor
                         ? 'bg-[#1b1c2e] border-amber-400/40'

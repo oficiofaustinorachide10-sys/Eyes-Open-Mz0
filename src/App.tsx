@@ -11,6 +11,8 @@ import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 // Subcomponents
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
+import { AlaXHeader } from './components/AlaXHeader';
+import { AlaXIntroSplashModal } from './components/AlaXIntroSplashModal';
 import { BookCard } from './components/BookCard';
 import { LivroDetailModal } from './components/LivroDetailModal';
 import { PdfViewerModal } from './components/PdfViewerModal';
@@ -42,7 +44,9 @@ export default function App() {
     return [];
   });
 
-  // Active Modals
+  // Active Modals & Splash Video State
+  const [showIntroSplash, setShowIntroSplash] = useState<boolean>(false);
+  const [splashMode, setSplashMode] = useState<'login' | 'register' | 'manual'>('login');
   const [selectedBookForDetails, setSelectedBookForDetails] = useState<{ book: Book; initialTab?: 'reviews' | 'comments' } | null>(null);
   const [selectedBookForPdfReader, setSelectedBookForPdfReader] = useState<Book | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
@@ -249,10 +253,20 @@ export default function App() {
       <div className="min-h-screen bg-[#07080d]">
         <AuthModal
           canClose={false}
-          onLoginSuccess={(user) => {
+          onLoginSuccess={(user, mode) => {
             setCurrentUser(user);
+            setSplashMode(mode || 'login');
+            setShowIntroSplash(true);
           }}
         />
+
+        {showIntroSplash && (
+          <AlaXIntroSplashModal
+            user={currentUser}
+            mode={splashMode}
+            onClose={() => setShowIntroSplash(false)}
+          />
+        )}
       </div>
     );
   }
@@ -260,7 +274,26 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0d0e15] text-amber-50 selection:bg-amber-500 selection:text-black font-sans antialiased flex flex-col justify-between">
       
-      {/* HEADER & NAVBAR */}
+      {/* ALA X HEADER WITH CENTERED TYPOGRAPHY & BLURRED MOTION VIDEO BACKDROP */}
+      <AlaXHeader
+        currentUser={currentUser}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onOpenIntroVideo={() => {
+          setSplashMode('manual');
+          setShowIntroSplash(true);
+        }}
+        onOpenAdmin={() => setIsAdminPanelOpen(true)}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenFavorites={() => setShowOnlyFavorites(!showOnlyFavorites)}
+        onOpenDownloads={() => setIsDownloadsModalOpen(true)}
+        favoriteCount={favoriteBookIds.length}
+        downloadCount={downloadedItems.length}
+        onLogout={handleLogoutAction}
+      />
+
+      {/* NAVBAR NAVIGATION CATEGORIES */}
       <Navbar
         currentUser={currentUser}
         searchQuery={searchQuery}
@@ -477,6 +510,14 @@ export default function App() {
           onUserUpdated={(updated) => {
             setCurrentUser(updated);
           }}
+        />
+      )}
+
+      {showIntroSplash && (
+        <AlaXIntroSplashModal
+          user={currentUser}
+          mode={splashMode}
+          onClose={() => setShowIntroSplash(false)}
         />
       )}
 

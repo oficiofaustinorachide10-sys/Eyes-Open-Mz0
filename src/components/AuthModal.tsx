@@ -5,7 +5,7 @@ import { loginWithGoogle, loginWithEmail, registerWithEmail, requestPasswordRese
 
 interface AuthModalProps {
   onClose?: () => void;
-  onLoginSuccess: (user: User) => void;
+  onLoginSuccess: (user: User, mode?: 'login' | 'register') => void;
   canClose?: boolean;
 }
 
@@ -28,7 +28,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess, c
     setIsLoading(true);
     try {
       const user = await loginWithGoogle();
-      onLoginSuccess(user);
+      onLoginSuccess(user, 'login');
       if (onClose) onClose();
     } catch (err: any) {
       console.error('Google Login Error:', err);
@@ -123,10 +123,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess, c
       let user: User;
       if (mode === 'login') {
         user = await loginWithEmail(email.trim(), password);
+        onLoginSuccess(user, 'login');
       } else {
         user = await registerWithEmail(email.trim(), password, name.trim());
+        onLoginSuccess(user, 'register');
       }
-      onLoginSuccess(user);
       if (onClose) onClose();
     } catch (err: any) {
       console.error('Auth submit error:', err);
