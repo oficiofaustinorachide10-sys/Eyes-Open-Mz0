@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, PlusCircle, BookOpen, Trash2, Edit3, Upload, Shield, 
-  BarChart3, FileText, CheckCircle2, AlertCircle, RefreshCw, Star, Download, Users
+  X, Plus, Trash2, Edit, BookOpen, Upload, Sparkles, Check, 
+  Search, Shield, AtSign, Loader2, AlertCircle, FileText, User as UserIcon
 } from 'lucide-react';
-import { Book, User, AdminStats } from '../types';
-import { dbCreateBook, dbDeleteBook, dbUpdateBook, dbFetchAdminStats } from '../lib/db';
+import { Book, User } from '../types';
+import { dbCreateBook, dbDeleteBook, dbUpdateBook } from '../lib/db';
+import { dbFetchAllUsers } from '../lib/authService';
 import { BOOK_CATEGORIES, compressBase64Image } from '../utils';
 
 interface AdminPanelModalProps {
   currentUser: User | null;
   books: Book[];
   onClose: () => void;
-  onBookAdded: (newBook: Book) => void;
+  onBookAdded: (book: Book) => void;
   onBookDeleted: (bookId: string) => void;
 }
 
@@ -22,540 +23,520 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onBookAdded,
   onBookDeleted
 }) => {
-  const [activeTab, setActiveTab] = useState<'upload' | 'manage' | 'stats'>('upload');
+  // Discrete permission guard
+  const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
 
-  // Form state
+  const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
+  
+  // Form State
   const [title, setTitle] = useState('');
-  const [author, setAuthor] = useState('');
-  const [authorUserId, setAuthorUserId] = useState<string | undefined>(undefined);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [authorInput, setAuthorInput] = useState('');
+  const [selectedAuthorUser, setSelectedAuthorUser] = useState<User | null>(null);
   const [synopsis, setSynopsis] = useState('');
-
-  const SAMPLE_USERS_LIST = [
-    { id: 'admin_alax_master', name: 'Ofício Faustino Rachide (Admin)', email: 'admin@alax.mz', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200' },
-    { id: 'user-reader-4', name: 'Eurico Machava', email: 'eurico@exemplo.mz', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150' },
-    { id: 'user-reader-2', name: 'Ana Paula Langa', email: 'ana@exemplo.mz', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150' },
-    { id: 'user-gato', name: 'Gato Escritor', email: 'gato@exemplo.mz', avatar: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=150' }
-  ];
-
-  const filteredUsers = SAMPLE_USERS_LIST.filter(u => {
-    const q = author.startsWith('@') ? author.slice(1).toLowerCase() : author.toLowerCase();
-    if (!q) return true;
-    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-  });
-  const [category, setCategory] = useState('Drama');
-  const [language, setLanguage] = useState('Português');
-  const [pageCount, setPageCount] = useState<number>(120);
-  const [publishedYear, setPublishedYear] = useState<number>(new Date().getFullYear());
+  const [category, setCategory] = useState(BOOK_CATEGORIES[0]?.name || 'Ficção');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [pdfUrl, setPdfUrl] = useState('');
+  const [pageCount, setPageCount] = useState(150);
+  const [publishedYear, setPublishedYear] = useState(2026);
   const [isFeatured, setIsFeatured] = useState(false);
 
-  // File uploads state
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string>('');
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfUrlInput, setPdfUrlInput] = useState<string>('');
+  // User Autocomplete for Author Selection
+  const [systemUsers, setSystemUsers] = useState<User[]>([]);
+  const [showAuthorSuggestions, setShowAuthorSuggestions] = useState(false);
+  const [filteredUserSuggestions, setFilteredUserSuggestions] = useState<User[]>([]);
 
-  const [isUploading, setIsUploading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  // Admin stats
-  const [stats, setStats] = useState<AdminStats>({
-    totalBooks: books.length,
-    totalDownloads: books.reduce((acc, b) => acc + (b.downloadCount || 0), 0),
-    totalUsers: 14,
-    totalReviews: 24
-  });
+  // Editing state
+  const [editingBookId, setEditingBookId] = useState<string | null>(null);
 
+  // Load registered users on mount for @mentions and author selection
   useEffect(() => {
-    dbFetchAdminStats().then(setStats).catch(console.error);
-  }, [books]);
+    dbFetchAllUsers().then((users) => {
+      setSystemUsers(users);
+    });
+  }, []);
 
-  // Handle Cover File Upload (convert to compressed Base64)
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle author input change & @ trigger
+  const handleAuthorInputChange = (val: string) => {
+    setAuthorInput(val);
+    setSelectedAuthorUser(null);
+
+    // If typing @ or search query
+    if (val.includes('@')) {
+      const query = val.split('@').pop()?.toLowerCase() || '';
+      const matches = systemUsers.filter(u => 
+        u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query)
+      );
+      setFilteredUserSuggestions(matches);
+      setShowAuthorSuggestions(true);
+    } else if (val.trim().length > 0) {
+      const query = val.toLowerCase().trim();
+      const matches = systemUsers.filter(u => 
+        u.name.toLowerCase().includes(query)
+      );
+      setFilteredUserSuggestions(matches);
+      setShowAuthorSuggestions(matches.length > 0);
+    } else {
+      setShowAuthorSuggestions(false);
+    }
+  };
+
+  const selectAuthorUser = (user: User) => {
+    setAuthorInput(user.name);
+    setSelectedAuthorUser(user);
+    setShowAuthorSuggestions(false);
+  };
+
+  // Image & File upload base64 helpers
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setCoverFile(file);
       const reader = new FileReader();
-      reader.onload = async (event) => {
-        const rawUrl = event.target?.result as string;
-        const compressed = await compressBase64Image(rawUrl, 800, 0.65);
-        setCoverPreviewUrl(compressed);
+      reader.onload = async (ev) => {
+        const rawBase64 = ev.target?.result as string;
+        try {
+          const compressed = await compressBase64Image(rawBase64, 800, 0.7);
+          setCoverUrl(compressed);
+        } catch (err) {
+          setCoverUrl(rawBase64);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Handle PDF File Upload (convert to Blob Data URL)
-  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPdfFile(file);
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        setPdfUrlInput(result);
+      reader.onload = (ev) => {
+        setPdfUrl(ev.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Submit Upload Form
-  const handlePublishSubmit = async (e: React.FormEvent) => {
+  const handleSubmitBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !author.trim() || !synopsis.trim()) {
-      setStatusMessage({ type: 'error', text: 'Por favor preencha todos os campos obrigatórios.' });
+    if (!isPublisher) {
+      setErrorMsg('Sem permissão para realizar esta operação.');
       return;
     }
 
-    const finalCoverUrl = coverPreviewUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=600';
-    const finalPdfUrl = pdfUrlInput || 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
+    if (!title.trim() || !authorInput.trim() || !synopsis.trim() || !pdfUrl) {
+      setErrorMsg('Preencha os campos obrigatórios: Título, Autor, Sinopse e Ficheiro PDF.');
+      return;
+    }
 
-    setIsUploading(true);
-    setStatusMessage(null);
+    setIsLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
 
     try {
-      const newBook: Book = {
-        id: `book_${Date.now()}`,
-        title: title.trim(),
-        author: author.trim().replace(/^@/, ''),
-        authorUserId: authorUserId || (author.startsWith('@') ? 'user_tagged' : undefined),
-        publisherUserId: currentUser?.id || 'admin_alax_master',
-        synopsis: synopsis.trim(),
-        category,
-        coverUrl: finalCoverUrl,
-        pdfUrl: finalPdfUrl,
-        createdAt: Date.now(),
-        downloadCount: 0,
-        likesCount: 0,
-        ratingAverage: 5.0,
-        ratingCount: 1,
-        pageCount: Number(pageCount) || 120,
-        language: language.trim(),
-        publishedYear: Number(publishedYear) || 2026,
-        isFeatured,
-        uploadedBy: currentUser?.name || 'Administrador Ala X'
-      };
+      const finalCover = coverUrl.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800';
 
-      const created = await dbCreateBook(newBook);
-      onBookAdded(created);
+      if (editingBookId) {
+        await dbUpdateBook(editingBookId, {
+          title: title.trim(),
+          author: authorInput.trim(),
+          authorUserId: selectedAuthorUser?.uid || selectedAuthorUser?.id,
+          synopsis: synopsis.trim(),
+          category,
+          coverUrl: finalCover,
+          pdfUrl: pdfUrl.trim(),
+          pageCount,
+          publishedYear,
+          isFeatured
+        });
+        setSuccessMsg('Obra atualizada com sucesso!');
+        setEditingBookId(null);
+      } else {
+        const newBookPayload: Book = {
+          id: `book_${Date.now()}`,
+          title: title.trim(),
+          author: authorInput.trim(),
+          authorUserId: selectedAuthorUser?.uid || selectedAuthorUser?.id,
+          publisherUserId: currentUser?.uid || currentUser?.id, // Secret publisher link
+          synopsis: synopsis.trim(),
+          category,
+          coverUrl: finalCover,
+          pdfUrl: pdfUrl.trim(),
+          createdAt: Date.now(),
+          downloadCount: 0,
+          likesCount: 0,
+          ratingAverage: 5.0,
+          ratingCount: 1,
+          pageCount,
+          publishedYear,
+          isFeatured,
+          uploadedBy: currentUser?.uid
+        };
 
-      setStatusMessage({ type: 'success', text: `A obra "${created.title}" foi publicada com sucesso no Ala X!` });
+        const created = await dbCreateBook(newBookPayload);
+        onBookAdded(created);
+        setSuccessMsg('Nova obra publicada com sucesso!');
+      }
 
       // Reset Form
       setTitle('');
-      setAuthor('');
-      setAuthorUserId(undefined);
-      setShowUserDropdown(false);
+      setAuthorInput('');
+      setSelectedAuthorUser(null);
       setSynopsis('');
-      setCoverFile(null);
-      setCoverPreviewUrl('');
-      setPdfFile(null);
-      setPdfUrlInput('');
+      setCoverUrl('');
+      setPdfUrl('');
       setIsFeatured(false);
+
+      setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
-      console.error(err);
-      setStatusMessage({ type: 'error', text: `Erro ao publicar obra: ${err?.message || 'Falha na gravação'}` });
+      console.error('Publish error:', err);
+      setErrorMsg(err.message || 'Erro ao publicar obra no Firestore.');
     } finally {
-      setIsUploading(false);
+      setIsLoading(false);
     }
   };
 
-  // Delete Book
-  const handleDeleteBook = async (bookId: string, bookTitle: string) => {
-    if (window.confirm(`Tem a certeza que deseja eliminar a obra "${bookTitle}" permanentemente do Ala X?`)) {
+  const handleEditBookInit = (b: Book) => {
+    setEditingBookId(b.id);
+    setTitle(b.title);
+    setAuthorInput(b.author);
+    setSynopsis(b.synopsis);
+    setCategory(b.category);
+    setCoverUrl(b.coverUrl);
+    setPdfUrl(b.pdfUrl);
+    setPageCount(b.pageCount || 150);
+    setPublishedYear(b.publishedYear || 2026);
+    setIsFeatured(Boolean(b.isFeatured));
+    setActiveTab('create');
+  };
+
+  const handleDeleteBookInit = async (bookId: string) => {
+    if (!isPublisher) return;
+    if (confirm('Tem a certeza que deseja remover esta obra do sistema?')) {
       try {
         await dbDeleteBook(bookId);
         onBookDeleted(bookId);
       } catch (e) {
-        console.error('Error deleting book:', e);
+        console.error(e);
       }
     }
   };
 
+  if (!isPublisher) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="bg-[#141622] border border-rose-500/40 rounded-3xl p-6 text-center max-w-sm space-y-4">
+          <AlertCircle className="w-12 h-12 text-rose-400 mx-auto" />
+          <h3 className="text-base font-bold text-white">Acesso Restrito</h3>
+          <p className="text-xs text-gray-400">Não tem permissões para aceder a este recurso.</p>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold">
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-3xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto p-6 sm:p-8 space-y-6">
         
-        {/* MODAL HEADER */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-amber-500/20 bg-[#181a27]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-black font-black">
-              <Shield className="w-5 h-5" />
-            </div>
+        {/* HEADER */}
+        <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
+          <div className="flex items-center gap-2.5">
+            <BookOpen className="w-6 h-6 text-amber-400" />
             <div>
-              <h2 className="text-lg font-black text-white flex items-center gap-2">
-                Gestão de Obras — Ala X
-              </h2>
-              <p className="text-xs text-amber-300">
-                Publicação de novas obras em PDF e catálogo
-              </p>
+              <h3 className="font-bold text-white text-lg font-serif">Gestão de Obras Literárias</h3>
+              <p className="text-[11px] text-amber-300">Publicação e catalogação oficial de PDFs</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-gray-400 transition-all cursor-pointer"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* NAVIGATION TABS */}
-        <div className="flex items-center gap-2 px-6 pt-4 bg-[#181a27] border-b border-amber-500/10">
+        {/* TAB SWITCHER */}
+        <div className="grid grid-cols-2 p-1 bg-[#181a26] rounded-xl border border-amber-500/20">
           <button
-            onClick={() => setActiveTab('upload')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all border-b-2 cursor-pointer ${
-              activeTab === 'upload'
-                ? 'bg-[#141622] text-amber-300 border-amber-400'
-                : 'text-gray-400 border-transparent hover:text-white'
+            type="button"
+            onClick={() => setActiveTab('create')}
+            className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'create' ? 'bg-amber-500 text-black shadow' : 'text-gray-400 hover:text-white'
             }`}
           >
-            <Upload className="w-4 h-4" />
-            <span>Publicar Nova Obra</span>
+            {editingBookId ? 'Editar Obra em Destaque' : 'Publicar Nova Obra'}
           </button>
-
           <button
+            type="button"
             onClick={() => setActiveTab('manage')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all border-b-2 cursor-pointer ${
-              activeTab === 'manage'
-                ? 'bg-[#141622] text-amber-300 border-amber-400'
-                : 'text-gray-400 border-transparent hover:text-white'
+            className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'manage' ? 'bg-amber-500 text-black shadow' : 'text-gray-400 hover:text-white'
             }`}
           >
-            <BookOpen className="w-4 h-4" />
-            <span>Gerir Obras ({books.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all border-b-2 cursor-pointer ${
-              activeTab === 'stats'
-                ? 'bg-[#141622] text-amber-300 border-amber-400'
-                : 'text-gray-400 border-transparent hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Estatísticas & Métricas</span>
+            Catálogo Existente ({books.length})
           </button>
         </div>
 
-        {/* TAB BODY */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
-          
-          {/* TAB 1: UPLOAD FORM */}
-          {activeTab === 'upload' && (
-            <form onSubmit={handlePublishSubmit} className="space-y-6">
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold">
+            {errorMsg}
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* TAB 1: CREATE / EDIT FORM */}
+        {activeTab === 'create' && (
+          <form onSubmit={handleSubmitBook} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               
-              {statusMessage && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 text-xs font-bold border ${
-                  statusMessage.type === 'success' 
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
-                    : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                }`}>
-                  {statusMessage.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-                  <span>{statusMessage.text}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
-                {/* TITLE */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-amber-200">Título da Obra *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: A Madrasta"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-[#181a26] border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 placeholder-gray-500 outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                {/* AUTHOR WITH @ USER AUTOCOMPLETE */}
-                <div className="space-y-1 relative">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-amber-200">Autor / Escritor da Obra *</label>
-                    <span className="text-[10px] text-amber-400">Escreva <code className="bg-amber-500/20 px-1 rounded text-amber-300">@</code> para selecionar utilizador</span>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: @Gato ou Ofício Faustino"
-                    value={author}
-                    onFocus={() => setShowUserDropdown(true)}
-                    onChange={(e) => {
-                      setAuthor(e.target.value);
-                      setShowUserDropdown(true);
-                    }}
-                    className="w-full bg-[#181a26] border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 placeholder-gray-500 outline-none focus:border-amber-400"
-                  />
-
-                  {/* USER AUTOCOMPLETE DROPDOWN */}
-                  {showUserDropdown && filteredUsers.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-[#181a27] border border-amber-500/30 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto space-y-1">
-                      <p className="text-[10px] text-amber-300 font-bold px-2 py-1 uppercase tracking-wider">
-                        Utilizadores Registados (Vincular Autor):
-                      </p>
-                      {filteredUsers.map((usr) => (
-                        <button
-                          key={usr.id}
-                          type="button"
-                          onClick={() => {
-                            setAuthor(usr.name);
-                            setAuthorUserId(usr.id);
-                            setShowUserDropdown(false);
-                          }}
-                          className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-amber-500/20 transition-all text-left cursor-pointer group"
-                        >
-                          <img
-                            src={usr.avatar}
-                            alt={usr.name}
-                            className="w-7 h-7 rounded-full object-cover border border-amber-400/30"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="text-xs font-bold text-white group-hover:text-amber-300 block truncate">
-                              {usr.name}
-                            </span>
-                            <span className="text-[10px] text-gray-400 block truncate font-mono">
-                              {usr.email}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* CATEGORY, LANGUAGE, YEAR */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-amber-200">Categoria / Gênero</label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-[#181a26] border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 outline-none focus:border-amber-400"
-                  >
-                    {BOOK_CATEGORIES.filter(c => c.slug !== 'todas').map(cat => (
-                      <option key={cat.id} value={cat.name}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-amber-200">Páginas</label>
-                  <input
-                    type="number"
-                    value={pageCount}
-                    onChange={(e) => setPageCount(Number(e.target.value))}
-                    className="w-full bg-[#181a26] border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-amber-200">Ano de Publicação</label>
-                  <input
-                    type="number"
-                    value={publishedYear}
-                    onChange={(e) => setPublishedYear(Number(e.target.value))}
-                    className="w-full bg-[#181a26] border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* SYNOPSIS */}
+              {/* TITLE */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-amber-200">Sinopse Detalhada *</label>
-                <textarea
-                  rows={4}
-                  required
-                  placeholder="Escreva a sinopse completa da obra literária..."
-                  value={synopsis}
-                  onChange={(e) => setSynopsis(e.target.value)}
-                  className="w-full bg-[#181a26] border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 placeholder-gray-500 outline-none focus:border-amber-400"
-                />
-              </div>
-
-              {/* FILE UPLOADS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-2xl bg-[#181a26] border border-amber-500/20">
-                
-                {/* COVER UPLOAD */}
-                <div className="space-y-3">
-                  <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                    <Upload className="w-4 h-4 text-amber-400" />
-                    <span>Upload de Imagem de Capa</span>
-                  </label>
-                  
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleCoverChange}
-                    className="w-full text-xs text-gray-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-black hover:file:bg-amber-400 cursor-pointer"
-                  />
-
-                  {coverPreviewUrl && (
-                    <div className="relative w-24 h-32 rounded-lg overflow-hidden border border-amber-400">
-                      <img src={coverPreviewUrl} alt="Cover preview" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                </div>
-
-                {/* PDF UPLOAD */}
-                <div className="space-y-3">
-                  <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-amber-400" />
-                    <span>Upload de Ficheiro PDF</span>
-                  </label>
-
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={handlePdfChange}
-                    className="w-full text-xs text-gray-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-500 file:text-black hover:file:bg-emerald-400 cursor-pointer"
-                  />
-
-                  <div className="pt-2">
-                    <span className="text-[10px] text-gray-400 block pb-1">Ou cole um Link URL direto de PDF:</span>
-                    <input
-                      type="url"
-                      placeholder="https://exemplo.com/obra.pdf"
-                      value={pdfUrlInput}
-                      onChange={(e) => setPdfUrlInput(e.target.value)}
-                      className="w-full bg-[#11131c] border border-amber-500/20 rounded-xl p-2 text-xs text-amber-100 outline-none"
-                    />
-                  </div>
-                </div>
-
-              </div>
-
-              {/* FEATURED CHECKBOX */}
-              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-amber-200">Título da Obra *</label>
                 <input
-                  type="checkbox"
-                  id="isFeaturedCheck"
-                  checked={isFeatured}
-                  onChange={(e) => setIsFeatured(e.target.checked)}
-                  className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-400"
+                  type="text"
+                  required
+                  placeholder="Ex: O Leitor Noturno"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
                 />
-                <label htmlFor="isFeaturedCheck" className="text-xs text-amber-200 font-semibold cursor-pointer">
-                  Destacar esta obra no Banner Principal do Ala X
-                </label>
               </div>
 
-              {/* SUBMIT BUTTON */}
-              <button
-                type="submit"
-                disabled={isUploading}
-                className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-black font-extrabold text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 hover:scale-[1.01] transition-all cursor-pointer"
-              >
-                {isUploading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
-                <span>{isUploading ? 'A publicar Obra...' : 'Publicar Obra no Ala X'}</span>
-              </button>
+              {/* AUTHOR SELECTION (WITH @ USER AUTOCOMPLETE) */}
+              <div className="space-y-1 relative">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-amber-200">Autor da Obra *</label>
+                  <span className="text-[10px] text-amber-400">Digite @ para sugerir utilizadores</span>
+                </div>
+                <div className="relative">
+                  <AtSign className="absolute left-3 top-2.5 w-4 h-4 text-amber-400/60" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Digite o autor ou @para selecionar da lista"
+                    value={authorInput}
+                    onChange={(e) => handleAuthorInputChange(e.target.value)}
+                    className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl pl-9 pr-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
+                  />
+                </div>
 
-            </form>
-          )}
-
-          {/* TAB 2: MANAGE BOOKS */}
-          {activeTab === 'manage' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs text-gray-400 pb-2 border-b border-amber-500/10">
-                <span>Lista completa de obras cadastradas no Cloud Firestore</span>
-                <span>Total: {books.length} obras</span>
-              </div>
-
-              <div className="space-y-3">
-                {books.map((b) => (
-                  <div key={b.id} className="p-4 rounded-2xl bg-[#181a26] border border-amber-500/15 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                      <img
-                        src={b.coverUrl}
-                        alt={b.title}
-                        className="w-12 h-16 rounded-lg object-cover border border-amber-500/30 shrink-0"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white text-sm">{b.title}</h4>
-                          <span className="px-2 py-0.5 text-[9px] rounded bg-amber-500/20 text-amber-300 font-black uppercase">
-                            {b.category}
-                          </span>
-                        </div>
-                        <p className="text-xs text-amber-300/80">Por {b.author}</p>
-                        <div className="flex items-center gap-3 text-[10px] text-gray-400 pt-1">
-                          <span>Downloads: <strong className="text-emerald-400">{b.downloadCount || 0}</strong></span>
-                          <span>Nota: <strong className="text-amber-400">{b.ratingAverage?.toFixed(1) || '5.0'}</strong></span>
+                {/* USER AUTOCOMPLETE DROPDOWN */}
+                {showAuthorSuggestions && filteredUserSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-[#181a29] border border-amber-500/40 rounded-xl shadow-xl max-h-40 overflow-y-auto p-1 divide-y divide-amber-500/10">
+                    {filteredUserSuggestions.map((u) => (
+                      <div
+                        key={u.id}
+                        onClick={() => selectAuthorUser(u)}
+                        className="p-2 hover:bg-amber-500/20 transition-all cursor-pointer flex items-center gap-2.5 rounded-lg"
+                      >
+                        <img
+                          src={u.photoURL || u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
+                          alt={u.name}
+                          className="w-6 h-6 rounded-full object-cover border border-amber-400"
+                        />
+                        <div>
+                          <p className="font-bold text-xs text-amber-100">{u.name}</p>
+                          <p className="text-[10px] text-gray-400">{u.email}</p>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      <button
-                        onClick={() => handleDeleteBook(b.id, b.title)}
-                        className="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Apagar</span>
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
+              </div>
+
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              
+              {/* CATEGORY */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-200">Categoria</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
+                >
+                  {BOOK_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* PAGE COUNT */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-200">N.º de Páginas</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={pageCount}
+                  onChange={(e) => setPageCount(parseInt(e.target.value) || 100)}
+                  className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* PUBLISHED YEAR */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-200">Ano de Publicação</label>
+                <input
+                  type="number"
+                  value={publishedYear}
+                  onChange={(e) => setPublishedYear(parseInt(e.target.value) || 2026)}
+                  className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
+                />
+              </div>
+
+            </div>
+
+            {/* SYNOPSIS */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-amber-200">Sinopse da Obra *</label>
+              <textarea
+                rows={3}
+                required
+                placeholder="Escreva uma descrição detalhada sobre o livro..."
+                value={synopsis}
+                onChange={(e) => setSynopsis(e.target.value)}
+                className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl p-3 text-xs text-amber-100 outline-none focus:border-amber-400 resize-none"
+              />
+            </div>
+
+            {/* COVER URL OR UPLOAD */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-amber-200">Capa do Livro (URL ou Ficheiro Imagem)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  placeholder="https://exemplo.com/capa.jpg"
+                  value={coverUrl}
+                  onChange={(e) => setCoverUrl(e.target.value)}
+                  className="flex-1 bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
+                />
+                <label className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black font-bold text-xs cursor-pointer border border-amber-500/30 shrink-0">
+                  <span>Carregar Imagem</span>
+                  <input type="file" accept="image/*" onChange={handleCoverUpload} className="hidden" />
+                </label>
               </div>
             </div>
-          )}
 
-          {/* TAB 3: STATS & METRICS */}
-          {activeTab === 'stats' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                
-                <div className="p-5 rounded-2xl bg-[#181a26] border border-amber-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400 font-semibold">Total de Obras</span>
-                    <BookOpen className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <p className="text-3xl font-black text-white">{stats.totalBooks}</p>
-                  <span className="text-[10px] text-amber-300">Catálogo Ativo</span>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-[#181a26] border border-emerald-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400 font-semibold">Total Downloads PDF</span>
-                    <Download className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <p className="text-3xl font-black text-emerald-400">{stats.totalDownloads}</p>
-                  <span className="text-[10px] text-emerald-300">Downloads no Firestore</span>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-[#181a26] border border-amber-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400 font-semibold">Utilizadores Ala X</span>
-                    <Users className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <p className="text-3xl font-black text-white">{stats.totalUsers}</p>
-                  <span className="text-[10px] text-gray-400">Leitores Registados</span>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-[#181a26] border border-amber-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400 font-semibold">Avaliações</span>
-                    <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
-                  </div>
-                  <p className="text-3xl font-black text-amber-300">{stats.totalReviews}</p>
-                  <span className="text-[10px] text-gray-400">Comentários & Estrelas</span>
-                </div>
-
-              </div>
-
-              <div className="p-6 rounded-2xl bg-[#181a26] border border-amber-500/20 space-y-3">
-                <h4 className="font-extrabold text-white text-sm">Informações de Servidor & Firestore</h4>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  A base de dados do <strong>Ala X</strong> está conectada ao Cloud Firestore em tempo real. As atualizações de contadores de downloads e publicação de obras são propagadas automaticamente para todos os leitores.
-                </p>
+            {/* PDF URL OR UPLOAD */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-amber-200">Documento PDF * (URL ou Carregar Ficheiro PDF)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  required
+                  placeholder="https://exemplo.com/documento.pdf"
+                  value={pdfUrl}
+                  onChange={(e) => setPdfUrl(e.target.value)}
+                  className="flex-1 bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-100 outline-none focus:border-amber-400"
+                />
+                <label className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black font-bold text-xs cursor-pointer border border-emerald-500/30 shrink-0">
+                  <span>Escolher PDF</span>
+                  <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="hidden" />
+                </label>
               </div>
             </div>
-          )}
 
-        </div>
+            {/* FEATURED TOGGLE */}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="isFeatured"
+                checked={isFeatured}
+                onChange={(e) => setIsFeatured(e.target.checked)}
+                className="w-4 h-4 accent-amber-500 cursor-pointer"
+              />
+              <label htmlFor="isFeatured" className="text-xs text-amber-200 font-bold cursor-pointer">
+                Destacar esta obra no Hero Banner Principal
+              </label>
+            </div>
+
+            {/* SUBMIT BUTTON */}
+            <div className="pt-2 flex justify-end gap-3 border-t border-amber-500/10">
+              {editingBookId && (
+                <button
+                  type="button"
+                  onClick={() => { setEditingBookId(null); setTitle(''); setAuthorInput(''); setSynopsis(''); setCoverUrl(''); setPdfUrl(''); }}
+                  className="px-4 py-2 rounded-xl bg-white/5 text-gray-400 text-xs font-bold"
+                >
+                  Cancelar Edição
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isLoading && <Loader2 className="w-4 h-4 animate-spin text-black" />}
+                <span>{editingBookId ? 'Guardar Alterações' : 'Publicar Obra'}</span>
+              </button>
+            </div>
+
+          </form>
+        )}
+
+        {/* TAB 2: MANAGE EXISTING BOOKS */}
+        {activeTab === 'manage' && (
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            {books.length === 0 ? (
+              <p className="text-center py-8 text-xs text-gray-400">Nenhuma obra publicada no catálogo.</p>
+            ) : (
+              books.map((b) => (
+                <div
+                  key={b.id}
+                  className="p-3.5 rounded-2xl bg-[#181a26] border border-amber-500/20 flex items-center justify-between gap-4 hover:border-amber-500/40 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={b.coverUrl}
+                      alt={b.title}
+                      className="w-10 h-14 rounded-lg object-cover border border-amber-500/30"
+                    />
+                    <div>
+                      <h5 className="font-bold text-white text-xs">{b.title}</h5>
+                      <p className="text-[11px] text-amber-300">Por {b.author}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 pt-0.5">
+                        <span className="text-emerald-400 font-semibold">{b.category}</span>
+                        <span>•</span>
+                        <span>{b.downloadCount || 0} downloads</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleEditBookInit(b)}
+                      className="p-2 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black transition-colors cursor-pointer"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBookInit(b.id)}
+                      className="p-2 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
       </div>
     </div>

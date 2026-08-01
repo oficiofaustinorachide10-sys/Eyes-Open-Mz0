@@ -16,15 +16,14 @@ export interface User {
   readHistory?: string[];
   createdAt: number;
   lastLogin?: number;
-  isGuest?: boolean;
 }
 
 export interface Book {
   id: string;
   title: string;
   author: string;
-  authorUserId?: string;
-  publisherUserId?: string;
+  authorUserId?: string; // UID of user if work author is a system user
+  publisherUserId?: string; // Secret publisher UID
   synopsis: string;
   category: string;
   coverUrl: string;
@@ -51,6 +50,7 @@ export interface Review {
   rating: number; // 1 to 5 stars
   comment: string;
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface BookComment {
@@ -61,10 +61,12 @@ export interface BookComment {
   userAvatar: string;
   text: string;
   createdAt: number;
+  updatedAt?: number;
   likesCount: number;
   likedBy?: string[];
-  parentId?: string | null;
-  isAuthor?: boolean;
+  parentId?: string | null; // For nested thread replies
+  pinned?: boolean;
+  reportedBy?: string[];
 }
 
 export interface BookCategory {

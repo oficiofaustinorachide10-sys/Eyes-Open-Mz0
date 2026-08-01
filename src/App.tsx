@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Book, User } from './types';
 import { dbSubscribeBooks, dbIncrementBookDownloads } from './lib/db';
-import { getStoredUser, saveStoredUser, subscribeToAuth, logoutUser } from './lib/authService';
+import { subscribeToAuth, logoutUser } from './lib/authService';
 import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 
 // Subcomponents
@@ -17,14 +17,12 @@ import { PdfViewerModal } from './components/PdfViewerModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { AuthModal } from './components/AuthModal';
 import { UserProfileModal } from './components/UserProfileModal';
-import { ContinueSessionModal } from './components/ContinueSessionModal';
 import { DownloadedBooksModal, DownloadedItem } from './components/DownloadedBooksModal';
 
 export default function App() {
   const [books, setBooks] = useState<Book[]>(SAMPLE_BOOKS);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [savedSessionUser, setSavedSessionUser] = useState<User | null>(null);
-  const [showSessionPrompt, setShowSessionPrompt] = useState<boolean>(false);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('todas');
@@ -41,17 +39,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return [
-      {
-        id: 'dl_sample_1',
-        bookId: SAMPLE_BOOKS[0]?.id || 'book-1',
-        book: SAMPLE_BOOKS[0],
-        downloadedAt: Date.now() - 3600000,
-        progress: 100,
-        status: 'completed',
-        fileSizeFormatted: '4.2 MB'
-      }
-    ];
+    return [];
   });
 
   // Active Modals
@@ -72,32 +60,23 @@ export default function App() {
     }
   }, [downloadedItems]);
 
-  // Check stored session on load & listen for Firebase Auth state changes
+  // Firebase Auth state listener
   useEffect(() => {
-    const stored = getStoredUser();
-    if (stored) {
-      setSavedSessionUser(stored);
-      setShowSessionPrompt(true);
-    }
-
     const unsubAuth = subscribeToAuth((fbUser) => {
-      if (fbUser) {
-        setCurrentUser(fbUser);
-        saveStoredUser(fbUser);
-        setShowSessionPrompt(false);
-      }
+      setCurrentUser(fbUser);
+      setAuthChecked(true);
     });
-
     return () => unsubAuth();
   }, []);
 
-  // Firestore real-time listener for books
+  // Firestore real-time listener for books (only active when logged in)
   useEffect(() => {
+    if (!currentUser) return;
     const unsub = dbSubscribeBooks((updatedBooks) => {
       setBooks(updatedBooks);
     });
     return () => unsub();
-  }, []);
+  }, [currentUser]);
 
   // Filter & Sort Books
   const filteredBooks = useMemo(() => {
@@ -150,11 +129,6 @@ export default function App() {
     return books.find(b => b.isFeatured) || books[0];
   }, [books]);
 
-  // Favorite Books List
-  const favoriteBooks = useMemo(() => {
-    return books.filter(b => favoriteBookIds.includes(b.id));
-  }, [books, favoriteBookIds]);
-
   // Toggle favorite
   const handleToggleFavorite = (bookId: string) => {
     setFavoriteBookIds(prev => {
@@ -166,7 +140,7 @@ export default function App() {
     });
   };
 
-  // Open External PDF / Gestor de Ficheiros
+  // Open External PDF
   const handleOpenExternalPdf = (book: Book) => {
     try {
       const link = document.createElement('a');
@@ -181,7 +155,7 @@ export default function App() {
     }
   };
 
-  // Download PDF handler with progress simulation & gestor tracking
+  // Download PDF handler
   const handleDownloadBook = async (book: Book) => {
     setIsDownloadsModalOpen(true);
 
@@ -203,7 +177,6 @@ export default function App() {
 
     setDownloadedItems(prev => [newItem, ...prev.filter(i => i.bookId !== book.id)]);
 
-    // Increment downloads in Firestore right away
     try {
       const updatedDownloads = await dbIncrementBookDownloads(book.id);
       setBooks(prev => prev.map(b => b.id === book.id ? { ...b, downloadCount: updatedDownloads } : b));
@@ -211,7 +184,6 @@ export default function App() {
       console.error(e);
     }
 
-    // Animate download progress smoothly: 15% -> 45% -> 75% -> 95% -> 100%
     let curProgress = 15;
     const interval = setInterval(() => {
       curProgress += Math.floor(Math.random() * 25) + 15;
@@ -226,7 +198,6 @@ export default function App() {
           return item;
         }));
 
-        // Trigger browser file download
         try {
           const link = document.createElement('a');
           link.href = book.pdfUrl;
@@ -259,11 +230,32 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    saveStoredUser(null);
     setCurrentUser(null);
-    setSavedSessionUser(null);
-    setShowSessionPrompt(false);
   };
+
+  // REQUIREMENT 1: MANDATORY AUTH WALL — NO ACCESS IF NOT AUTHENTICATED
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-[#07080d] flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-amber-500 animate-pulse flex items-center justify-center text-black font-black text-xl">
+          X
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#07080d]">
+        <AuthModal
+          canClose={false}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0d0e15] text-amber-50 selection:bg-amber-500 selection:text-black font-sans antialiased flex flex-col justify-between">
@@ -278,14 +270,7 @@ export default function App() {
           setSelectedCategory(cat);
           setShowOnlyFavorites(false);
         }}
-        onOpenAdmin={() => {
-          const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz';
-          if (!currentUser || !isAdmin) {
-            setIsAuthModalOpen(true);
-          } else {
-            setIsAdminPanelOpen(true);
-          }
-        }}
+        onOpenAdmin={() => setIsAdminPanelOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onOpenFavorites={() => setShowOnlyFavorites(!showOnlyFavorites)}
@@ -480,46 +465,15 @@ export default function App() {
         />
       )}
 
-      {((!currentUser && !showSessionPrompt) || isAuthModalOpen) && (
-        <AuthModal
-          canClose={Boolean(currentUser)}
-          onClose={() => setIsAuthModalOpen(false)}
-          onLoginSuccess={(user) => {
-            saveStoredUser(user);
-            setCurrentUser(user);
-            setIsAuthModalOpen(false);
-          }}
-        />
-      )}
-
       {isProfileModalOpen && currentUser && (
         <UserProfileModal
-          user={currentUser}
-          favoriteBooks={favoriteBooks}
+          currentUser={currentUser}
+          books={books}
           onClose={() => setIsProfileModalOpen(false)}
           onSelectBook={(b) => setSelectedBookForDetails(b)}
-          onOpenDownloads={() => setIsDownloadsModalOpen(true)}
           onLogout={handleLogoutAction}
           onUserUpdated={(updated) => {
             setCurrentUser(updated);
-            saveStoredUser(updated);
-          }}
-        />
-      )}
-
-      {/* CONTINUATION PROMPT FOR RETURNING BROWSERS */}
-      {showSessionPrompt && savedSessionUser && (
-        <ContinueSessionModal
-          savedUser={savedSessionUser}
-          onConfirm={() => {
-            setCurrentUser(savedSessionUser);
-            setShowSessionPrompt(false);
-          }}
-          onSwitchAccount={() => {
-            saveStoredUser(null);
-            setSavedSessionUser(null);
-            setShowSessionPrompt(false);
-            setIsAuthModalOpen(true);
           }}
         />
       )}

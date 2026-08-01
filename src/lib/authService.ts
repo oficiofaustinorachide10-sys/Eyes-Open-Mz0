@@ -3,6 +3,7 @@ import {
   GoogleAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   updateProfile,
   signOut,
   onAuthStateChanged,
@@ -12,7 +13,9 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc
+  updateDoc,
+  collection,
+  getDocs
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { User } from '../types';
@@ -39,7 +42,6 @@ export async function syncUserDocToFirestore(fbUser: FirebaseUser, overrideName?
     const snap = await getDoc(userRef);
     if (snap.exists()) {
       const data = snap.data();
-      // Ensure role is preserved or assigned admin if email matches
       const updatedRole = isAdmin ? 'admin' : (data.role || 'user');
 
       const updatedUser: User = {
@@ -85,7 +87,6 @@ export async function syncUserDocToFirestore(fbUser: FirebaseUser, overrideName?
     }
   } catch (err) {
     console.error('Error syncing user document to Firestore:', err);
-    // Fallback in-memory object if Firestore read fails
     return {
       id: uid,
       uid: uid,
@@ -102,8 +103,24 @@ export async function syncUserDocToFirestore(fbUser: FirebaseUser, overrideName?
 }
 
 /**
+ * Fetch all registered users for `@author` selection and `@mentions` autocomplete
+ */
+export async function dbFetchAllUsers(): Promise<User[]> {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const list: User[] = [];
+    snap.forEach((docSnap) => {
+      list.push({ id: docSnap.id, uid: docSnap.id, ...docSnap.data() } as User);
+    });
+    return list;
+  } catch (e) {
+    console.warn('dbFetchAllUsers error:', e);
+    return [];
+  }
+}
+
+/**
  * Google Sign-In with popup
- * Ensures each user Google account maps to their own independent UID in Firestore
  */
 export async function loginWithGoogle(): Promise<User> {
   const provider = new GoogleAuthProvider();
@@ -135,6 +152,16 @@ export async function registerWithEmail(email: string, pass: string, name: strin
 }
 
 /**
+ * Send password reset email
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email.trim());
+}
+
+export const sendPasswordReset = requestPasswordReset;
+export const fetchSystemUsers = dbFetchAllUsers;
+
+/**
  * Logout authenticated user
  */
 export async function logoutUser(): Promise<void> {
@@ -157,7 +184,6 @@ export function subscribeToAuth(onUserChanged: (user: User | null) => void): () 
 
 /**
  * Update current user profile in Firestore document `users/{uid}`
- * Isolates updates strictly to the specified UID document
  */
 export async function updateUserProfile(uid: string, updates: Partial<User>): Promise<User> {
   const userRef = doc(db, 'users', uid);
@@ -174,7 +200,6 @@ export async function updateUserProfile(uid: string, updates: Partial<User>): Pr
     }
   }
 
-  // Update photoURL / avatar sync
   if (cleanUpdates.photoURL && !cleanUpdates.avatar) {
     cleanUpdates.avatar = cleanUpdates.photoURL;
   }
@@ -188,23 +213,24 @@ export async function updateUserProfile(uid: string, updates: Partial<User>): Pr
   return { id: uid, uid, ...updatedSnap.data() } as User;
 }
 
-/**
- * Utility functions for user session caching fallback
- */
 export function getStoredUser(): User | null {
   try {
-    const raw = localStorage.getItem('alax_session_cache');
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
+    const data = localStorage.getItem('ala_x_session_user');
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error(e);
+  }
   return null;
 }
 
 export function saveStoredUser(user: User | null): void {
   try {
     if (user) {
-      localStorage.setItem('alax_session_cache', JSON.stringify(user));
+      localStorage.setItem('ala_x_session_user', JSON.stringify(user));
     } else {
-      localStorage.removeItem('alax_session_cache');
+      localStorage.removeItem('ala_x_session_user');
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error(e);
+  }
 }
