@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   BookOpen, Search, Star, Heart, FolderDown, User as UserIcon, 
-  Play, PlusCircle, Shield, LogOut, Check
+  Play, PlusCircle, Shield, LogOut, Check, Bell
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -15,6 +15,8 @@ interface AlaXHeaderProps {
   onOpenProfile: () => void;
   onOpenFavorites: () => void;
   onOpenDownloads: () => void;
+  onOpenNotifications: () => void;
+  unreadNotificationCount: number;
   favoriteCount: number;
   downloadCount: number;
   onLogout: () => void;
@@ -30,6 +32,8 @@ export const AlaXHeader: React.FC<AlaXHeaderProps> = ({
   onOpenProfile,
   onOpenFavorites,
   onOpenDownloads,
+  onOpenNotifications,
+  unreadNotificationCount,
   favoriteCount,
   downloadCount,
   onLogout
@@ -79,6 +83,21 @@ export const AlaXHeader: React.FC<AlaXHeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* NOTIFICATIONS BELL */}
+          <button
+            onClick={onOpenNotifications}
+            className="relative px-2.5 py-1.5 rounded-xl bg-[#141624]/80 hover:bg-[#1b1e30] border border-amber-500/20 text-amber-300 font-bold flex items-center gap-1.5 transition-all cursor-pointer text-[11px]"
+            title="Notificações em Tempo Real"
+          >
+            <Bell className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Avisos</span>
+            {unreadNotificationCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-black animate-pulse">
+                {unreadNotificationCount}
+              </span>
+            )}
+          </button>
+
           {/* FAVORITES */}
           <button
             onClick={onOpenFavorites}

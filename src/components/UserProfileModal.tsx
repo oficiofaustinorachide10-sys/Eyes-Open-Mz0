@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User as UserIcon, Mail, Camera, Save, Heart, BookOpen, Loader2, LogOut, Check } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Mail, Camera, Save, Heart, BookOpen, Loader2, LogOut, Check } from 'lucide-react';
 import { User, Book } from '../types';
 import { updateUserProfile } from '../lib/authService';
 import { compressBase64Image } from '../utils';
@@ -77,22 +77,20 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       <div className="relative w-full max-w-xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto p-6 sm:p-8 space-y-6">
         
-        {/* HEADER */}
+        {/* TOP APP BAR WITH BACK BUTTON */}
         <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
-          <div className="flex items-center gap-2.5">
-            <UserIcon className="w-6 h-6 text-amber-400" />
-            <div>
-              <h3 className="font-bold text-white text-lg font-serif">Perfil do Utilizador</h3>
-              <p className="text-[11px] text-amber-300">Gestão de dados de conta vinculados ao UID</p>
-            </div>
-          </div>
-
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-300 hover:text-black font-extrabold text-xs sm:text-sm transition-all cursor-pointer shadow-md"
           >
-            <X className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar</span>
           </button>
+
+          <div className="flex items-center gap-2.5">
+            <UserIcon className="w-5 h-5 text-amber-400" />
+            <h3 className="font-bold text-white text-base sm:text-lg font-serif">Perfil do Utilizador</h3>
+          </div>
         </div>
 
         {errorMsg && (

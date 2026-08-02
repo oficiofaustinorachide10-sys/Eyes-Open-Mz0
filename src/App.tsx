@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BookOpen, Search, Filter, Shield, Sparkles, Star, Download, 
-  Layers, Heart, FileText, ArrowUpDown, ChevronRight, BookMarked
+  Layers, Heart, FileText, ArrowUpDown, ChevronRight, BookMarked,
+  LayoutGrid, List, Zap
 } from 'lucide-react';
-import { Book, User } from './types';
-import { dbSubscribeBooks, dbIncrementBookDownloads } from './lib/db';
+import { Book, User, AppNotification } from './types';
+import { dbSubscribeBooks, dbIncrementBookDownloads, dbSubscribeNotifications } from './lib/db';
 import { subscribeToAuth, logoutUser } from './lib/authService';
 import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 
@@ -13,6 +14,8 @@ import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { AlaXHeader } from './components/AlaXHeader';
 import { AlaXIntroSplashModal } from './components/AlaXIntroSplashModal';
+import { AlaXAnimatedXLoader } from './components/AlaXAnimatedXLoader';
+import { AppTheme } from './components/ThemeSwitcher';
 import { BookCard } from './components/BookCard';
 import { LivroDetailModal } from './components/LivroDetailModal';
 import { PdfViewerModal } from './components/PdfViewerModal';
@@ -20,11 +23,40 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { AuthModal } from './components/AuthModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { DownloadedBooksModal, DownloadedItem } from './components/DownloadedBooksModal';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
 
 export default function App() {
   const [books, setBooks] = useState<Book[]>(SAMPLE_BOOKS);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
+
+  // App Theme & View Mode State
+  const [currentTheme, setCurrentTheme] = useState<AppTheme>(() => {
+    try {
+      const stored = localStorage.getItem('ala_x_theme');
+      if (stored === 'light' || stored === 'dark' || stored === 'lite') return stored;
+    } catch (e) {
+      console.error(e);
+    }
+    return 'dark';
+  });
+
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    return currentTheme === 'lite' ? 'list' : 'grid';
+  });
+
+  const handleThemeChange = (newTheme: AppTheme) => {
+    setCurrentTheme(newTheme);
+    try {
+      localStorage.setItem('ala_x_theme', newTheme);
+    } catch (e) {
+      console.error(e);
+    }
+    // Auto toggle list view for Lite mode if user changes theme
+    if (newTheme === 'lite') {
+      setViewMode('list');
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('todas');
@@ -47,13 +79,18 @@ export default function App() {
   // Active Modals & Splash Video State
   const [showIntroSplash, setShowIntroSplash] = useState<boolean>(false);
   const [splashMode, setSplashMode] = useState<'login' | 'register' | 'manual'>('login');
-  const [selectedBookForDetails, setSelectedBookForDetails] = useState<{ book: Book; initialTab?: 'reviews' | 'comments' } | null>(null);
+  const [selectedBookForDetails, setSelectedBookForDetails] = useState<{ book: Book; initialTab?: 'reviews' | 'comments'; targetCommentId?: string } | null>(null);
   const [selectedBookForPdfReader, setSelectedBookForPdfReader] = useState<Book | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isDownloadsModalOpen, setIsDownloadsModalOpen] = useState<boolean>(false);
+  const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState<boolean>(false);
+
+  const isAdmin = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
+  const unreadNotificationCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
 
   // Sync downloads to localStorage
   useEffect(() => {
@@ -73,14 +110,20 @@ export default function App() {
     return () => unsubAuth();
   }, []);
 
-  // Firestore real-time listener for books (only active when logged in)
+  // Firestore real-time listener for books & notifications
   useEffect(() => {
     if (!currentUser) return;
-    const unsub = dbSubscribeBooks((updatedBooks) => {
+    const unsubBooks = dbSubscribeBooks((updatedBooks) => {
       setBooks(updatedBooks);
     });
-    return () => unsub();
-  }, [currentUser]);
+    const unsubNotifs = dbSubscribeNotifications(currentUser.id, Boolean(isAdmin), (updatedNotifs) => {
+      setNotifications(updatedNotifs);
+    });
+    return () => {
+      unsubBooks();
+      unsubNotifs();
+    };
+  }, [currentUser, isAdmin]);
 
   // Filter & Sort Books
   const filteredBooks = useMemo(() => {
@@ -239,13 +282,7 @@ export default function App() {
 
   // REQUIREMENT 1: MANDATORY AUTH WALL — NO ACCESS IF NOT AUTHENTICATED
   if (!authChecked) {
-    return (
-      <div className="min-h-screen bg-[#07080d] flex items-center justify-center">
-        <div className="w-10 h-10 rounded-xl bg-amber-500 animate-pulse flex items-center justify-center text-black font-black text-xl">
-          X
-        </div>
-      </div>
-    );
+    return <AlaXAnimatedXLoader message="A carregar Biblioteca Ala X..." fullScreen />;
   }
 
   if (!currentUser) {
@@ -272,7 +309,13 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0e15] text-amber-50 selection:bg-amber-500 selection:text-black font-sans antialiased flex flex-col justify-between">
+    <div className={`min-h-screen font-sans antialiased flex flex-col justify-between transition-colors duration-300 ${
+      currentTheme === 'light'
+        ? 'bg-slate-100 text-slate-900 selection:bg-amber-400 selection:text-black'
+        : currentTheme === 'lite'
+        ? 'bg-slate-950 text-emerald-50 selection:bg-emerald-500 selection:text-black'
+        : 'bg-[#0d0e15] text-amber-50 selection:bg-amber-500 selection:text-black'
+    }`}>
       
       {/* ALA X HEADER WITH CENTERED TYPOGRAPHY & BLURRED MOTION VIDEO BACKDROP */}
       <AlaXHeader
@@ -288,6 +331,8 @@ export default function App() {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onOpenFavorites={() => setShowOnlyFavorites(!showOnlyFavorites)}
         onOpenDownloads={() => setIsDownloadsModalOpen(true)}
+        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
+        unreadNotificationCount={unreadNotificationCount}
         favoriteCount={favoriteBookIds.length}
         downloadCount={downloadedItems.length}
         onLogout={handleLogoutAction}
@@ -303,11 +348,15 @@ export default function App() {
           setSelectedCategory(cat);
           setShowOnlyFavorites(false);
         }}
+        currentTheme={currentTheme}
+        onThemeChange={handleThemeChange}
         onOpenAdmin={() => setIsAdminPanelOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onOpenFavorites={() => setShowOnlyFavorites(!showOnlyFavorites)}
         onOpenDownloads={() => setIsDownloadsModalOpen(true)}
+        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
+        unreadNotificationCount={unreadNotificationCount}
         downloadCount={downloadedItems.length}
         favoriteCount={favoriteBookIds.length}
         onLogout={handleLogoutAction}
@@ -322,35 +371,79 @@ export default function App() {
             featuredBook={featuredBook}
             currentUser={currentUser}
             onReadBook={(book) => setSelectedBookForPdfReader(book)}
+            onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
             onOpenAdmin={() => setIsAdminPanelOpen(true)}
             totalBooksCount={books.length}
           />
         )}
 
-        {/* CATEGORIES STRIP */}
+        {/* CATEGORIES STRIP & VIEW MODE CONTROLS */}
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-amber-400" />
-              <h3 className="font-extrabold text-white text-sm tracking-wide uppercase">
+              <Filter className={`w-4 h-4 ${currentTheme === 'lite' ? 'text-emerald-400' : 'text-amber-400'}`} />
+              <h3 className={`font-extrabold text-sm tracking-wide uppercase ${
+                currentTheme === 'light' ? 'text-slate-800' : 'text-white'
+              }`}>
                 {showOnlyFavorites ? 'Minha Biblioteca de Favoritos' : 'Categorias & Obras em PDF'}
               </h3>
             </div>
 
-            {/* SORTING CONTROLS */}
-            <div className="flex items-center gap-2">
-              <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-400 font-medium hidden sm:inline">Ordenar:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-[#181a26] border border-amber-500/20 rounded-xl px-3 py-1.5 text-xs text-amber-200 outline-none focus:border-amber-400 cursor-pointer"
-              >
-                <option value="recent">Mais Recentes</option>
-                <option value="downloads">Mais Descarregados</option>
-                <option value="rating">Melhor Avaliados</option>
-                <option value="title">Ordem Alfabética</option>
-              </select>
+            {/* SORTING & VIEW MODE CONTROLS */}
+            <div className="flex items-center gap-3">
+              {/* VIEW MODE TOGGLE (Grid vs List) */}
+              <div className={`p-1 rounded-xl border flex items-center gap-1 ${
+                currentTheme === 'light'
+                  ? 'bg-slate-200 border-slate-300'
+                  : currentTheme === 'lite'
+                  ? 'bg-slate-900 border-emerald-500/30'
+                  : 'bg-[#181a26] border-amber-500/20'
+              }`}>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    viewMode === 'grid'
+                      ? (currentTheme === 'lite' ? 'bg-emerald-500 text-black shadow-md' : 'bg-amber-500 text-black shadow-md')
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                  title="Modo de Exibição em Grelha"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    viewMode === 'list'
+                      ? (currentTheme === 'lite' ? 'bg-emerald-500 text-black shadow-md' : 'bg-amber-500 text-black shadow-md')
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                  title="Modo Lite / Lista Detalhada (Aparência Reordenada)"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* SORT BY */}
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs text-gray-400 font-medium hidden sm:inline">Ordenar:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className={`border rounded-xl px-3 py-1.5 text-xs outline-none cursor-pointer ${
+                    currentTheme === 'light'
+                      ? 'bg-white border-slate-300 text-slate-800 focus:border-amber-500'
+                      : currentTheme === 'lite'
+                      ? 'bg-slate-900 border-emerald-500/30 text-emerald-200 focus:border-emerald-400'
+                      : 'bg-[#181a26] border-amber-500/20 text-amber-200 focus:border-amber-400'
+                  }`}
+                >
+                  <option value="recent">Mais Recentes</option>
+                  <option value="downloads">Mais Descarregados</option>
+                  <option value="rating">Melhor Avaliados</option>
+                  <option value="title">Ordem Alfabética</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -367,8 +460,14 @@ export default function App() {
                   }}
                   className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
                     isActive
-                      ? 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/20'
-                      : 'bg-[#181a26] text-gray-300 border-amber-500/15 hover:border-amber-400/50 hover:text-white'
+                      ? (currentTheme === 'lite' 
+                          ? 'bg-emerald-500 text-black border-emerald-400 shadow-md shadow-emerald-500/20' 
+                          : 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/20')
+                      : (currentTheme === 'light'
+                          ? 'bg-white text-slate-700 border-slate-300 hover:border-amber-400'
+                          : currentTheme === 'lite'
+                          ? 'bg-slate-900 text-emerald-200 border-emerald-500/20 hover:border-emerald-400'
+                          : 'bg-[#181a26] text-gray-300 border-amber-500/15 hover:border-amber-400/50 hover:text-white')
                   }`}
                 >
                   {cat.name}
@@ -380,10 +479,16 @@ export default function App() {
 
         {/* ACTIVE FILTER STATUS */}
         {(showOnlyFavorites || selectedCategory !== 'todas' || searchQuery) && (
-          <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+          <div className={`flex items-center justify-between p-3 rounded-xl border text-xs ${
+            currentTheme === 'light'
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : currentTheme === 'lite'
+              ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+          }`}>
             <span>
               A mostrar resultados para:{' '}
-              <strong className="text-white">
+              <strong className={currentTheme === 'light' ? 'text-slate-900' : 'text-white'}>
                 {showOnlyFavorites ? 'Favoritos' : selectedCategory !== 'todas' ? `Categoria "${selectedCategory}"` : `Pesquisa por "${searchQuery}"`}
               </strong>{' '}
               ({filteredBooks.length} obras encontradas)
@@ -394,18 +499,24 @@ export default function App() {
                 setSearchQuery('');
                 setShowOnlyFavorites(false);
               }}
-              className="font-bold underline text-amber-400 hover:text-white cursor-pointer"
+              className="font-bold underline cursor-pointer hover:opacity-80"
             >
               Limpar Filtros
             </button>
           </div>
         )}
 
-        {/* BOOKS CATALOG GRID */}
+        {/* BOOKS CATALOG GRID / LIST */}
         {filteredBooks.length === 0 ? (
-          <div className="text-center py-16 space-y-4 bg-[#141622] rounded-3xl border border-amber-500/20 p-8">
+          <div className={`text-center py-16 space-y-4 rounded-3xl border p-8 ${
+            currentTheme === 'light'
+              ? 'bg-white border-slate-200 text-slate-800'
+              : currentTheme === 'lite'
+              ? 'bg-slate-900 border-emerald-500/30 text-emerald-100'
+              : 'bg-[#141622] border-amber-500/20 text-white'
+          }`}>
             <BookMarked className="w-12 h-12 text-amber-400/40 mx-auto" />
-            <h4 className="text-lg font-bold text-white">Nenhuma obra encontrada</h4>
+            <h4 className="text-lg font-bold">Nenhuma obra encontrada</h4>
             <p className="text-xs text-gray-400 max-w-md mx-auto">
               Não foram encontradas obras literárias com os critérios selecionados. Tente pesquisar por outro termo ou explorar o catálogo.
             </p>
@@ -421,12 +532,18 @@ export default function App() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className={
+            viewMode === 'list' 
+              ? "grid grid-cols-1 gap-4" 
+              : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+          }>
             {filteredBooks.map((book) => (
               <BookCard
                 key={book.id}
                 book={book}
                 isFavorite={favoriteBookIds.includes(book.id)}
+                theme={currentTheme}
+                viewMode={viewMode}
                 onRead={(b) => setSelectedBookForPdfReader(b)}
                 onDownload={handleDownloadBook}
                 onToggleFavorite={handleToggleFavorite}
@@ -458,6 +575,7 @@ export default function App() {
         <LivroDetailModal
           book={selectedBookForDetails.book}
           initialTab={selectedBookForDetails.initialTab}
+          targetCommentId={selectedBookForDetails.targetCommentId}
           currentUser={currentUser}
           isFavorite={favoriteBookIds.includes(selectedBookForDetails.book.id)}
           onClose={() => setSelectedBookForDetails(null)}
@@ -469,6 +587,29 @@ export default function App() {
           onStartDownload={handleDownloadBook}
           onBookUpdated={(updated) => {
             setBooks(prev => prev.map(b => b.id === updated.id ? updated : b));
+          }}
+        />
+      )}
+
+      {isNotificationsModalOpen && (
+        <NotificationCenterModal
+          currentUser={currentUser}
+          notifications={notifications}
+          onClose={() => setIsNotificationsModalOpen(false)}
+          onOpenNotificationTarget={(notif) => {
+            setIsNotificationsModalOpen(false);
+            if (notif.type === 'new_user') {
+              setIsProfileModalOpen(true);
+            } else if (notif.bookId) {
+              const targetBook = books.find(b => b.id === notif.bookId);
+              if (targetBook) {
+                setSelectedBookForDetails({
+                  book: targetBook,
+                  initialTab: notif.type === 'new_review' ? 'reviews' : 'comments',
+                  targetCommentId: notif.commentId
+                });
+              }
+            }
           }}
         />
       )}

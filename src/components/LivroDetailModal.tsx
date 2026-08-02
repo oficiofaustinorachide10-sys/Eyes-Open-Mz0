@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Heart, Download, BookOpen, Star, MessageSquare, ThumbsUp, 
-  Send, Reply, Pin, Copy, Flag, Edit, Trash2, Check, Sparkles, User as UserIcon, MoreHorizontal, ArrowLeft, Maximize2
+  Send, Reply, Pin, Copy, Flag, Edit, Trash2, Check, Sparkles, User as UserIcon, MoreHorizontal, ArrowLeft, Maximize2,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Book, User, Review, BookComment } from '../types';
 import { 
@@ -29,15 +30,20 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   book,
   currentUser,
   isFavorite,
-  initialTab = 'reviews',
+  initialTab,
   targetCommentId,
   onClose,
   onOpenPdfReader,
   onToggleFavorite,
   onStartDownload
 }) => {
-  const [activeTab, setActiveTab] = useState<'reviews' | 'comments'>(targetCommentId ? 'comments' : initialTab);
+  const [activeTab, setActiveTab] = useState<'chapters' | 'reviews' | 'comments'>(
+    targetCommentId 
+      ? 'comments' 
+      : (initialTab ? initialTab : (book.status === 'em_lancamento' || (book.chapters && book.chapters.length > 0) ? 'chapters' : 'reviews'))
+  );
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [isSynopsisExpandedModal, setIsSynopsisExpandedModal] = useState(true);
 
   // Real-time Firestore Reviews & Comments
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -364,6 +370,20 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
                 <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-extrabold uppercase tracking-wider">
                   {book.category}
                 </span>
+
+                {book.status === 'em_lancamento' ? (
+                  <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-black uppercase tracking-wider flex items-center gap-1">
+                    <span>Em Lançamento</span>
+                    {book.latestChapterNumber && (
+                      <span className="text-amber-400 font-extrabold">• Cap. {book.latestChapterNumber}</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[11px] font-extrabold uppercase tracking-wider">
+                    Completo
+                  </span>
+                )}
+
                 <span className="text-xs text-amber-300/80">
                   {book.publishedYear || 2026} • {book.pageCount || 180} Páginas
                 </span>
@@ -372,8 +392,12 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
               <h2 className="text-2xl sm:text-3xl font-black text-white font-serif">{book.title}</h2>
               <p className="text-sm text-amber-300 font-bold">Por {book.author}</p>
 
-              {/* RATING SUMMARY */}
-              <div className="flex items-center gap-3 pt-1">
+              {/* RATING SUMMARY - CLICKING REDIRECTS TO REVIEWS & PEOPLE WHO RATED */}
+              <div 
+                onClick={() => setActiveTab('reviews')}
+                className="inline-flex items-center gap-3 pt-1 cursor-pointer group/rating hover:bg-amber-500/10 p-1.5 rounded-xl transition-all"
+                title="Clique para ver todas as avaliações e as pessoas que avaliaram a obra"
+              >
                 <div className="flex items-center text-amber-400">
                   {[1, 2, 3, 4, 5].map((s) => (
                     <Star
@@ -383,14 +407,32 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
                   ))}
                 </div>
                 <span className="text-sm font-black text-white">{ratingStats.average}</span>
-                <span className="text-xs text-gray-400">({ratingStats.total} avaliações)</span>
+                <span className="text-xs text-amber-300 font-bold group-hover/rating:underline">
+                  ({ratingStats.total} avaliações - ver leitores)
+                </span>
                 <span className="text-xs text-gray-500">•</span>
                 <span className="text-xs text-amber-200">{book.downloadCount || 0} downloads</span>
               </div>
 
-              <p className="text-xs text-gray-300 leading-relaxed pt-2 line-clamp-4">
-                {book.synopsis}
-              </p>
+              {/* SYNOPSIS / PUBLICATION TEXT - CLICK TO SHOW FULLY */}
+              <div 
+                onClick={() => setIsSynopsisExpandedModal(!isSynopsisExpandedModal)}
+                className="pt-2 cursor-pointer group/synopsis"
+                title="Clique para expandir/recolher o texto completo da publicação"
+              >
+                <p className={`text-xs text-gray-200 leading-relaxed transition-all ${
+                  isSynopsisExpandedModal ? '' : 'line-clamp-4 text-gray-300 group-hover/synopsis:text-white'
+                }`}>
+                  {book.synopsis}
+                </p>
+                <span className="text-[10px] font-extrabold text-amber-400 flex items-center gap-1 pt-1 hover:underline">
+                  {isSynopsisExpandedModal ? (
+                    <><span>Recolher texto</span><ChevronUp className="w-3 h-3" /></>
+                  ) : (
+                    <><span>Ver texto completo da publicação</span><ChevronDown className="w-3 h-3" /></>
+                  )}
+                </span>
+              </div>
             </div>
 
             {/* ACTION BUTTONS */}
@@ -425,11 +467,25 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
           </div>
         </div>
 
-        {/* TABS SWITCHER: AVALIAÇÕES vs COMENTÁRIOS */}
-        <div className="border-b border-amber-500/20 flex items-center gap-6">
+        {/* TABS SWITCHER */}
+        <div className="border-b border-amber-500/20 flex items-center gap-6 overflow-x-auto">
+          {(book.status === 'em_lancamento' || (book.chapters && book.chapters.length > 0)) && (
+            <button
+              onClick={() => setActiveTab('chapters')}
+              className={`pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'chapters'
+                  ? 'border-amber-400 text-amber-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <BookOpen className="w-4 h-4 text-amber-400" />
+              <span>Capítulos Lançados ({book.chapters?.length || 0})</span>
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('reviews')}
-            className={`pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+            className={`pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'reviews'
                 ? 'border-amber-400 text-amber-400'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -441,7 +497,7 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
 
           <button
             onClick={() => setActiveTab('comments')}
-            className={`pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+            className={`pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'comments'
                 ? 'border-amber-400 text-amber-400'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -451,6 +507,94 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
             <span>Comentários ({comments.length})</span>
           </button>
         </div>
+
+        {/* TAB 0: CAPÍTULOS LANÇADOS (OBRA EM LANÇAMENTO) */}
+        {activeTab === 'chapters' && (
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+            <div className="p-4 rounded-2xl bg-[#181a26] border border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold uppercase">
+                  Publicação em Série
+                </span>
+                <h4 className="font-extrabold text-white text-sm pt-1">
+                  {book.chapters?.length || 0} Capítulo(s) Disponível(eis)
+                </h4>
+                <p className="text-xs text-gray-400">
+                  Acompanhe a obra à medida que novos capítulos são disponibilizados pelo autor.
+                </p>
+              </div>
+
+              <button
+                onClick={() => onStartDownload(book)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Descarregar Todos os Capítulos</span>
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {!book.chapters || book.chapters.length === 0 ? (
+                <p className="text-center py-8 text-xs text-gray-400 italic">
+                  O primeiro capítulo desta obra será disponibilizado em breve.
+                </p>
+              ) : (
+                book.chapters.map((chap) => (
+                  <div
+                    key={chap.id}
+                    className="p-4 rounded-2xl bg-[#181a26] border border-amber-500/20 hover:border-amber-500/50 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center font-black text-sm shrink-0">
+                        {chap.number}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h5 className="font-bold text-white text-sm">{chap.title}</h5>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold border border-emerald-500/30">
+                            Liberado
+                          </span>
+                        </div>
+                        {chap.description && (
+                          <p className="text-xs text-gray-300 pt-0.5">{chap.description}</p>
+                        )}
+                        <p className="text-[10px] text-gray-400 pt-1">
+                          {chap.pageCount} páginas • {chap.fileSizeFormatted || 'PDF'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button
+                        onClick={() => onOpenPdfReader({
+                          ...book,
+                          pdfUrl: chap.pdfUrl,
+                          title: `${book.title} - ${chap.title}`
+                        })}
+                        className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/30 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>Ler</span>
+                      </button>
+
+                      <button
+                        onClick={() => onStartDownload({
+                          ...book,
+                          pdfUrl: chap.pdfUrl,
+                          title: `${book.title} - ${chap.title}`
+                        })}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black border border-emerald-500/30 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Baixar</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* TAB 1: AVALIAÇÕES (Play Store Style) */}
         {activeTab === 'reviews' && (
@@ -586,39 +730,56 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
             </div>
 
             {/* PLAY STORE STYLE REVIEWS LIST */}
-            <div className="space-y-3">
-              {reviews.map((r) => (
-                <div
-                  key={r.id}
-                  className="p-4 rounded-2xl bg-[#181a26] border border-amber-500/15 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <img
-                        src={r.userAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
-                        alt={r.userName}
-                        className="w-7 h-7 rounded-full object-cover border border-amber-400/50"
-                      />
-                      <span className="font-bold text-white text-xs">{r.userName}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-amber-400">
-                      {[1, 2, 3, 4, 5].map((st) => (
-                        <Star
-                          key={st}
-                          className={`w-3.5 h-3.5 ${st <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-700'}`}
+            {reviews.length === 0 ? (
+              <div className="p-6 text-center bg-[#181a26] border border-amber-500/20 rounded-2xl space-y-2">
+                <Star className="w-8 h-8 text-amber-400/50 mx-auto" />
+                <p className="text-xs font-bold text-gray-300">Nenhuma avaliação registada ainda.</p>
+                <p className="text-[11px] text-gray-400">Seja o primeiro leitor a avaliar e a partilhar a sua opinião sobre esta obra!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <h5 className="text-xs font-bold text-amber-200 flex items-center gap-1.5 pt-2">
+                  <UserIcon className="w-4 h-4 text-amber-400" />
+                  <span>Leitores que Avaliaram ({reviews.length})</span>
+                </h5>
+                {reviews.map((r) => (
+                  <div
+                    key={r.id}
+                    className="p-4 rounded-2xl bg-[#181a26] border border-amber-500/15 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <img
+                          src={r.userAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
+                          alt={r.userName}
+                          className="w-7 h-7 rounded-full object-cover border border-amber-400/50"
                         />
-                      ))}
-                    </div>
-                  </div>
+                        <div>
+                          <span className="font-bold text-white text-xs block">{r.userName}</span>
+                          <span className="text-[10px] text-gray-400">Leitor do Ala X</span>
+                        </div>
+                      </div>
 
-                  <p className="text-xs text-amber-100 italic">"{r.comment}"</p>
-                  <span className="text-[10px] text-gray-500 block">
-                    {new Date(r.createdAt).toLocaleDateString('pt-PT')}
-                  </span>
-                </div>
-              ))}
-            </div>
+                      <div className="flex items-center gap-1 text-amber-400">
+                        {[1, 2, 3, 4, 5].map((st) => (
+                          <Star
+                            key={st}
+                            className={`w-3.5 h-3.5 ${st <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-700'}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {r.comment && (
+                      <p className="text-xs text-amber-100 italic pt-1">"{r.comment}"</p>
+                    )}
+                    <span className="text-[10px] text-gray-500 block pt-1">
+                      Avaliado em {new Date(r.createdAt).toLocaleDateString('pt-PT')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
           </div>
         )}

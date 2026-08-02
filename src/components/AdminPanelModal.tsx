@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Plus, Trash2, Edit, BookOpen, Upload, Sparkles, Check, 
-  Search, Shield, AtSign, Loader2, AlertCircle, FileText, User as UserIcon
+  ArrowLeft, Plus, Trash2, Edit, BookOpen, Upload, Sparkles, Check, 
+  Search, Shield, AtSign, Loader2, AlertCircle, FileText, User as UserIcon, Layers, Calendar
 } from 'lucide-react';
-import { Book, User } from '../types';
-import { dbCreateBook, dbDeleteBook, dbUpdateBook } from '../lib/db';
+import { Book, User, Chapter } from '../types';
+import { dbCreateBook, dbDeleteBook, dbUpdateBook, dbAddChapterToBook } from '../lib/db';
 import { dbFetchAllUsers } from '../lib/authService';
 import { BOOK_CATEGORIES, compressBase64Image } from '../utils';
 
@@ -26,7 +26,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   // Discrete permission guard
   const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
 
-  const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'chapters' | 'manage'>('create');
   
   // Form State
   const [title, setTitle] = useState('');
@@ -39,6 +39,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [pageCount, setPageCount] = useState(150);
   const [publishedYear, setPublishedYear] = useState(2026);
   const [isFeatured, setIsFeatured] = useState(false);
+  const [status, setStatus] = useState<'completo' | 'em_lancamento'>('completo');
+
+  // Chapter Release Manager State
+  const [selectedBookForChapter, setSelectedBookForChapter] = useState<Book | null>(null);
+  const [isAddingChapter, setIsAddingChapter] = useState(false);
+  const [chapNumber, setChapNumber] = useState<number>(1);
+  const [chapTitle, setChapTitle] = useState('');
+  const [chapDesc, setChapDesc] = useState('');
+  const [chapPdfUrl, setChapPdfUrl] = useState('');
+  const [chapPageCount, setChapPageCount] = useState(20);
 
   // User Autocomplete for Author Selection
   const [systemUsers, setSystemUsers] = useState<User[]>([]);
@@ -59,12 +69,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     });
   }, []);
 
-  // Handle author input change & @ trigger
   const handleAuthorInputChange = (val: string) => {
     setAuthorInput(val);
     setSelectedAuthorUser(null);
 
-    // If typing @ or search query
     if (val.includes('@')) {
       const query = val.split('@').pop()?.toLowerCase() || '';
       const matches = systemUsers.filter(u => 
@@ -90,7 +98,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setShowAuthorSuggestions(false);
   };
 
-  // Image & File upload base64 helpers
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -119,10 +126,27 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
+  const handleChapPdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setChapPdfUrl(ev.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmitBook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isPublisher) {
       setErrorMsg('Sem permissão para realizar esta operação.');
+      return;
+    }
+
+    // MANDATORY VALIDATION: Minimum 5 pages rule
+    if (pageCount < 5) {
+      setErrorMsg('A obra deve possuir pelo menos 5 páginas para ser publicada.');
       return;
     }
 
@@ -149,7 +173,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           pdfUrl: pdfUrl.trim(),
           pageCount,
           publishedYear,
-          isFeatured
+          isFeatured,
+          status
         });
         setSuccessMsg('Obra atualizada com sucesso!');
         setEditingBookId(null);
@@ -159,7 +184,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           title: title.trim(),
           author: authorInput.trim(),
           authorUserId: selectedAuthorUser?.uid || selectedAuthorUser?.id,
-          publisherUserId: currentUser?.uid || currentUser?.id, // Secret publisher link
+          publisherUserId: currentUser?.uid || currentUser?.id,
           synopsis: synopsis.trim(),
           category,
           coverUrl: finalCover,
@@ -172,7 +197,25 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           pageCount,
           publishedYear,
           isFeatured,
-          uploadedBy: currentUser?.uid
+          uploadedBy: currentUser?.uid,
+          status,
+          totalChapters: status === 'em_lancamento' ? 1 : undefined,
+          chapters: status === 'em_lancamento' ? [
+            {
+              id: `chap_init_${Date.now()}`,
+              bookId: `book_${Date.now()}`,
+              number: 1,
+              title: 'Capítulo 1: O Início',
+              description: 'Primeiro capítulo oficial do lançamento.',
+              pdfUrl: pdfUrl.trim(),
+              pageCount: pageCount,
+              createdAt: Date.now()
+            }
+          ] : undefined,
+          latestChapterNumber: status === 'em_lancamento' ? 1 : undefined,
+          latestChapterTitle: status === 'em_lancamento' ? 'Capítulo 1: O Início' : undefined,
+          lastChapterReleasedAt: status === 'em_lancamento' ? Date.now() : undefined,
+          hasNewChapterBadge: status === 'em_lancamento'
         };
 
         const created = await dbCreateBook(newBookPayload);
@@ -188,11 +231,62 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setCoverUrl('');
       setPdfUrl('');
       setIsFeatured(false);
+      setStatus('completo');
 
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
       console.error('Publish error:', err);
-      setErrorMsg(err.message || 'Erro ao publicar obra no Firestore.');
+      setErrorMsg('Erro ao publicar obra no sistema.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveChapterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBookForChapter || !chapTitle.trim() || !chapPdfUrl.trim()) {
+      setErrorMsg('Preencha o título e o ficheiro PDF do capítulo.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const chapterData = {
+        number: chapNumber,
+        title: chapTitle.trim(),
+        description: chapDesc.trim(),
+        pdfUrl: chapPdfUrl.trim(),
+        pageCount: chapPageCount || 1,
+        fileSizeFormatted: `${(chapPageCount * 0.15).toFixed(1)} MB`
+      };
+
+      await dbAddChapterToBook(selectedBookForChapter.id, chapterData);
+
+      setSuccessMsg(`Capítulo ${chapNumber} ("${chapTitle.trim()}") lançado com sucesso! Leitoria notificada.`);
+      setIsAddingChapter(false);
+      setChapTitle('');
+      setChapDesc('');
+      setChapPdfUrl('');
+
+      // Refresh selected book state locally
+      const updatedList = books.find(b => b.id === selectedBookForChapter.id);
+      if (updatedList) {
+        setSelectedBookForChapter({
+          ...updatedList,
+          status: 'em_lancamento',
+          totalChapters: (updatedList.chapters?.length || 0) + 1,
+          latestChapterNumber: chapNumber,
+          latestChapterTitle: chapTitle.trim()
+        });
+      }
+
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Não foi possível registrar o novo capítulo.');
     } finally {
       setIsLoading(false);
     }
@@ -243,26 +337,24 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       <div className="relative w-full max-w-3xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto p-6 sm:p-8 space-y-6">
         
-        {/* HEADER */}
+        {/* TOP APP BAR WITH BACK BUTTON */}
         <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
-          <div className="flex items-center gap-2.5">
-            <BookOpen className="w-6 h-6 text-amber-400" />
-            <div>
-              <h3 className="font-bold text-white text-lg font-serif">Gestão de Obras Literárias</h3>
-              <p className="text-[11px] text-amber-300">Publicação e catalogação oficial de PDFs</p>
-            </div>
-          </div>
-
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-300 hover:text-black font-extrabold text-xs sm:text-sm transition-all cursor-pointer shadow-md"
           >
-            <X className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar</span>
           </button>
+
+          <div className="flex items-center gap-2.5">
+            <BookOpen className="w-5 h-5 text-amber-400" />
+            <h3 className="font-bold text-white text-base sm:text-lg font-serif">Gestão de Obras Literárias</h3>
+          </div>
         </div>
 
         {/* TAB SWITCHER */}
-        <div className="grid grid-cols-2 p-1 bg-[#181a26] rounded-xl border border-amber-500/20">
+        <div className="grid grid-cols-3 p-1 bg-[#181a26] rounded-xl border border-amber-500/20">
           <button
             type="button"
             onClick={() => setActiveTab('create')}
@@ -270,7 +362,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               activeTab === 'create' ? 'bg-amber-500 text-black shadow' : 'text-gray-400 hover:text-white'
             }`}
           >
-            {editingBookId ? 'Editar Obra em Destaque' : 'Publicar Nova Obra'}
+            {editingBookId ? 'Editar Obra' : 'Publicar Nova Obra'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('chapters')}
+            className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'chapters' ? 'bg-amber-500 text-black shadow' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Lançar Capítulo
           </button>
           <button
             type="button"
@@ -279,7 +380,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               activeTab === 'manage' ? 'bg-amber-500 text-black shadow' : 'text-gray-400 hover:text-white'
             }`}
           >
-            Catálogo Existente ({books.length})
+            Catálogo ({books.length})
           </button>
         </div>
 
@@ -452,6 +553,36 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </div>
             </div>
 
+            {/* TIPO DA OBRA */}
+            <div className="space-y-1 bg-[#181a26] p-3 rounded-2xl border border-amber-500/20">
+              <label className="text-xs font-bold text-amber-200 block mb-1">Tipo da Obra *</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatus('completo')}
+                  className={`p-2.5 rounded-xl text-xs font-bold border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                    status === 'completo' ? 'bg-amber-500/20 border-amber-400 text-amber-200' : 'bg-black/20 border-white/10 text-gray-400'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 text-amber-400" />
+                  <span>Obra Completa</span>
+                  <span className="text-[10px] font-normal text-gray-400 text-center">Volume único publicado na íntegra</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatus('em_lancamento')}
+                  className={`p-2.5 rounded-xl text-xs font-bold border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                    status === 'em_lancamento' ? 'bg-amber-500/20 border-amber-400 text-amber-200' : 'bg-black/20 border-white/10 text-gray-400'
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-emerald-400" />
+                  <span>Obra em Lançamento</span>
+                  <span className="text-[10px] font-normal text-gray-400 text-center">Lançamento seriado por capítulos</span>
+                </button>
+              </div>
+            </div>
+
             {/* FEATURED TOGGLE */}
             <div className="flex items-center gap-2 pt-1">
               <input
@@ -472,7 +603,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 <button
                   type="button"
                   onClick={() => { setEditingBookId(null); setTitle(''); setAuthorInput(''); setSynopsis(''); setCoverUrl(''); setPdfUrl(''); }}
-                  className="px-4 py-2 rounded-xl bg-white/5 text-gray-400 text-xs font-bold"
+                  className="px-4 py-2 rounded-xl bg-white/5 text-gray-400 text-xs font-bold cursor-pointer"
                 >
                   Cancelar Edição
                 </button>
@@ -488,6 +619,238 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
 
           </form>
+        )}
+
+        {/* TAB 2: LANÇAR CAPÍTULO */}
+        {activeTab === 'chapters' && (
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            {!selectedBookForChapter ? (
+              <div className="space-y-3">
+                <p className="text-xs text-amber-200/80">
+                  Selecione uma obra em lançamento para adicionar e disponibilizar novos capítulos aos leitores:
+                </p>
+
+                {books.filter(b => b.status === 'em_lancamento').length === 0 ? (
+                  <div className="p-8 text-center bg-[#181a26] border border-amber-500/20 rounded-2xl space-y-3">
+                    <Layers className="w-10 h-10 text-amber-400/60 mx-auto" />
+                    <p className="text-xs font-bold text-gray-300">Nenhuma obra em lançamento seriada disponível.</p>
+                    <p className="text-[11px] text-gray-400 max-w-md mx-auto">
+                      Ao publicar uma nova obra, selecione a opção "Obra em Lançamento" para poder gerir e lançar capítulos individuais.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('create')}
+                      className="px-4 py-2 rounded-xl bg-amber-500 text-black font-extrabold text-xs transition-all cursor-pointer inline-flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Criar Obra em Lançamento</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {books.filter(b => b.status === 'em_lancamento').map((b) => (
+                      <div
+                        key={b.id}
+                        onClick={() => {
+                          setSelectedBookForChapter(b);
+                          setChapNumber((b.chapters?.length || 0) + 1);
+                        }}
+                        className="p-3.5 rounded-2xl bg-[#181a26] border border-amber-500/30 hover:border-amber-400 flex items-center gap-3 cursor-pointer transition-all hover:bg-amber-500/5 group"
+                      >
+                        <img
+                          src={b.coverUrl}
+                          alt={b.title}
+                          className="w-12 h-16 rounded-xl object-cover border border-amber-500/30 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold uppercase border border-emerald-500/30">
+                            Em Lançamento
+                          </span>
+                          <h4 className="font-extrabold text-white text-xs truncate group-hover:text-amber-300 pt-1">
+                            {b.title}
+                          </h4>
+                          <p className="text-[10px] text-gray-400 truncate">Por {b.author}</p>
+                          <p className="text-[10px] text-amber-400 font-bold pt-1">
+                            {b.chapters?.length || 0} capítulos publicados
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 bg-[#181a26] p-4 rounded-2xl border border-amber-500/30">
+                {/* SELECTED BOOK HEADER */}
+                <div className="flex items-center justify-between pb-3 border-b border-amber-500/20">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={selectedBookForChapter.coverUrl}
+                      alt={selectedBookForChapter.title}
+                      className="w-10 h-14 rounded-lg object-cover border border-amber-400 shrink-0"
+                    />
+                    <div>
+                      <h4 className="font-extrabold text-white text-sm font-serif">
+                        {selectedBookForChapter.title}
+                      </h4>
+                      <p className="text-xs text-amber-300">
+                        Total de capítulos: {selectedBookForChapter.chapters?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedBookForChapter(null);
+                      setIsAddingChapter(false);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-gray-300 font-bold cursor-pointer"
+                  >
+                    Mudar Obra
+                  </button>
+                </div>
+
+                {/* ADD NEW CHAPTER FORM TOGGLE */}
+                {!isAddingChapter ? (
+                  <div className="flex items-center justify-between pt-1">
+                    <h5 className="font-bold text-xs text-amber-200 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <span>Capítulos Lançados</span>
+                    </h5>
+                    <button
+                      onClick={() => setIsAddingChapter(true)}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Novo Capítulo</span>
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveChapterSubmit} className="p-4 rounded-xl bg-[#141622] border border-amber-500/40 space-y-3">
+                    <h5 className="font-bold text-xs text-amber-300 flex items-center gap-2">
+                      <Plus className="w-4 h-4 text-amber-400" />
+                      <span>Cadastrar Novo Capítulo</span>
+                    </h5>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-amber-200">N.º Capítulo *</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={chapNumber}
+                          onChange={(e) => setChapNumber(parseInt(e.target.value) || 1)}
+                          className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[11px] font-bold text-amber-200">Título do Capítulo *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: Capítulo 5: A Revelação"
+                          value={chapTitle}
+                          onChange={(e) => setChapTitle(e.target.value)}
+                          className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-amber-200">Descrição/Resumo do Capítulo (Opcional)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Neste capítulo os segredos da Ala X começam a vir à tona..."
+                        value={chapDesc}
+                        onChange={(e) => setChapDesc(e.target.value)}
+                        className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-amber-200">Ficheiro PDF do Capítulo *</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder="https://exemplo.com/capitulo.pdf"
+                            value={chapPdfUrl}
+                            onChange={(e) => setChapPdfUrl(e.target.value)}
+                            className="flex-1 bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                          />
+                          <label className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black font-bold text-[11px] cursor-pointer border border-emerald-500/30 shrink-0">
+                            <span>Carregar</span>
+                            <input type="file" accept="application/pdf" onChange={handleChapPdfUpload} className="hidden" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-amber-200">Páginas do Capítulo</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={chapPageCount}
+                          onChange={(e) => setChapPageCount(parseInt(e.target.value) || 15)}
+                          className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingChapter(false)}
+                        className="px-3 py-1.5 rounded-xl bg-white/10 text-gray-300 font-bold text-xs cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-md cursor-pointer flex items-center gap-2"
+                      >
+                        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        <span>Publicar Capítulo</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* LIST OF RELEASED CHAPTERS */}
+                <div className="space-y-2 pt-2">
+                  {!selectedBookForChapter.chapters || selectedBookForChapter.chapters.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-4">Nenhum capítulo lançado ainda.</p>
+                  ) : (
+                    selectedBookForChapter.chapters.map((chap) => (
+                      <div
+                        key={chap.id}
+                        className="p-3 rounded-xl bg-[#141622] border border-amber-500/20 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center text-xs font-black shrink-0">
+                            {chap.number}
+                          </div>
+                          <div>
+                            <h6 className="font-bold text-xs text-white">{chap.title}</h6>
+                            <p className="text-[10px] text-gray-400">
+                              {chap.pageCount} páginas • Lançado em {new Date(chap.createdAt).toLocaleDateString('pt-PT')}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold shrink-0">
+                          Disponível
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* TAB 2: MANAGE EXISTING BOOKS */}

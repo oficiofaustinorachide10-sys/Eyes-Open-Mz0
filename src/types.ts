@@ -18,6 +18,18 @@ export interface User {
   lastLogin?: number;
 }
 
+export interface Chapter {
+  id: string;
+  bookId: string;
+  number: number;
+  title: string;
+  description?: string;
+  pdfUrl: string;
+  pageCount: number;
+  fileSizeFormatted?: string;
+  createdAt: number;
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -29,6 +41,7 @@ export interface Book {
   coverUrl: string;
   pdfUrl: string;
   createdAt: number;
+  updatedAt?: number;
   downloadCount: number;
   likesCount: number;
   ratingAverage: number;
@@ -39,6 +52,13 @@ export interface Book {
   isFeatured?: boolean;
   uploadedBy?: string;
   fileSizeFormatted?: string;
+  status?: 'completo' | 'em_lancamento'; // Obra Completa vs Obra em Lançamento
+  totalChapters?: number;
+  chapters?: Chapter[];
+  latestChapterNumber?: number;
+  latestChapterTitle?: string;
+  lastChapterReleasedAt?: number;
+  hasNewChapterBadge?: boolean;
 }
 
 export interface Review {
@@ -91,11 +111,13 @@ export interface AppNotification {
   senderId: string;
   senderName: string;
   senderAvatar?: string;
-  type: 'new_user' | 'new_review' | 'new_comment' | 'comment_reply' | 'user_mention';
+  type: 'new_user' | 'new_review' | 'new_comment' | 'comment_reply' | 'user_mention' | 'new_chapter';
   title: string;
   message: string;
   bookId?: string;
   bookTitle?: string;
+  chapterId?: string;
+  chapterNumber?: number;
   commentId?: string;
   reviewId?: string;
   targetUserId?: string; // For opening user profiles

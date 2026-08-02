@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { 
   BookOpen, Search, Filter, Shield, Sparkles, Heart, User as UserIcon, 
-  LogOut, PlusCircle, FolderDown, Menu, X, ChevronDown, Check
+  LogOut, PlusCircle, FolderDown, Menu, X, ChevronDown, Check, Bell
 } from 'lucide-react';
 import { User } from '../types';
 import { BOOK_CATEGORIES } from '../utils';
+import { ThemeSwitcher, AppTheme } from './ThemeSwitcher';
 
 interface NavbarProps {
   currentUser: User | null;
@@ -12,11 +13,15 @@ interface NavbarProps {
   onSearchChange: (query: string) => void;
   selectedCategory: string;
   onSelectCategory: (categorySlug: string) => void;
+  currentTheme: AppTheme;
+  onThemeChange: (theme: AppTheme) => void;
   onOpenAdmin: () => void;
   onOpenAuth: () => void;
   onOpenProfile: () => void;
   onOpenFavorites: () => void;
   onOpenDownloads: () => void;
+  onOpenNotifications: () => void;
+  unreadNotificationCount: number;
   downloadCount: number;
   favoriteCount: number;
   onLogout: () => void;
@@ -28,11 +33,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSearchChange,
   selectedCategory,
   onSelectCategory,
+  currentTheme,
+  onThemeChange,
   onOpenAdmin,
   onOpenAuth,
   onOpenProfile,
   onOpenFavorites,
   onOpenDownloads,
+  onOpenNotifications,
+  unreadNotificationCount,
   downloadCount,
   favoriteCount,
   onLogout
@@ -44,34 +53,56 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0c0d14]/90 backdrop-blur-md border-b border-amber-500/20 shadow-xl">
+    <header className={`sticky top-0 z-40 backdrop-blur-md border-b shadow-xl transition-colors ${
+      currentTheme === 'light'
+        ? 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200'
+        : currentTheme === 'lite'
+        ? 'bg-slate-950/90 border-emerald-500/30 text-emerald-100 shadow-emerald-500/10'
+        : 'bg-[#0c0d14]/90 border-amber-500/20 text-white'
+    }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           
           {/* LOGO & BRAND */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-black text-lg shadow-md shadow-amber-500/20">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-lg shadow-md ${
+              currentTheme === 'lite'
+                ? 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-black shadow-emerald-500/30'
+                : 'bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-amber-500/20'
+            }`}>
               X
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-white text-base font-serif tracking-wider leading-none">
+              <span className={`font-extrabold text-base font-serif tracking-wider leading-none ${
+                currentTheme === 'light' ? 'text-slate-900' : 'text-white'
+              }`}>
                 ALA X
               </span>
-              <span className="text-[10px] text-amber-300 font-sans tracking-tight">
-                Biblioteca & Obras Literárias
+              <span className={`text-[10px] tracking-tight ${
+                currentTheme === 'light' ? 'text-amber-700' : 'text-amber-300'
+              }`}>
+                {currentTheme === 'lite' ? 'Modo Lite Pro' : 'Biblioteca & Obras Literárias'}
               </span>
             </div>
           </div>
 
           {/* SEARCH BAR (DESKTOP) */}
           <div className="hidden md:flex flex-1 max-w-md relative">
-            <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-amber-400/60" />
+            <Search className={`absolute left-3.5 top-2.5 w-4 h-4 ${
+              currentTheme === 'light' ? 'text-slate-400' : 'text-amber-400/60'
+            }`} />
             <input
               type="text"
               placeholder="Pesquisar por título, autor ou palavra-chave..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full bg-[#151726] border border-amber-500/20 rounded-xl pl-10 pr-4 py-2 text-xs text-amber-100 placeholder-gray-500 outline-none focus:border-amber-400/80 transition-all shadow-inner"
+              className={`w-full border rounded-xl pl-10 pr-4 py-2 text-xs outline-none transition-all shadow-inner ${
+                currentTheme === 'light'
+                  ? 'bg-slate-100 border-slate-300 text-slate-800 placeholder-slate-400 focus:border-amber-500'
+                  : currentTheme === 'lite'
+                  ? 'bg-slate-900 border-emerald-500/30 text-emerald-100 placeholder-slate-500 focus:border-emerald-400'
+                  : 'bg-[#151726] border-amber-500/20 text-amber-100 placeholder-gray-500 focus:border-amber-400/80'
+              }`}
             />
             {searchQuery && (
               <button
@@ -86,12 +117,38 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* RIGHT CONTROLS */}
           <div className="hidden lg:flex items-center gap-3">
             
+            {/* THEME SWITCHER */}
+            <ThemeSwitcher currentTheme={currentTheme} onThemeChange={onThemeChange} />
+
+            {/* NOTIFICATIONS */}
+            <button
+              onClick={onOpenNotifications}
+              className={`relative px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                currentTheme === 'light'
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                  : 'bg-[#151726] hover:bg-[#1c1f33] border-amber-500/20 text-amber-200'
+              }`}
+              title="Notificações em Tempo Real"
+            >
+              <Bell className="w-4 h-4 text-amber-500" />
+              <span>Avisos</span>
+              {unreadNotificationCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-400 text-black text-[10px] flex items-center justify-center font-black animate-pulse">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </button>
+
             {/* FAVORITES */}
             <button
               onClick={onOpenFavorites}
-              className="relative px-3 py-2 rounded-xl bg-[#151726] hover:bg-[#1c1f33] border border-amber-500/20 text-xs font-bold text-amber-200 flex items-center gap-2 transition-all cursor-pointer"
+              className={`relative px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                currentTheme === 'light'
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                  : 'bg-[#151726] hover:bg-[#1c1f33] border-amber-500/20 text-amber-200'
+              }`}
             >
-              <Heart className="w-4 h-4 text-rose-400 fill-rose-400/20" />
+              <Heart className="w-4 h-4 text-rose-500 fill-rose-500/20" />
               <span>Favoritos</span>
               {favoriteCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center font-black">
@@ -103,9 +160,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* DOWNLOADS MANAGER */}
             <button
               onClick={onOpenDownloads}
-              className="relative px-3 py-2 rounded-xl bg-[#151726] hover:bg-[#1c1f33] border border-amber-500/20 text-xs font-bold text-emerald-300 flex items-center gap-2 transition-all cursor-pointer"
+              className={`relative px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                currentTheme === 'light'
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-emerald-700'
+                  : 'bg-[#151726] hover:bg-[#1c1f33] border-amber-500/20 text-emerald-300'
+              }`}
             >
-              <FolderDown className="w-4 h-4 text-emerald-400" />
+              <FolderDown className="w-4 h-4 text-emerald-500" />
               <span>Downloads</span>
               {downloadCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-black text-[10px] flex items-center justify-center font-black">
@@ -171,8 +232,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* MOBILE MENU DROPDOWN */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden border-t border-amber-500/20 bg-[#0f111c] px-4 py-4 space-y-3">
+        <div className={`lg:hidden border-t px-4 py-4 space-y-3 ${
+          currentTheme === 'light' 
+            ? 'bg-slate-50 border-slate-200 text-slate-900' 
+            : 'bg-[#0f111c] border-amber-500/20 text-white'
+        }`}>
           
+          {/* THEME SWITCHER ROW MOBILE */}
+          <div className="flex items-center justify-between p-2 rounded-xl bg-black/10 border border-white/10">
+            <span className="text-xs font-bold">Tema da App:</span>
+            <ThemeSwitcher currentTheme={currentTheme} onThemeChange={onThemeChange} />
+          </div>
+
           {/* SEARCH BAR */}
           <div className="relative">
             <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-amber-400/60" />
@@ -185,21 +256,36 @@ export const Navbar: React.FC<NavbarProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2">
+          <div className="grid grid-cols-3 gap-2 pt-2">
+            <button
+              onClick={() => { onOpenNotifications(); setIsMobileMenuOpen(false); }}
+              className="p-2.5 rounded-xl bg-[#151726] border border-amber-500/20 text-xs font-bold text-amber-300 flex flex-col items-center justify-center gap-1"
+            >
+              <div className="relative">
+                <Bell className="w-4 h-4 text-amber-400" />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 py-0.1 rounded-full bg-amber-400 text-black text-[9px] font-black">
+                    {unreadNotificationCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px]">Avisos</span>
+            </button>
+
             <button
               onClick={() => { onOpenFavorites(); setIsMobileMenuOpen(false); }}
-              className="p-2.5 rounded-xl bg-[#151726] border border-amber-500/20 text-xs font-bold text-amber-200 flex items-center gap-2"
+              className="p-2.5 rounded-xl bg-[#151726] border border-amber-500/20 text-xs font-bold text-amber-200 flex flex-col items-center justify-center gap-1"
             >
               <Heart className="w-4 h-4 text-rose-400" />
-              <span>Favoritos ({favoriteCount})</span>
+              <span className="text-[10px]">Favoritos ({favoriteCount})</span>
             </button>
 
             <button
               onClick={() => { onOpenDownloads(); setIsMobileMenuOpen(false); }}
-              className="p-2.5 rounded-xl bg-[#151726] border border-amber-500/20 text-xs font-bold text-emerald-300 flex items-center gap-2"
+              className="p-2.5 rounded-xl bg-[#151726] border border-amber-500/20 text-xs font-bold text-emerald-300 flex flex-col items-center justify-center gap-1"
             >
               <FolderDown className="w-4 h-4 text-emerald-400" />
-              <span>Downloads ({downloadCount})</span>
+              <span className="text-[10px]">Downloads ({downloadCount})</span>
             </button>
           </div>
 

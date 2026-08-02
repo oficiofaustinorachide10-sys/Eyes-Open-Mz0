@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  X, Download, CheckCircle2, Clock, ExternalLink, BookOpen, 
+  ArrowLeft, Download, CheckCircle2, Clock, ExternalLink, BookOpen, 
   Trash2, FileText, ArrowUpRight, FolderDown, RefreshCw
 } from 'lucide-react';
 import { Book } from '../types';
@@ -45,28 +45,24 @@ export const DownloadedBooksModal: React.FC<DownloadedBooksModalProps> = ({
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       <div className="relative w-full max-w-3xl bg-[#141622] border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
         
-        {/* HEADER */}
+        {/* TOP APP BAR WITH BACK BUTTON */}
         <div className="flex items-center justify-between p-5 border-b border-amber-500/20 bg-[#181a27]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-400 text-black shadow-lg shadow-amber-500/20">
-              <FolderDown className="w-5 h-5 text-black" />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-white text-lg font-serif flex items-center gap-2">
-                <span>Obras Baixadas — Ala X</span>
-              </h3>
-              <p className="text-xs text-amber-300/80">
-                Gestor de downloads em andamento e ficheiros PDF armazenados
-              </p>
-            </div>
-          </div>
-
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-gray-400 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-300 hover:text-black font-extrabold text-xs sm:text-sm transition-all cursor-pointer shadow-md"
           >
-            <X className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar</span>
           </button>
+
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-black shadow-lg shadow-amber-500/20">
+              <FolderDown className="w-4 h-4 text-black" />
+            </div>
+            <h3 className="font-extrabold text-white text-base sm:text-lg font-serif">
+              Obras Baixadas — Ala X
+            </h3>
+          </div>
         </div>
 
         {/* TABS */}

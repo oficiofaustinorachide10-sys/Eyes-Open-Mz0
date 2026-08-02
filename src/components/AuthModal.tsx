@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Mail, Lock, User as UserIcon, Loader2, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { User } from '../types';
 import { loginWithGoogle, loginWithEmail, registerWithEmail, requestPasswordReset } from '../lib/authService';
+import { dbCreateNotification } from '../lib/db';
 
 interface AuthModalProps {
   onClose?: () => void;
@@ -126,6 +127,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess, c
         onLoginSuccess(user, 'login');
       } else {
         user = await registerWithEmail(email.trim(), password, name.trim());
+        dbCreateNotification({
+          userId: 'admin',
+          senderId: user.id,
+          senderName: user.name,
+          senderAvatar: user.photoURL || user.avatar,
+          type: 'new_user',
+          title: 'Novo Utilizador Registado',
+          message: `${user.name} criou uma conta na biblioteca.`,
+          targetUserId: user.id
+        });
         onLoginSuccess(user, 'register');
       }
       if (onClose) onClose();

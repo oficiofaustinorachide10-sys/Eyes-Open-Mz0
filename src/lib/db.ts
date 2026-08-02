@@ -17,7 +17,7 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Book, Review, BookComment, User, AdminStats, AppNotification } from '../types';
+import { Book, Chapter, Review, BookComment, User, AdminStats, AppNotification } from '../types';
 import { SAMPLE_BOOKS, SAMPLE_REVIEWS, SAMPLE_COMMENTS, compressBase64Image } from '../utils';
 
 // Helper to strip non-serializable fields
@@ -146,6 +146,98 @@ export async function dbDeleteBook(id: string): Promise<void> {
     await deleteDoc(ref);
   } catch (e) {
     console.error('dbDeleteBook error:', e);
+  }
+}
+
+export async function dbAddChapterToBook(
+  bookId: string, 
+  chapterData: { number: number; title: string; description?: string; pdfUrl: string; pageCount: number; fileSizeFormatted?: string }
+): Promise<Chapter> {
+  const chapterId = `chap_${bookId}_${Date.now()}`;
+  const newChapter: Chapter = {
+    id: chapterId,
+    bookId,
+    number: chapterData.number,
+    title: chapterData.title,
+    description: chapterData.description || '',
+    pdfUrl: chapterData.pdfUrl,
+    pageCount: chapterData.pageCount || 1,
+    fileSizeFormatted: chapterData.fileSizeFormatted || '1.5 MB',
+    createdAt: Date.now()
+  };
+
+  const currentBook = await dbFetchBookById(bookId);
+  const existingChapters = currentBook?.chapters || [];
+  // Ensure no duplicate chapter number override if already exists, else append
+  const updatedChapters = [...existingChapters.filter(c => c.number !== newChapter.number), newChapter].sort((a, b) => a.number - b.number);
+
+  const updates: Partial<Book> = {
+    status: 'em_lancamento',
+    chapters: updatedChapters,
+    totalChapters: updatedChapters.length,
+    latestChapterNumber: newChapter.number,
+    latestChapterTitle: newChapter.title,
+    lastChapterReleasedAt: Date.now(),
+    updatedAt: Date.now(),
+    hasNewChapterBadge: true
+  };
+
+  await dbUpdateBook(bookId, updates);
+
+  // Notify readers
+  dbNotifyBookFollowers(
+    bookId, 
+    currentBook?.title || 'Obra', 
+    newChapter.number, 
+    newChapter.title,
+    chapterId
+  );
+
+  return newChapter;
+}
+
+export async function dbNotifyBookFollowers(
+  bookId: string, 
+  bookTitle: string, 
+  chapterNumber: number, 
+  chapterTitle: string,
+  chapterId: string
+): Promise<void> {
+  try {
+    const usersSnap = await getDocs(collection(db, 'users'));
+    const notifiedUserIds = new Set<string>();
+
+    usersSnap.forEach((docSnap) => {
+      const u = docSnap.data() as User;
+      const uid = u.id || u.uid;
+      if (uid && u.favoriteBookIds && u.favoriteBookIds.includes(bookId)) {
+        notifiedUserIds.add(uid);
+      }
+    });
+
+    // Also notify users who commented or reviewed
+    const reviewsSnap = await getDocs(query(collection(db, 'reviews'), where('bookId', '==', bookId)));
+    reviewsSnap.forEach((rSnap) => {
+      const r = rSnap.data();
+      if (r.userId) notifiedUserIds.add(r.userId);
+    });
+
+    for (const targetUserId of Array.from(notifiedUserIds)) {
+      await dbCreateNotification({
+        userId: targetUserId,
+        senderId: 'admin',
+        senderName: 'Editora Ala X',
+        type: 'new_chapter',
+        title: 'Novo capítulo disponível!',
+        message: `O capítulo ${chapterNumber} ("${chapterTitle}") de "${bookTitle}" acaba de ser lançado.`,
+        bookId,
+        bookTitle,
+        chapterId,
+        chapterNumber
+      });
+    }
+  } catch (err) {
+    console.warn('dbNotifyBookFollowers error:', err);
   }
 }
 
