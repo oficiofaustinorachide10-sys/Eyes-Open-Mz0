@@ -51,8 +51,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
 
-  // Discrete permission check — NO admin text broadcasted
-  const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
+  // Check if guest user & publisher
+  const isGuest = !currentUser || currentUser.id === 'guest_reader' || Boolean(currentUser.isGuest);
+  const isPublisher = !isGuest && (currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin');
 
   return (
     <header className={`sticky top-0 z-40 backdrop-blur-md border-b shadow-xl transition-all ${
@@ -224,25 +225,35 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* USER PROFILE BUTTON */}
-            {currentUser ? (
-              <button
-                onClick={onOpenProfile}
-                className="flex items-center gap-2.5 p-1.5 pr-3 rounded-xl bg-[#151726] hover:bg-[#1c1f33] border border-amber-500/30 text-xs text-amber-100 transition-all cursor-pointer"
-              >
-                <img
-                  src={currentUser.photoURL || currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
-                  alt={currentUser.name}
-                  className="w-7 h-7 rounded-lg object-cover border border-amber-400/50"
-                />
-                <span className="font-bold truncate max-w-[120px]">{currentUser.name}</span>
-              </button>
+            {/* USER PROFILE OR LOGIN BUTTON */}
+            {!isGuest && currentUser ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onOpenProfile}
+                  className="flex items-center gap-2.5 p-1.5 pr-3 rounded-xl bg-[#151726] hover:bg-[#1c1f33] border border-amber-500/30 text-xs text-amber-100 transition-all cursor-pointer"
+                >
+                  <img
+                    src={currentUser.photoURL || currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
+                    alt={currentUser.name}
+                    className="w-7 h-7 rounded-lg object-cover border border-amber-400/50"
+                  />
+                  <span className="font-bold truncate max-w-[120px]">{currentUser.name}</span>
+                </button>
+                <button
+                  onClick={onLogout}
+                  className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer"
+                  title="Encerrar Sessão / Sair"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="px-4 py-2 rounded-xl bg-amber-500 text-black font-extrabold text-xs transition-all shadow-md cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-black font-extrabold text-xs transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center gap-1.5"
               >
-                Entrar
+                <UserIcon className="w-4 h-4" />
+                <span>Iniciar Sessão</span>
               </button>
             )}
           </div>
@@ -327,7 +338,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {currentUser && (
+          {!isGuest && currentUser ? (
             <div className="pt-2 border-t border-amber-500/10 flex items-center justify-between">
               <button
                 onClick={() => { onOpenProfile(); setIsMobileMenuOpen(false); }}
@@ -347,6 +358,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Sair</span>
+              </button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-amber-500/10">
+              <button
+                onClick={() => { onOpenAuth(); setIsMobileMenuOpen(false); }}
+                className="w-full py-2.5 rounded-xl bg-amber-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+              >
+                <UserIcon className="w-4 h-4" />
+                <span>Iniciar Sessão / Criar Conta</span>
               </button>
             </div>
           )}

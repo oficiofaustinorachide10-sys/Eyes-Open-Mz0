@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Star, BookMarked, Users, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BookOpen, Star, BookMarked, Users, Shield, ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
 import { Book, User } from '../types';
 
 interface HeroBannerProps {
@@ -9,6 +9,7 @@ interface HeroBannerProps {
   onOpenDetails?: (book: Book, tab?: 'reviews' | 'comments') => void;
   onOpenAdmin: () => void;
   totalBooksCount: number;
+  onShare?: (book: Book) => void;
 }
 
 interface SlideItem {
@@ -27,7 +28,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onReadBook,
   onOpenDetails,
   onOpenAdmin,
-  totalBooksCount
+  totalBooksCount,
+  onShare
 }) => {
   const slides: SlideItem[] = [
     {
@@ -159,6 +161,14 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 className="px-3 py-1.5 sm:px-5 sm:py-2.5 rounded-lg sm:rounded-xl bg-[#131b2e]/80 border border-amber-500/40 text-amber-300 font-bold text-[10px] sm:text-xs hover:bg-amber-500/10 transition-all backdrop-blur-sm cursor-pointer"
               >
                 Detalhes
+              </button>
+
+              <button 
+                onClick={() => onShare ? onShare(displayBook) : null}
+                className="px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-lg sm:rounded-xl bg-cyan-500/20 hover:bg-cyan-500 border border-cyan-500/40 text-cyan-300 hover:text-black font-bold text-[10px] sm:text-xs transition-all backdrop-blur-sm cursor-pointer flex items-center gap-1"
+              >
+                <Share2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span>Partilhar</span>
               </button>
             </div>
 

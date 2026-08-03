@@ -162,12 +162,14 @@ export async function dbCreateBook(book: Book): Promise<Book> {
 
   const bookId = cleanBook.id || `book_${Date.now()}`;
 
-  // Check if PDF URL is a huge base64 (over 400KB) to prevent Firestore 1MB document limit overflow
+  // Check if PDF URL is extremely large base64 (over 780KB) to prevent Firestore 1MB document limit overflow
   let rawPdfUrl = cleanBook.pdfUrl || '';
   let firestorePdfUrl = rawPdfUrl;
-  if (rawPdfUrl.length > 400000) {
+  if (rawPdfUrl.length > 780000) {
     savePdfToLocalStore(bookId, rawPdfUrl);
     firestorePdfUrl = `local_pdf:${bookId}`;
+  } else if (rawPdfUrl.startsWith('data:application/pdf')) {
+    savePdfToLocalStore(bookId, rawPdfUrl);
   }
 
   const returnedPayload: Book = {

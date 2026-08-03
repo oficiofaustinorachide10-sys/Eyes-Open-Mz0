@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Heart, Download, BookOpen, Star, MessageSquare, ThumbsUp, 
   Send, Reply, Pin, Copy, Flag, Edit, Trash2, Check, Sparkles, User as UserIcon, MoreHorizontal, ArrowLeft, Maximize2,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Share2
 } from 'lucide-react';
 import { Book, User, Review, BookComment } from '../types';
 import { 
@@ -24,6 +24,7 @@ interface LivroDetailModalProps {
   onToggleFavorite: (bookId: string) => void;
   onStartDownload: (book: Book) => void;
   onBookUpdated?: (book: Book) => void;
+  onShare?: (book: Book) => void;
 }
 
 export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
@@ -36,7 +37,8 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   onOpenPdfReader,
   onToggleFavorite,
   onStartDownload,
-  onBookUpdated
+  onBookUpdated,
+  onShare
 }) => {
   const [activeTab, setActiveTab] = useState<'chapters' | 'reviews' | 'comments'>(
     targetCommentId 
@@ -517,12 +519,21 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
               </button>
 
               <button
+                onClick={() => onShare ? onShare(book) : null}
+                className="px-4 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-black border border-cyan-500/30 font-extrabold text-xs transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Partilhar</span>
+              </button>
+
+              <button
                 onClick={() => onToggleFavorite(book.id)}
                 className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                   isFavorite
                     ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'
                     : 'bg-white/5 border-amber-500/20 text-gray-400 hover:text-rose-400'
                 }`}
+                title={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
               >
                 <Heart className={`w-5 h-5 ${isFavorite ? 'fill-rose-400' : ''}`} />
               </button>

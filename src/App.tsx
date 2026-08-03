@@ -28,6 +28,8 @@ import { AuthModal } from './components/AuthModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { DownloadedBooksModal, DownloadedItem } from './components/DownloadedBooksModal';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { ShareBookModal } from './components/ShareBookModal';
+import { GuestAuthPromptModal } from './components/GuestAuthPromptModal';
 
 const DEFAULT_GUEST_USER: User = {
   id: 'guest_reader',
@@ -107,6 +109,25 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState<boolean>(false);
+  const [sharingBook, setSharingBook] = useState<Book | null>(null);
+  const [guestAuthPromptMessage, setGuestAuthPromptMessage] = useState<string | null>(null);
+
+  // Check URL parameters for book sharing direct links (?book=BOOK_ID)
+  useEffect(() => {
+    if (!books || books.length === 0) return;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const bookIdFromUrl = urlParams.get('book') || (window.location.hash.startsWith('#book=') ? window.location.hash.replace('#book=', '') : null);
+      if (bookIdFromUrl) {
+        const found = books.find(b => b.id === bookIdFromUrl);
+        if (found) {
+          setSelectedBookForDetails({ book: found });
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing shared book link:', e);
+    }
+  }, [books]);
 
   const isAdmin = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
   const unreadNotificationCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
@@ -309,6 +330,7 @@ export default function App() {
     }
     setCurrentUser(DEFAULT_GUEST_USER);
     saveStoredUser(null);
+    setIsAuthModalOpen(true);
   };
 
   return (
@@ -359,6 +381,7 @@ export default function App() {
               onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
               onOpenAdmin={() => setIsAdminPanelOpen(true)}
               totalBooksCount={books.length}
+              onShare={(b) => setSharingBook(b)}
             />
 
             {/* 2. CATEGORIZED INFINITE HORIZONTAL ROWS IN FEED */}
@@ -371,6 +394,7 @@ export default function App() {
                 setSelectedCategory(cat);
                 setShowOnlyFavorites(false);
               }}
+              onShare={(b) => setSharingBook(b)}
             />
 
             {/* 4. POR QUE USAR A ALA X? */}
@@ -553,6 +577,7 @@ export default function App() {
                     onDownload={handleDownloadBook}
                     onToggleFavorite={handleToggleFavorite}
                     onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
+                    onShare={(b) => setSharingBook(b)}
                   />
                 ))}
               </div>
@@ -589,6 +614,7 @@ export default function App() {
           onBookUpdated={(updated) => {
             setBooks(prev => prev.map(b => b.id === updated.id ? updated : b));
           }}
+          onShare={(b) => setSharingBook(b)}
         />
       )}
 
@@ -674,6 +700,21 @@ export default function App() {
           user={currentUser}
           mode={splashMode}
           onClose={() => setShowIntroSplash(false)}
+        />
+      )}
+
+      {sharingBook && (
+        <ShareBookModal
+          book={sharingBook}
+          onClose={() => setSharingBook(null)}
+        />
+      )}
+
+      {guestAuthPromptMessage && (
+        <GuestAuthPromptModal
+          actionMessage={guestAuthPromptMessage}
+          onClose={() => setGuestAuthPromptMessage(null)}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
         />
       )}
 

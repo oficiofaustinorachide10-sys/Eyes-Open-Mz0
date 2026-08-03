@@ -11,6 +11,7 @@ interface BookCardProps {
   onDownload: (book: Book) => void;
   onToggleFavorite: (bookId: string) => void;
   onOpenDetails: (book: Book, initialTab?: 'reviews' | 'comments') => void;
+  onShare?: (book: Book) => void;
 }
 
 export const BookCard: React.FC<BookCardProps> = ({
@@ -21,7 +22,8 @@ export const BookCard: React.FC<BookCardProps> = ({
   onRead,
   onDownload,
   onToggleFavorite,
-  onOpenDetails
+  onOpenDetails,
+  onShare
 }) => {
   const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
 
@@ -314,10 +316,10 @@ export const BookCard: React.FC<BookCardProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             <button
               onClick={() => onRead(book)}
-              className="py-2 px-2 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-500 hover:text-black font-bold text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-2 px-1 rounded-xl bg-amber-500/15 hover:bg-amber-500 border border-amber-500/30 text-amber-500 hover:text-black font-bold text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer"
               title="Ler PDF"
             >
               <FileText className="w-3.5 h-3.5" />
@@ -326,20 +328,29 @@ export const BookCard: React.FC<BookCardProps> = ({
 
             <button
               onClick={() => onOpenDetails(book, 'comments')}
-              className="py-2 px-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/30 border border-amber-500/30 text-amber-600 hover:text-amber-800 font-bold text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-2 px-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 font-bold text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer"
               title="Abrir Comentários"
             >
-              <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
+              <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
               <span>Opinar</span>
             </button>
 
             <button
               onClick={() => onDownload(book)}
-              className="py-2 px-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-600 border border-emerald-500/30 text-emerald-600 hover:text-white font-bold text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-2 px-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-600 border border-emerald-500/30 text-emerald-400 hover:text-white font-bold text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer"
               title="Baixar PDF"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Baixar</span>
+            </button>
+
+            <button
+              onClick={() => onShare ? onShare(book) : null}
+              className="py-2 px-1 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 border border-cyan-500/30 text-cyan-400 hover:text-black font-bold text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+              title="Partilhar Obra"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Partilhar</span>
             </button>
           </div>
         </div>

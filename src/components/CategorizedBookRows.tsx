@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Star, ChevronLeft, ChevronRight, ArrowRight, Layers, Sparkles, Heart, Feather, Globe, ShieldAlert, BookOpen, Cpu } from 'lucide-react';
+import { Star, ChevronLeft, ChevronRight, ArrowRight, Layers, Sparkles, Heart, Feather, Globe, ShieldAlert, BookOpen, Cpu, Share2 } from 'lucide-react';
 import { Book } from '../types';
 
 interface CategorizedBookRowsProps {
@@ -8,6 +8,7 @@ interface CategorizedBookRowsProps {
   onReadBook: (book: Book) => void;
   onOpenDetails: (book: Book, tab?: 'reviews' | 'comments' | 'chapters') => void;
   onSelectCategory: (categorySlug: string) => void;
+  onShare?: (book: Book) => void;
 }
 
 interface CategoryGroup {
@@ -24,6 +25,7 @@ export const CategorizedBookRows: React.FC<CategorizedBookRowsProps> = ({
   onReadBook,
   onOpenDetails,
   onSelectCategory,
+  onShare,
 }) => {
   // Define the category row sections to present in the feed
   const categoryGroups: CategoryGroup[] = [
@@ -102,6 +104,7 @@ export const CategorizedBookRows: React.FC<CategorizedBookRowsProps> = ({
             theme={theme}
             onOpenDetails={onOpenDetails}
             onSelectCategory={onSelectCategory}
+            onShare={onShare}
           />
         );
       })}
@@ -116,7 +119,8 @@ const RowCategorySection: React.FC<{
   theme: 'dark' | 'light' | 'lite';
   onOpenDetails: (book: Book, tab?: 'reviews' | 'comments' | 'chapters') => void;
   onSelectCategory: (categorySlug: string) => void;
-}> = ({ group, books, theme, onOpenDetails, onSelectCategory }) => {
+  onShare?: (book: Book) => void;
+}> = ({ group, books, theme, onOpenDetails, onSelectCategory, onShare }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollLeft = () => {
@@ -230,6 +234,18 @@ const RowCategorySection: React.FC<{
                       <span>Em Lançamento</span>
                     </div>
                   )}
+
+                  {/* SHARE BUTTON TOP RIGHT */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onShare) onShare(book);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-amber-500 hover:text-black text-white backdrop-blur-md transition-all cursor-pointer shadow-md z-10"
+                    title="Partilhar Obra"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </button>
 
                   {(book.isFeatured || isMadrasta) && !isSerial && (
                     <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-amber-500 text-black font-extrabold text-[9px] shadow-lg tracking-wide uppercase">
