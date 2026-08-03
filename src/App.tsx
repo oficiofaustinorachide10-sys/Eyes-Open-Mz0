@@ -12,8 +12,7 @@ import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 // Subcomponents
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
-import { ExploreCategoriesGrid } from './components/ExploreCategoriesGrid';
-import { DestaquesSection } from './components/DestaquesSection';
+import { CategorizedBookRows } from './components/CategorizedBookRows';
 import { WhyUseAlaXSection } from './components/WhyUseAlaXSection';
 import { TestimonialsSection } from './components/TestimonialsSection';
 import { NewsletterSection } from './components/NewsletterSection';
@@ -343,15 +342,16 @@ export default function App() {
         downloadCount={downloadedItems.length}
         favoriteCount={favoriteBookIds.length}
         onLogout={handleLogoutAction}
+        transparentOverlay={!showOnlyFavorites && !searchQuery && selectedCategory === 'todas'}
       />
 
       {/* MAIN CONTENT AREA */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 flex-1 w-full space-y-6">
         
         {/* HOMEPAGE DEFAULT LAYOUT MATCHING UPLOADED REFERENCE DESIGN */}
         {!showOnlyFavorites && !searchQuery && selectedCategory === 'todas' ? (
           <>
-            {/* 1. HERO BANNER DESTAQUE DA SEMANA + STATS BAR */}
+            {/* 1. HERO BANNER DESTAQUE DA SEMANA + STATS BAR (INTEGRATED AT TOP) */}
             <HeroBanner
               featuredBook={featuredBook}
               currentUser={currentUser}
@@ -361,18 +361,8 @@ export default function App() {
               totalBooksCount={books.length}
             />
 
-            {/* 2. EXPLORE POR CATEGORIAS */}
-            <ExploreCategoriesGrid
-              selectedCategory={selectedCategory}
-              onSelectCategory={(cat) => {
-                setSelectedCategory(cat);
-                setShowOnlyFavorites(false);
-              }}
-              theme={currentTheme}
-            />
-
-            {/* 3. DESTAQUES (HORIZONTAL CAROUSEL OF WORKS) */}
-            <DestaquesSection
+            {/* 2. CATEGORIZED INFINITE HORIZONTAL ROWS IN FEED */}
+            <CategorizedBookRows
               books={books}
               theme={currentTheme}
               onReadBook={(book) => setSelectedBookForPdfReader(book)}

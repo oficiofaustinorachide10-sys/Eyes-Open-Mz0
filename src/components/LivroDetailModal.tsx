@@ -8,7 +8,7 @@ import { Book, User, Review, BookComment } from '../types';
 import { 
   dbSubscribeReviews, dbAddOrUpdateReview, dbDeleteReview,
   dbSubscribeComments, dbAddComment, dbUpdateComment, dbDeleteComment, dbToggleCommentLike, dbPinComment, dbReportComment,
-  dbCreateNotification
+  dbCreateNotification, dbAddChapterToBook
 } from '../lib/db';
 import { dbFetchAllUsers } from '../lib/authService';
 import { ImageViewerModal } from './ImageViewerModal';
@@ -35,7 +35,8 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   onClose,
   onOpenPdfReader,
   onToggleFavorite,
-  onStartDownload
+  onStartDownload,
+  onBookUpdated
 }) => {
   const [activeTab, setActiveTab] = useState<'chapters' | 'reviews' | 'comments'>(
     targetCommentId 
@@ -69,6 +70,68 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   // @Mentions popup state
   const [showMentionsList, setShowMentionsList] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
+
+  // Lançar Novo Capítulo Inline Form State
+  const [isAddingChapterInline, setIsAddingChapterInline] = useState(false);
+  const [chapNumberInline, setChapNumberInline] = useState((book.chapters?.length || 0) + 1);
+  const [chapTitleInline, setChapTitleInline] = useState('');
+  const [chapDescInline, setChapDescInline] = useState('');
+  const [chapPdfUrlInline, setChapPdfUrlInline] = useState('');
+  const [chapPageCountInline, setChapPageCountInline] = useState(15);
+  const [isSubmittingChapInline, setIsSubmittingChapInline] = useState(false);
+
+  const handleChapPdfUploadInline = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        alert('Por favor selecione um ficheiro PDF válido.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setChapPdfUrlInline(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveChapterInline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chapPdfUrlInline) {
+      alert('Por favor insira ou carregue o ficheiro PDF do capítulo.');
+      return;
+    }
+    setIsSubmittingChapInline(true);
+    try {
+      const newChap = await dbAddChapterToBook(book.id, {
+        number: chapNumberInline,
+        title: chapTitleInline || `Capítulo ${chapNumberInline}`,
+        description: chapDescInline,
+        pdfUrl: chapPdfUrlInline,
+        pageCount: chapPageCountInline || 15
+      });
+
+      const updatedChapters = [...(book.chapters || []), newChap];
+      const updatedBook: Book = {
+        ...book,
+        status: 'em_lancamento',
+        chapters: updatedChapters
+      };
+      
+      onBookUpdated?.(updatedBook);
+      setIsAddingChapterInline(false);
+      setChapTitleInline('');
+      setChapDescInline('');
+      setChapPdfUrlInline('');
+      setChapNumberInline(updatedChapters.length + 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingChapInline(false);
+    }
+  };
 
   // Subscribe to Reviews & Comments
   useEffect(() => {
@@ -524,14 +587,119 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => onStartDownload(book)}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Descarregar Todos os Capítulos</span>
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setIsAddingChapterInline(!isAddingChapterInline)}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{isAddingChapterInline ? 'Fechar Form' : '➕ Lançar Novo Capítulo'}</span>
+                </button>
+
+                <button
+                  onClick={() => onStartDownload(book)}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Descarregar Todos</span>
+                </button>
+              </div>
             </div>
+
+            {/* INLINE FORM FOR PUBLISHING A NEW CHAPTER */}
+            {isAddingChapterInline && (
+              <form onSubmit={handleSaveChapterInline} className="p-4 rounded-2xl bg-[#11131e] border border-emerald-500/40 space-y-3 animate-fadeIn">
+                <h5 className="font-bold text-xs text-emerald-400 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>Lançar Capítulo para "{book.title}"</span>
+                </h5>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-amber-200">N.º Capítulo *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={chapNumberInline}
+                      onChange={(e) => setChapNumberInline(parseInt(e.target.value) || 1)}
+                      className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-[11px] font-bold text-amber-200">Título do Capítulo *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Capítulo 2: O Despertar"
+                      value={chapTitleInline}
+                      onChange={(e) => setChapTitleInline(e.target.value)}
+                      className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-amber-200">Resumo/Descrição (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: O segredo é finalmente revelado..."
+                    value={chapDescInline}
+                    onChange={(e) => setChapDescInline(e.target.value)}
+                    className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-amber-200">Ficheiro PDF do Capítulo *</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        required
+                        placeholder="https://exemplo.com/capitulo2.pdf"
+                        value={chapPdfUrlInline}
+                        onChange={(e) => setChapPdfUrlInline(e.target.value)}
+                        className="flex-1 bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                      />
+                      <label className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black font-bold text-[11px] cursor-pointer border border-emerald-500/30 shrink-0">
+                        <span>Carregar PDF</span>
+                        <input type="file" accept="application/pdf" onChange={handleChapPdfUploadInline} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-amber-200">N.º de Páginas</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={chapPageCountInline}
+                      onChange={(e) => setChapPageCountInline(parseInt(e.target.value) || 15)}
+                      className="w-full bg-[#181a26] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-amber-100 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingChapterInline(false)}
+                    className="px-3.5 py-1.5 rounded-xl bg-white/5 text-gray-400 text-xs font-bold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingChapInline}
+                    className="px-5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmittingChapInline ? 'Publicando...' : '🚀 Publicar Capítulo'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="space-y-2.5">
               {!book.chapters || book.chapters.length === 0 ? (

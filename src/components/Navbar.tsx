@@ -25,6 +25,7 @@ interface NavbarProps {
   downloadCount: number;
   favoriteCount: number;
   onLogout: () => void;
+  transparentOverlay?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -44,7 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   unreadNotificationCount,
   downloadCount,
   favoriteCount,
-  onLogout
+  onLogout,
+  transparentOverlay = false
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
@@ -53,8 +55,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
 
   return (
-    <header className={`sticky top-0 z-40 backdrop-blur-md border-b shadow-xl transition-colors ${
-      currentTheme === 'light'
+    <header className={`sticky top-0 z-40 backdrop-blur-md border-b shadow-xl transition-all ${
+      transparentOverlay
+        ? 'bg-[#07090e]/85 border-white/10 text-white shadow-2xl'
+        : currentTheme === 'light'
         ? 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200'
         : currentTheme === 'lite'
         ? 'bg-slate-950/90 border-emerald-500/30 text-emerald-100 shadow-emerald-500/10'

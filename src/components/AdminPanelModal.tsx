@@ -627,56 +627,65 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             {!selectedBookForChapter ? (
               <div className="space-y-3">
                 <p className="text-xs text-amber-200/80">
-                  Selecione uma obra em lançamento para adicionar e disponibilizar novos capítulos aos leitores:
+                  Selecione uma obra para adicionar e disponibilizar novos capítulos seriais aos leitores:
                 </p>
 
-                {books.filter(b => b.status === 'em_lancamento').length === 0 ? (
-                  <div className="p-8 text-center bg-[#181a26] border border-amber-500/20 rounded-2xl space-y-3">
-                    <Layers className="w-10 h-10 text-amber-400/60 mx-auto" />
-                    <p className="text-xs font-bold text-gray-300">Nenhuma obra em lançamento seriada disponível.</p>
-                    <p className="text-[11px] text-gray-400 max-w-md mx-auto">
-                      Ao publicar uma nova obra, selecione a opção "Obra em Lançamento" para poder gerir e lançar capítulos individuais.
-                    </p>
-                    <button
-                      onClick={() => setActiveTab('create')}
-                      className="px-4 py-2 rounded-xl bg-amber-500 text-black font-extrabold text-xs transition-all cursor-pointer inline-flex items-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Criar Obra em Lançamento</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {books.filter(b => b.status === 'em_lancamento').map((b) => (
-                      <div
-                        key={b.id}
-                        onClick={() => {
-                          setSelectedBookForChapter(b);
-                          setChapNumber((b.chapters?.length || 0) + 1);
-                        }}
-                        className="p-3.5 rounded-2xl bg-[#181a26] border border-amber-500/30 hover:border-amber-400 flex items-center gap-3 cursor-pointer transition-all hover:bg-amber-500/5 group"
-                      >
-                        <img
-                          src={b.coverUrl}
-                          alt={b.title}
-                          className="w-12 h-16 rounded-xl object-cover border border-amber-500/30 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold uppercase border border-emerald-500/30">
-                            Em Lançamento
-                          </span>
-                          <h4 className="font-extrabold text-white text-xs truncate group-hover:text-amber-300 pt-1">
-                            {b.title}
-                          </h4>
-                          <p className="text-[10px] text-gray-400 truncate">Por {b.author}</p>
-                          <p className="text-[10px] text-amber-400 font-bold pt-1">
-                            {b.chapters?.length || 0} capítulos publicados
-                          </p>
-                        </div>
+                {(() => {
+                  const serialBooks = books.filter(b => b.status === 'em_lancamento' || (b.chapters && b.chapters.length > 0) || (b.category || '').toLowerCase().includes('lançamento'));
+                  const displayBooks = serialBooks.length > 0 ? serialBooks : books;
+
+                  if (displayBooks.length === 0) {
+                    return (
+                      <div className="p-8 text-center bg-[#181a26] border border-amber-500/20 rounded-2xl space-y-3">
+                        <Layers className="w-10 h-10 text-amber-400/60 mx-auto" />
+                        <p className="text-xs font-bold text-gray-300">Nenhuma obra cadastrada na biblioteca.</p>
+                        <p className="text-[11px] text-gray-400 max-w-md mx-auto">
+                          Publique a sua primeira obra para começar a lançar capítulos seriais.
+                        </p>
+                        <button
+                          onClick={() => setActiveTab('create')}
+                          className="px-4 py-2 rounded-xl bg-amber-500 text-black font-extrabold text-xs transition-all cursor-pointer inline-flex items-center gap-2"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Criar Nova Obra</span>
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {displayBooks.map((b) => (
+                        <div
+                          key={b.id}
+                          onClick={() => {
+                            setSelectedBookForChapter(b);
+                            setChapNumber((b.chapters?.length || 0) + 1);
+                          }}
+                          className="p-3.5 rounded-2xl bg-[#181a26] border border-amber-500/30 hover:border-amber-400 flex items-center gap-3 cursor-pointer transition-all hover:bg-amber-500/5 group"
+                        >
+                          <img
+                            src={b.coverUrl}
+                            alt={b.title}
+                            className="w-12 h-16 rounded-xl object-cover border border-amber-500/30 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold uppercase border border-emerald-500/30">
+                              {b.status === 'em_lancamento' ? 'Em Lançamento' : 'Obra Publicada'}
+                            </span>
+                            <h4 className="font-extrabold text-white text-xs truncate group-hover:text-amber-300 pt-1">
+                              {b.title}
+                            </h4>
+                            <p className="text-[10px] text-gray-400 truncate">Por {b.author}</p>
+                            <p className="text-[10px] text-amber-400 font-bold pt-1">
+                              {b.chapters?.length || 0} capítulos lançados
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div className="space-y-4 bg-[#181a26] p-4 rounded-2xl border border-amber-500/30">
