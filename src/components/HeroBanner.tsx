@@ -93,114 +93,114 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     <div className="space-y-6 my-2">
       
       {/* MAIN HERO SECTION WITH CINEMATIC BACKGROUND AND ROTATION */}
-      <section className="relative min-h-[240px] sm:min-h-[340px] lg:min-h-[400px] flex items-center overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-800/60 shadow-2xl group">
+      <section className="relative overflow-hidden rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-xl group">
         
         {/* CINEMATIC BACKGROUND IMAGE WITH OVERLAYS */}
         <div className="absolute inset-0 z-0 transition-opacity duration-1000">
           <img 
             src={currentSlide.bgUrl} 
             alt="Cenário de fundo" 
-            className="w-full h-full object-cover object-center filter brightness-[0.45] transition-transform duration-1000 scale-105"
+            className="w-full h-full object-cover object-center filter brightness-[0.40] transition-transform duration-1000 scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#07090e] via-[#07090e]/90 to-transparent"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-transparent to-[#07090e]/50"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-[#07090e] via-[#07090e]/95 to-[#07090e]/60"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-transparent to-[#07090e]/40"></div>
         </div>
 
         {/* NAVIGATION CHEVRON BUTTONS */}
         <button 
           onClick={() => setActiveSlide((prev) => (prev > 0 ? prev - 1 : slides.length - 1))}
-          className="absolute left-2 sm:left-4 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white/80 hover:text-amber-400 hover:bg-black/80 transition-all backdrop-blur-sm cursor-pointer"
+          className="absolute left-1 sm:left-3 z-20 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white/80 hover:text-amber-400 hover:bg-black/90 transition-all backdrop-blur-sm cursor-pointer"
           title="Anterior"
         >
-          <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+          <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </button>
         <button 
           onClick={() => setActiveSlide((prev) => (prev + 1) % slides.length)}
-          className="absolute right-2 sm:right-4 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white/80 hover:text-amber-400 hover:bg-black/80 transition-all backdrop-blur-sm cursor-pointer"
+          className="absolute right-1 sm:right-3 z-20 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white/80 hover:text-amber-400 hover:bg-black/90 transition-all backdrop-blur-sm cursor-pointer"
           title="Próximo"
         >
-          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+          <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </button>
 
-        {/* BANNER CONTENT */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-10 lg:px-12 w-full py-4 sm:py-6 lg:py-8 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-center relative z-10">
+        {/* BANNER CONTENT - COMPACT FLEX/GRID WITH BOOK ALWAYS ON THE RIGHT */}
+        <div className="max-w-7xl mx-auto px-7 sm:px-10 lg:px-12 w-full py-3 sm:py-5 lg:py-6 grid grid-cols-12 gap-2 sm:gap-6 items-center relative z-10">
           
           {/* LEFT COLUMN: TEXT CONTENT */}
-          <div className="lg:col-span-7 space-y-3 sm:space-y-4 lg:space-y-5 animate-fadeIn">
-            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] sm:text-xs font-bold tracking-wider uppercase">
-              <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-amber-400" />
-              <span>Destaque da semana</span>
+          <div className="col-span-7 sm:col-span-8 lg:col-span-7 space-y-1.5 sm:space-y-3 animate-fadeIn">
+            <div className="inline-flex items-center space-x-1 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[9px] sm:text-xs font-bold tracking-wider uppercase">
+              <Star className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 fill-amber-400" />
+              <span>Destaque</span>
             </div>
 
-            <h1 className="font-serif text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white leading-[1.1] uppercase">
+            <h1 className="font-serif text-base sm:text-3xl lg:text-4xl font-black tracking-tight text-white leading-tight uppercase line-clamp-1">
               {currentSlide.title}
             </h1>
 
-            <p className="text-sm sm:text-lg lg:text-xl text-amber-200/90 font-serif italic">
+            <p className="text-xs sm:text-base lg:text-lg text-amber-200/90 font-serif italic line-clamp-1">
               Por <span className="font-semibold text-amber-400">{currentSlide.author}</span>
             </p>
 
-            <p className="text-slate-300 text-xs sm:text-sm lg:text-base max-w-xl leading-relaxed font-medium line-clamp-2 sm:line-clamp-none">
+            <p className="text-slate-300 text-[11px] sm:text-xs lg:text-sm max-w-xl leading-snug font-medium line-clamp-1 sm:line-clamp-2 hidden xs:block">
               {currentSlide.synopsis}
             </p>
 
             {/* ACTION BUTTONS */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 pt-1 sm:pt-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 pt-0.5 sm:pt-1">
               <button 
                 onClick={() => onReadBook(displayBook)}
-                className="px-5 py-2.5 sm:px-7 sm:py-3 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-extrabold text-xs sm:text-sm flex items-center space-x-2 sm:space-x-3 shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                className="px-3 py-1.5 sm:px-5 sm:py-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-extrabold text-[10px] sm:text-xs flex items-center space-x-1.5 shadow-md shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
               >
-                <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <BookOpen className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span>Ler agora</span>
               </button>
               
               <button 
                 onClick={() => onOpenDetails?.(displayBook, 'reviews')}
-                className="px-5 py-2.5 sm:px-7 sm:py-3 rounded-xl bg-[#131b2e]/80 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm hover:bg-amber-500/10 transition-all backdrop-blur-sm cursor-pointer"
+                className="px-3 py-1.5 sm:px-5 sm:py-2.5 rounded-lg sm:rounded-xl bg-[#131b2e]/80 border border-amber-500/40 text-amber-300 font-bold text-[10px] sm:text-xs hover:bg-amber-500/10 transition-all backdrop-blur-sm cursor-pointer"
               >
-                Ver detalhes
+                Detalhes
               </button>
             </div>
 
             {/* CAROUSEL INDICATORS */}
-            <div className="flex items-center space-x-2 pt-2 sm:pt-3">
+            <div className="flex items-center space-x-1.5 pt-1 sm:pt-2">
               {slides.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveSlide(idx)}
-                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                    activeSlide === idx ? 'w-8 bg-amber-400' : 'w-5 bg-white/20 hover:bg-white/40'
+                  className={`h-1 rounded-full transition-all cursor-pointer ${
+                    activeSlide === idx ? 'w-6 sm:w-8 bg-amber-400' : 'w-3 sm:w-5 bg-white/20 hover:bg-white/40'
                   }`}
                 />
               ))}
             </div>
           </div>
 
-          {/* RIGHT COLUMN: BOOK DISPLAY */}
-          <div className="lg:col-span-5 flex justify-center lg:justify-end">
+          {/* RIGHT COLUMN: BOOK DISPLAY (ALWAYS ON THE RIGHT SIDE) */}
+          <div className="col-span-5 sm:col-span-4 lg:col-span-5 flex justify-end">
             <div 
               onClick={() => onReadBook(displayBook)}
-              className="relative w-32 sm:w-52 md:w-60 lg:w-64 aspect-[3/4] rounded-xl overflow-hidden shadow-2xl shadow-black/80 border border-white/10 transform rotate-1 hover:rotate-0 transition-all duration-500 cursor-pointer group/cover"
+              className="relative w-24 sm:w-40 md:w-48 lg:w-52 aspect-[3/4] rounded-lg sm:rounded-xl overflow-hidden shadow-xl shadow-black/80 border border-white/10 transform rotate-1 hover:rotate-0 transition-all duration-500 cursor-pointer group/cover shrink-0"
             >
               {currentSlide.isSpecialCover ? (
                 /* MADRASTA 3D FLORAL COVER */
-                <div className="w-full h-full bg-slate-100 p-3 sm:p-5 text-slate-900 flex flex-col justify-between border-r-6 sm:border-r-8 border-slate-300 relative">
-                  <div className="absolute top-2 right-2 opacity-15 pointer-events-none text-slate-900">
-                    <svg width="80" height="100" viewBox="0 0 100 120" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <div className="w-full h-full bg-slate-100 p-2 sm:p-4 text-slate-900 flex flex-col justify-between border-r-4 sm:border-r-6 border-slate-300 relative">
+                  <div className="absolute top-1 right-1 opacity-15 pointer-events-none text-slate-900">
+                    <svg width="50" height="70" viewBox="0 0 100 120" fill="none" stroke="currentColor" strokeWidth="1.2">
                       <path d="M10 100 Q 30 50 80 10" />
                       <circle cx="80" cy="10" r="8" />
                     </svg>
                   </div>
-                  <div className="space-y-1 sm:space-y-2 pt-1">
-                    <h2 className="font-serif font-black text-sm sm:text-xl lg:text-2xl tracking-tight uppercase border-b border-slate-300 pb-1 sm:pb-2">
+                  <div className="space-y-0.5 sm:space-y-1 pt-0.5">
+                    <h2 className="font-serif font-black text-[11px] sm:text-base lg:text-xl tracking-tight uppercase border-b border-slate-300 pb-0.5 sm:pb-1">
                       A Madrasta
                     </h2>
-                    <p className="font-serif italic text-[10px] sm:text-xs text-slate-600">A sombra do coração</p>
-                    <p className="font-serif italic text-[10px] sm:text-xs text-slate-500 pt-1 sm:pt-2">A Jardim da Crença</p>
+                    <p className="font-serif italic text-[8px] sm:text-[10px] text-slate-600 line-clamp-1">A sombra do coração</p>
+                    <p className="font-serif italic text-[8px] sm:text-[10px] text-slate-500 pt-0.5 line-clamp-1">A Jardim da Crença</p>
                   </div>
-                  <div className="border-t border-slate-300 pt-1.5 sm:pt-3 flex items-center justify-between text-[10px] sm:text-xs font-serif italic text-slate-700">
-                    <span>Rachide</span>
-                    <span className="font-sans font-bold text-[9px] sm:text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">PDF</span>
+                  <div className="border-t border-slate-300 pt-1 flex items-center justify-between text-[8px] sm:text-[10px] font-serif italic text-slate-700">
+                    <span>Faustino</span>
+                    <span className="font-sans font-bold text-[8px] sm:text-[9px] text-amber-800 bg-amber-100 px-1 py-0.2 rounded">PDF</span>
                   </div>
                 </div>
               ) : (
@@ -211,9 +211,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                     alt={currentSlide.title} 
                     className="w-full h-full object-cover group-hover/cover:scale-105 transition-transform duration-500" 
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-3 sm:p-5">
-                    <span className="text-[10px] sm:text-xs text-amber-400 font-bold tracking-wider uppercase">Destaque Especial</span>
-                    <h3 className="font-serif text-white text-sm sm:text-lg font-bold">{currentSlide.title}</h3>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2 sm:p-3">
+                    <span className="text-[8px] sm:text-[10px] text-amber-400 font-bold tracking-wider uppercase">Destaque</span>
+                    <h3 className="font-serif text-white text-[10px] sm:text-sm font-bold line-clamp-1">{currentSlide.title}</h3>
                   </div>
                 </div>
               )}
