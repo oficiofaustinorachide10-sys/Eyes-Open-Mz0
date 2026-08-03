@@ -74,7 +74,6 @@ export const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ theme 
               />
               <div>
                 <h5 className="font-extrabold text-xs text-white leading-snug">{item.name}</h5>
-                <p className="text-[10px] text-gray-400">{item.role}</p>
               </div>
             </div>
           </div>
