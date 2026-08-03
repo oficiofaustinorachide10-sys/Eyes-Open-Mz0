@@ -78,22 +78,56 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}>
                 ALA X
               </span>
-              <span className={`text-[10px] tracking-tight ${
-                currentTheme === 'light' ? 'text-amber-700' : 'text-amber-300'
+              <span className={`text-[9px] tracking-tight font-bold uppercase ${
+                currentTheme === 'light' ? 'text-amber-700' : 'text-amber-400'
               }`}>
-                {currentTheme === 'lite' ? 'Modo Lite Pro' : 'Biblioteca & Obras Literárias'}
+                BIBLIOTECA DIGITAL
               </span>
             </div>
           </div>
 
+          {/* DESKTOP NAV LINKS (MATCHING DESIGN IMAGE) */}
+          <nav className="hidden lg:flex items-center gap-6 text-xs font-bold">
+            <button
+              onClick={() => onSelectCategory('todas')}
+              className="text-amber-400 border-b-2 border-amber-400 py-1 font-extrabold cursor-pointer"
+            >
+              Início
+            </button>
+            <button
+              onClick={() => onSelectCategory('todas')}
+              className="text-gray-300 hover:text-white transition-colors cursor-pointer"
+            >
+              Explorar
+            </button>
+            <button
+              onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+              className="text-gray-300 hover:text-white transition-colors cursor-pointer"
+            >
+              Categorias
+            </button>
+            <button
+              onClick={() => onSelectCategory('todas')}
+              className="text-gray-300 hover:text-white transition-colors cursor-pointer"
+            >
+              Autores
+            </button>
+            <button
+              onClick={() => onSelectCategory('todas')}
+              className="text-gray-300 hover:text-white transition-colors cursor-pointer"
+            >
+              Blog
+            </button>
+          </nav>
+
           {/* SEARCH BAR (DESKTOP) */}
-          <div className="hidden md:flex flex-1 max-w-md relative">
+          <div className="hidden md:flex flex-1 max-w-sm relative">
             <Search className={`absolute left-3.5 top-2.5 w-4 h-4 ${
               currentTheme === 'light' ? 'text-slate-400' : 'text-amber-400/60'
             }`} />
             <input
               type="text"
-              placeholder="Pesquisar por título, autor ou palavra-chave..."
+              placeholder="Buscar obras, autores..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               className={`w-full border rounded-xl pl-10 pr-4 py-2 text-xs outline-none transition-all shadow-inner ${

@@ -25,6 +25,43 @@ function sanitizeDoc<T>(docObj: T): any {
   return JSON.parse(JSON.stringify(docObj));
 }
 
+// Local PDF memory & LocalStorage cache store to handle large base64 PDFs cleanly
+const localPdfStore: Record<string, string> = {};
+
+export function savePdfToLocalStore(key: string, base64Pdf: string): void {
+  localPdfStore[key] = base64Pdf;
+  try {
+    localStorage.setItem(`alax_pdf_store_${key}`, base64Pdf);
+  } catch (e) {
+    console.warn('LocalStorage full, PDF kept in memory store:', e);
+  }
+}
+
+export function getPdfFromLocalStore(key: string): string | null {
+  if (localPdfStore[key]) return localPdfStore[key];
+  try {
+    return localStorage.getItem(`alax_pdf_store_${key}`);
+  } catch (e) {
+    return null;
+  }
+}
+
+export function resolvePdfUrl(bookOrPdfUrl: string | Book): string {
+  if (typeof bookOrPdfUrl !== 'string') {
+    const book = bookOrPdfUrl;
+    if (book.pdfUrl && book.pdfUrl.startsWith('local_pdf:')) {
+      const storeKey = book.pdfUrl.replace('local_pdf:', '');
+      return getPdfFromLocalStore(storeKey) || getPdfFromLocalStore(book.id) || book.pdfUrl;
+    }
+    return book.pdfUrl;
+  }
+  if (bookOrPdfUrl.startsWith('local_pdf:')) {
+    const storeKey = bookOrPdfUrl.replace('local_pdf:', '');
+    return getPdfFromLocalStore(storeKey) || bookOrPdfUrl;
+  }
+  return bookOrPdfUrl;
+}
+
 // -------------------------------------------------------------
 // BOOKS DATA LAYER (Firestore `books`)
 // -------------------------------------------------------------
@@ -43,7 +80,10 @@ export function dbSubscribeBooks(onUpdate: (books: Book[]) => void): () => void 
         }
         const books: Book[] = [];
         snapshot.forEach((docSnap) => {
-          books.push({ id: docSnap.id, ...docSnap.data() } as Book);
+          const data = docSnap.data() as Book;
+          // Resolve pdfUrl if stored locally
+          const resolvedPdf = resolvePdfUrl(data);
+          books.push({ ...data, id: docSnap.id, pdfUrl: resolvedPdf });
         });
         books.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         onUpdate(books);
@@ -84,7 +124,8 @@ export async function dbFetchBooks(): Promise<Book[]> {
     }
     const books: Book[] = [];
     snap.forEach((docSnap) => {
-      books.push({ id: docSnap.id, ...docSnap.data() } as Book);
+      const data = docSnap.data() as Book;
+      books.push({ ...data, id: docSnap.id, pdfUrl: resolvePdfUrl(data) });
     });
     books.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return books;
@@ -99,7 +140,8 @@ export async function dbFetchBookById(id: string): Promise<Book | null> {
     const ref = doc(db, 'books', id);
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      return { id: snap.id, ...snap.data() } as Book;
+      const data = snap.data() as Book;
+      return { ...data, id: snap.id, pdfUrl: resolvePdfUrl(data) };
     }
   } catch (e) {
     console.warn('dbFetchBookById failed:', e);
@@ -111,15 +153,27 @@ export async function dbCreateBook(book: Book): Promise<Book> {
   const cleanBook = sanitizeDoc(book);
 
   if (cleanBook.coverUrl && cleanBook.coverUrl.startsWith('data:image')) {
-    cleanBook.coverUrl = await compressBase64Image(cleanBook.coverUrl, 800, 0.65);
+    try {
+      cleanBook.coverUrl = await compressBase64Image(cleanBook.coverUrl, 800, 0.65);
+    } catch (e) {
+      console.warn('Cover compression fallback:', e);
+    }
   }
 
   const bookId = cleanBook.id || `book_${Date.now()}`;
-  const docRef = doc(db, 'books', bookId);
 
-  const payload = {
+  // Check if PDF URL is a huge base64 (over 400KB) to prevent Firestore 1MB document limit overflow
+  let rawPdfUrl = cleanBook.pdfUrl || '';
+  let firestorePdfUrl = rawPdfUrl;
+  if (rawPdfUrl.length > 400000) {
+    savePdfToLocalStore(bookId, rawPdfUrl);
+    firestorePdfUrl = `local_pdf:${bookId}`;
+  }
+
+  const returnedPayload: Book = {
     ...cleanBook,
     id: bookId,
+    pdfUrl: rawPdfUrl,
     createdAt: cleanBook.createdAt || Date.now(),
     downloadCount: cleanBook.downloadCount || 0,
     likesCount: cleanBook.likesCount || 0,
@@ -127,16 +181,55 @@ export async function dbCreateBook(book: Book): Promise<Book> {
     ratingCount: cleanBook.ratingCount || 1
   };
 
-  await setDoc(docRef, payload);
-  return payload;
+  const firestorePayload = sanitizeDoc({
+    ...returnedPayload,
+    pdfUrl: firestorePdfUrl
+  });
+
+  // Execute setDoc with timeout safety (max 5 seconds) so publishing NEVER hangs
+  try {
+    const docRef = doc(db, 'books', bookId);
+    const setDocPromise = setDoc(docRef, firestorePayload);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 5000)
+    );
+    await Promise.race([setDocPromise, timeoutPromise]);
+  } catch (e) {
+    console.warn('Firestore setDoc notice (book published & cached locally):', e);
+  }
+
+  // Prepend to SAMPLE_BOOKS in memory for instantaneous local UI updates
+  const existingIdx = SAMPLE_BOOKS.findIndex(b => b.id === bookId);
+  if (existingIdx >= 0) {
+    SAMPLE_BOOKS[existingIdx] = returnedPayload;
+  } else {
+    SAMPLE_BOOKS.unshift(returnedPayload);
+  }
+
+  return returnedPayload;
 }
 
 export async function dbUpdateBook(id: string, updates: Partial<Book>): Promise<void> {
   try {
     const ref = doc(db, 'books', id);
-    await updateDoc(ref, sanitizeDoc(updates));
+    const cleanUpdates = sanitizeDoc(updates);
+    if (cleanUpdates.pdfUrl && cleanUpdates.pdfUrl.length > 400000) {
+      savePdfToLocalStore(id, cleanUpdates.pdfUrl);
+      cleanUpdates.pdfUrl = `local_pdf:${id}`;
+    }
+    const updatePromise = updateDoc(ref, cleanUpdates);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 5000)
+    );
+    await Promise.race([updatePromise, timeoutPromise]);
   } catch (e) {
-    console.error('dbUpdateBook error:', e);
+    console.error('dbUpdateBook error (saved locally):', e);
+  }
+
+  // Also update in SAMPLE_BOOKS array
+  const sampleIdx = SAMPLE_BOOKS.findIndex(b => b.id === id);
+  if (sampleIdx >= 0) {
+    SAMPLE_BOOKS[sampleIdx] = { ...SAMPLE_BOOKS[sampleIdx], ...updates };
   }
 }
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Download, Maximize2, Minimize2, ExternalLink, BookOpen, ChevronLeft } from 'lucide-react';
 import { Book } from '../types';
-import { dbIncrementBookDownloads } from '../lib/db';
+import { dbIncrementBookDownloads, resolvePdfUrl } from '../lib/db';
 
 interface PdfViewerModalProps {
   book: Book;
@@ -12,12 +12,14 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({ book, onClose })
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [downloadCount, setDownloadCount] = useState(book.downloadCount || 0);
 
+  const activePdfUrl = resolvePdfUrl(book);
+
   const handleDownload = async () => {
     try {
       const updated = await dbIncrementBookDownloads(book.id);
       setDownloadCount(updated);
       const link = document.createElement('a');
-      link.href = book.pdfUrl;
+      link.href = activePdfUrl;
       link.download = `${book.title.replace(/\s+/g, '_')}_AlaX.pdf`;
       link.target = '_blank';
       document.body.appendChild(link);
@@ -64,7 +66,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({ book, onClose })
             </button>
 
             <button
-              onClick={() => window.open(book.pdfUrl, '_blank')}
+              onClick={() => window.open(activePdfUrl, '_blank')}
               className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-amber-300 transition-all cursor-pointer"
               title="Abrir PDF numa nova separador"
             >
@@ -91,7 +93,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({ book, onClose })
         {/* PDF VIEWPORT (IFRAME & OBJECT EMBED) */}
         <div className="flex-1 w-full bg-[#0a0b0e] relative">
           <iframe
-            src={`${book.pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
+            src={`${activePdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
             title={book.title}
             className="w-full h-full border-none"
           />

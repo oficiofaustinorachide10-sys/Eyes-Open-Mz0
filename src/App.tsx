@@ -12,6 +12,11 @@ import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 // Subcomponents
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
+import { ExploreCategoriesGrid } from './components/ExploreCategoriesGrid';
+import { WhyUseAlaXSection } from './components/WhyUseAlaXSection';
+import { TestimonialsSection } from './components/TestimonialsSection';
+import { NewsletterSection } from './components/NewsletterSection';
+import { FooterSection } from './components/FooterSection';
 import { AlaXHeader } from './components/AlaXHeader';
 import { AlaXIntroSplashModal } from './components/AlaXIntroSplashModal';
 import { AlaXAnimatedXLoader } from './components/AlaXAnimatedXLoader';
@@ -553,22 +558,34 @@ export default function App() {
           </div>
         )}
 
+        {/* ADDITIONAL DESIGN SECTIONS FROM DESIGN IMAGE */}
+        {!showOnlyFavorites && !searchQuery && (
+          <>
+            <ExploreCategoriesGrid
+              selectedCategory={selectedCategory}
+              onSelectCategory={(cat) => {
+                setSelectedCategory(cat);
+                setShowOnlyFavorites(false);
+              }}
+              theme={currentTheme}
+            />
+
+            <WhyUseAlaXSection theme={currentTheme} />
+            <TestimonialsSection theme={currentTheme} />
+            <NewsletterSection theme={currentTheme} />
+          </>
+        )}
+
       </main>
 
-      {/* FOOTER */}
-      <footer className="bg-[#0a0b10] border-t border-amber-500/20 py-8 px-4 mt-12">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-400">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center text-black font-black text-xs">
-              X
-            </div>
-            <span className="font-bold text-white font-mono">ALA X</span>
-            <span>— Plataforma de Publicação & Leitura de Obras em PDF</span>
-          </div>
-
-          <p>© 2026 Ala X. Todos os direitos reservados. Conectado ao Firebase Cloud Firestore.</p>
-        </div>
-      </footer>
+      {/* FOOTER (FULL DESIGN FROM IMAGE) */}
+      <FooterSection
+        onSelectCategory={(cat) => {
+          setSelectedCategory(cat);
+          setShowOnlyFavorites(false);
+        }}
+        theme={currentTheme}
+      />
 
       {/* ACTIVE MODALS */}
       {selectedBookForDetails && (

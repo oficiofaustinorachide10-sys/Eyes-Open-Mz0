@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Sparkles, Download, Shield, FileText, ArrowRight, Star, PlusCircle, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Star, BookMarked, Users, Shield, CheckCircle, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { Book, User } from '../types';
 
 interface HeroBannerProps {
@@ -19,190 +19,206 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onOpenAdmin,
   totalBooksCount
 }) => {
-  const [isBannerTextExpanded, setIsBannerTextExpanded] = useState(false);
-  const isPublisher = currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin';
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  const displayBook = featuredBook || {
+    id: 'book_madrasta_hero',
+    title: 'A MADRASTA',
+    author: 'Ofélio Faustino',
+    synopsis: 'Um drama envolvente sobre amor, família e os desafios que transformam destinos.',
+    category: 'Drama',
+    coverUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800',
+    pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+    downloadCount: 1420,
+    ratingAverage: 4.9,
+    ratingCount: 38
+  } as Book;
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#12141f] via-[#1a1c29] to-[#12141f] border border-amber-500/30 p-6 sm:p-10 my-6 shadow-2xl">
-      {/* BACKGROUND ACCENTS */}
-      <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-80 h-80 rounded-full bg-amber-600/10 blur-3xl pointer-events-none" />
-
-      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+    <div className="space-y-6 my-4">
+      
+      {/* MAIN HERO CARD (MATCHING UPLOADED DESIGN) */}
+      <div className="relative overflow-hidden rounded-3xl bg-[#070911] border border-amber-500/20 p-6 sm:p-10 lg:p-12 shadow-2xl">
         
-        {/* LEFT COLUMN - BRAND & DESCRIPTION */}
-        <div className="lg:col-span-7 space-y-5">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold tracking-wide">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-            <span>Plataforma Oficial de Publicação & Leitura</span>
-          </div>
+        {/* ATMOSPHERIC FOREST/LIGHTING WALLPAPER BACKGROUND */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-screen pointer-events-none"
+          style={{ 
+            backgroundImage: `url('https://images.unsplash.com/photo-1511497584788-8767611136f6?auto=format&fit=crop&q=80&w=1600')`
+          }}
+        />
+        
+        {/* AMBER & GOLDEN ATMOSPHERIC LIGHT GLOWS */}
+        <div className="absolute top-0 right-1/4 w-[500px] h-[500px] rounded-full bg-amber-500/20 blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 rounded-full bg-amber-600/15 blur-[120px] pointer-events-none" />
+        <div className="absolute top-1/3 left-1/3 w-80 h-80 rounded-full bg-amber-300/10 blur-[100px] pointer-events-none" />
 
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight font-serif leading-tight">
-            Descubra & Leia Obras Literárias em <span className="text-amber-400 italic">PDF</span>
-          </h2>
+        {/* CAROUSEL NAVIGATION ARROWS */}
+        <button 
+          onClick={() => setActiveSlide((prev) => (prev > 0 ? prev - 1 : 3))}
+          className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/10 hover:border-amber-400 text-white hover:text-amber-400 items-center justify-center transition-all cursor-pointer backdrop-blur-md z-20"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
 
-          {/* PUBLICATION TEXT - CLICKABLE TO SHOW FULLY */}
-          <div 
-            onClick={() => setIsBannerTextExpanded(!isBannerTextExpanded)}
-            className="cursor-pointer group/heroText space-y-1"
-            title="Clique para ler a apresentação completa"
-          >
-            <p className={`text-sm sm:text-base text-gray-300 max-w-2xl leading-relaxed transition-all ${
-              isBannerTextExpanded ? 'text-amber-100' : 'line-clamp-3 group-hover/heroText:text-white'
-            }`}>
-              Bem-vindo ao <strong className="text-amber-300 font-bold">Ala X</strong>, a sua biblioteca virtual aberta para exploração, leitura online de PDF, download instantâneo e avaliação crítica de romances, thrillers, poesias e ensaios.
+        <button 
+          onClick={() => setActiveSlide((prev) => (prev < 3 ? prev + 1 : 0))}
+          className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/10 hover:border-amber-400 text-white hover:text-amber-400 items-center justify-center transition-all cursor-pointer backdrop-blur-md z-20"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          
+          {/* LEFT SIDE CONTENT */}
+          <div className="lg:col-span-7 space-y-6">
+            
+            {/* BADGE: DESTAQUE DA SEMANA */}
+            <div className="inline-flex items-center gap-2 text-amber-400 text-xs font-black tracking-widest uppercase">
+              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>DESTAQUE DA SEMANA</span>
+            </div>
+
+            {/* MAIN TITLE */}
+            <div className="space-y-2">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight font-serif uppercase leading-tight">
+                {displayBook.title}
+              </h1>
+              <p className="text-xl sm:text-2xl text-amber-400 font-serif italic font-medium">
+                Por <span className="underline decoration-amber-500/40">{displayBook.author}</span>
+              </p>
+            </div>
+
+            {/* SYNOPSIS */}
+            <p className="text-sm sm:text-base text-gray-300 max-w-xl leading-relaxed">
+              {displayBook.synopsis || 'Um drama envolvente sobre amor, família e os desafios que transformam destinos.'}
             </p>
-            <span className="text-xs font-extrabold text-amber-400 inline-flex items-center gap-1 hover:underline pt-0.5">
-              {isBannerTextExpanded ? (
-                <><span>Recolher texto</span><ChevronUp className="w-3.5 h-3.5" /></>
-              ) : (
-                <><span>Ler texto de apresentação completo</span><ChevronDown className="w-3.5 h-3.5" /></>
-              )}
-            </span>
-          </div>
 
-          {/* QUICK STATS BADGES */}
-          <div className="flex flex-wrap items-center gap-4 text-xs pt-2">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#181a26] border border-amber-500/20 text-gray-300">
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span><strong className="text-white font-extrabold">{totalBooksCount}</strong> Obras Publicadas</span>
-            </div>
-
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#181a26] border border-amber-500/20 text-gray-300">
-              <Download className="w-4 h-4 text-emerald-400" />
-              <span>Downloads Ilimitados</span>
-            </div>
-
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#181a26] border border-amber-500/20 text-gray-300">
-              <Shield className="w-4 h-4 text-amber-400" />
-              <span>Plataforma Segura</span>
-            </div>
-          </div>
-
-          {/* ACTIONS */}
-          <div className="flex flex-wrap items-center gap-3 pt-4">
-            {featuredBook && (
-              <>
-                <button
-                  onClick={() => onReadBook(featuredBook)}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-black font-extrabold text-xs sm:text-sm tracking-wide shadow-lg shadow-amber-500/25 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Ler Destaque: {featuredBook.title}</span>
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </button>
-
-                {onOpenDetails && (
-                  <button
-                    onClick={() => onOpenDetails(featuredBook, 'reviews')}
-                    className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-[#181a26] border border-amber-500/30 text-amber-300 hover:text-white font-semibold text-xs sm:text-sm hover:border-amber-400/60 transition-all cursor-pointer"
-                    title="Ver Avaliações e Leitores que Avaliaram"
-                  >
-                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                    <span>Avaliações ({featuredBook.ratingCount || 1})</span>
-                  </button>
-                )}
-              </>
-            )}
-
-            {isPublisher && (
+            {/* BUTTONS */}
+            <div className="flex flex-wrap items-center gap-4 pt-2">
               <button
-                onClick={onOpenAdmin}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-[#181a26] border border-amber-500/30 text-amber-300 hover:text-white font-semibold text-xs sm:text-sm hover:border-amber-400/60 transition-all cursor-pointer"
+                onClick={() => onReadBook(displayBook)}
+                className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-black font-extrabold text-sm tracking-wide shadow-xl shadow-amber-500/25 hover:scale-105 active:scale-95 transition-all cursor-pointer"
               >
-                <PlusCircle className="w-4 h-4 text-amber-400" />
-                <span>Nova Obra</span>
+                <BookOpen className="w-4 h-4" />
+                <span>Ler agora</span>
               </button>
-            )}
+
+              <button
+                onClick={() => onOpenDetails?.(displayBook, 'reviews')}
+                className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-black/50 hover:bg-black/80 border border-white/20 hover:border-amber-400 text-white font-bold text-sm transition-all cursor-pointer backdrop-blur-md"
+              >
+                <span>Ver detalhes</span>
+              </button>
+            </div>
+
+            {/* CAROUSEL INDICATOR DOTS */}
+            <div className="flex items-center gap-2 pt-4">
+              {[0, 1, 2, 3].map((idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveSlide(idx)}
+                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                    activeSlide === idx ? 'w-8 bg-amber-400' : 'w-5 bg-white/20 hover:bg-white/40'
+                  }`}
+                />
+              ))}
+            </div>
+
           </div>
-        </div>
 
-        {/* RIGHT COLUMN - FEATURED BOOK SHOWCASE */}
-        {featuredBook && (
-          <div className="lg:col-span-5 flex justify-center">
+          {/* RIGHT SIDE 3D BOOK DISPLAY */}
+          <div className="lg:col-span-5 flex justify-center lg:justify-end">
             <div 
-              className="group relative w-full max-w-xs"
+              onClick={() => onReadBook(displayBook)}
+              className="relative group cursor-pointer max-w-xs sm:max-w-sm"
             >
-              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-300 opacity-30 group-hover:opacity-75 blur transition duration-500" />
-              <div className="relative rounded-2xl bg-[#181a26] p-4 border border-amber-500/40 shadow-2xl space-y-3">
+              {/* SHADOW & AMBER GLOW */}
+              <div className="absolute -inset-3 bg-amber-400/20 rounded-2xl blur-2xl group-hover:bg-amber-400/35 transition duration-500" />
+              
+              {/* 3D BOOK COVER MOCKUP MATCHING DESIGN IMAGE */}
+              <div className="relative rounded-xl overflow-hidden border border-amber-500/40 bg-white text-slate-900 p-6 sm:p-8 shadow-2xl transition-transform duration-500 group-hover:scale-[1.03] min-h-[360px] sm:min-h-[420px] flex flex-col justify-between border-r-8 border-r-slate-300">
                 
-                <div 
-                  onClick={() => onReadBook(featuredBook)}
-                  className="relative h-64 w-full rounded-xl overflow-hidden bg-black/40 cursor-pointer"
-                >
-                  <img
-                    src={featuredBook.coverUrl}
-                    alt={featuredBook.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                  />
-                  <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
-                    <span className="px-2.5 py-1 rounded-md bg-amber-500 text-black font-black text-[10px] uppercase tracking-wider">
-                      {featuredBook.category}
-                    </span>
-                    {featuredBook.status === 'em_lancamento' ? (
-                      <span className="px-2.5 py-0.5 rounded-md bg-emerald-500 text-black font-extrabold text-[9px] uppercase tracking-wider">
-                        Em Lançamento {featuredBook.latestChapterNumber ? `• Cap. ${featuredBook.latestChapterNumber}` : ''}
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-md bg-blue-600 text-white font-extrabold text-[9px] uppercase tracking-wider">
-                        Completo
-                      </span>
-                    )}
-                  </div>
-
-                  {/* STAR BADGE -> DIRECTS TO REVIEWS */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenDetails?.(featuredBook, 'reviews');
-                    }}
-                    className="absolute bottom-3 left-3 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-amber-300 text-xs font-extrabold flex items-center gap-1 hover:bg-amber-500 hover:text-black transition-all cursor-pointer border border-amber-500/30"
-                    title="Ver Avaliações e pessoas que avaliaram"
-                  >
-                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    <span>{featuredBook.ratingAverage ? featuredBook.ratingAverage.toFixed(1) : '5.0'}</span>
-                  </button>
-
-                  {/* COMMENTS BADGE -> DIRECTS TO COMMENTS */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenDetails?.(featuredBook, 'comments');
-                    }}
-                    className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-amber-300 text-xs font-extrabold flex items-center gap-1 hover:bg-amber-500 hover:text-black transition-all cursor-pointer border border-amber-500/30"
-                    title="Ver Comentários"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Comentários</span>
-                  </button>
+                {/* FLORAL ARTWORK BACKGROUND PATTERN ON COVER */}
+                <div className="absolute top-4 right-4 opacity-15 pointer-events-none text-slate-900">
+                  <svg width="140" height="180" viewBox="0 0 100 120" fill="none" stroke="currentColor" strokeWidth="1.2">
+                    <path d="M10 100 Q 30 50 80 10" />
+                    <path d="M30 70 Q 50 30 90 20" />
+                    <circle cx="80" cy="10" r="8" />
+                    <circle cx="90" cy="20" r="5" />
+                  </svg>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Obra em Destaque</span>
-                  <h3 
-                    onClick={() => onOpenDetails?.(featuredBook, 'reviews')}
-                    className="font-bold text-white text-base line-clamp-1 group-hover:text-amber-300 transition-colors cursor-pointer"
-                  >
-                    {featuredBook.title}
-                  </h3>
-                  <p className="text-xs text-gray-400 line-clamp-1">Por {featuredBook.author}</p>
+                <div className="space-y-4 relative z-10">
+                  <h2 className="text-3xl sm:text-4xl font-black font-serif tracking-tight text-slate-950 uppercase border-b border-slate-200 pb-2">
+                    {displayBook.title}
+                  </h2>
+                  <p className="text-sm font-serif italic text-slate-600">
+                    A sombra do coração
+                  </p>
+                  <p className="text-xs font-serif italic text-slate-500 pt-4">
+                    A Jardim da Crença
+                  </p>
                 </div>
 
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-amber-300 font-semibold">
-                  <button 
-                    onClick={() => onReadBook(featuredBook)}
-                    className="flex items-center gap-1 hover:underline cursor-pointer"
-                  >
-                    <span>Abrir no Leitor PDF</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </button>
+                <div className="relative z-10 pt-8 flex items-center justify-between border-t border-slate-200 text-xs font-serif italic text-slate-700">
+                  <span>Rachide</span>
+                  <span className="font-sans font-bold text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded">PDF</span>
                 </div>
+
               </div>
             </div>
           </div>
-        )}
+
+        </div>
+      </div>
+
+      {/* STATS BANNER (MATCHING UPLOADED DESIGN 4 COLUMNS) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 sm:p-6 rounded-2xl bg-[#0b0d18] border border-white/10 text-white">
+        
+        <div className="flex items-center gap-3.5 p-2 sm:p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <BookMarked className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-lg sm:text-xl font-black text-white leading-tight">10.000+</div>
+            <div className="text-xs text-gray-400 font-medium">Obras disponíveis</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3.5 p-2 sm:p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-lg sm:text-xl font-black text-white leading-tight">5.000+</div>
+            <div className="text-xs text-gray-400 font-medium">Autores nacionais</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3.5 p-2 sm:p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-lg sm:text-xl font-black text-white leading-tight">50.000+</div>
+            <div className="text-xs text-gray-400 font-medium">Leitores ativos</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3.5 p-2 sm:p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Shield className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-lg sm:text-xl font-black text-white leading-tight">100%</div>
+            <div className="text-xs text-gray-400 font-medium">Acesso gratuito</div>
+          </div>
+        </div>
 
       </div>
+
     </div>
   );
 };
+
