@@ -633,13 +633,15 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setIsAddingChapterInline(!isAddingChapterInline)}
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>{isAddingChapterInline ? 'Fechar Form' : '➕ Lançar Novo Capítulo'}</span>
-                </button>
+                {isPublisher && (
+                  <button
+                    onClick={() => setIsAddingChapterInline(!isAddingChapterInline)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>{isAddingChapterInline ? 'Fechar Form' : '➕ Lançar Novo Capítulo'}</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => onStartDownload(book)}
@@ -652,7 +654,7 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
             </div>
 
             {/* INLINE FORM FOR PUBLISHING A NEW CHAPTER */}
-            {isAddingChapterInline && (
+            {isPublisher && isAddingChapterInline && (
               <form onSubmit={handleSaveChapterInline} className="p-4 rounded-2xl bg-[#11131e] border border-emerald-500/40 space-y-3 animate-fadeIn">
                 <h5 className="font-bold text-xs text-emerald-400 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
