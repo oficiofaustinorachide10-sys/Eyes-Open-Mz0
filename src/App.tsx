@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Book, User, AppNotification } from './types';
 import { dbSubscribeBooks, dbIncrementBookDownloads, dbSubscribeNotifications } from './lib/db';
-import { subscribeToAuth, logoutUser } from './lib/authService';
+import { subscribeToAuth, logoutUser, getStoredUser, saveStoredUser } from './lib/authService';
 import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 
 // Subcomponents
@@ -30,10 +30,25 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { DownloadedBooksModal, DownloadedItem } from './components/DownloadedBooksModal';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 
+const DEFAULT_GUEST_USER: User = {
+  id: 'guest_reader',
+  uid: 'guest_reader',
+  email: 'leitor@alax.mz',
+  name: 'Leitor Ala X',
+  role: 'user',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+  photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+  bio: 'Leitor da Biblioteca Digital Ala X',
+  favoriteBookIds: [],
+  createdAt: Date.now()
+};
+
 export default function App() {
   const [books, setBooks] = useState<Book[]>(SAMPLE_BOOKS);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authChecked, setAuthChecked] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    return getStoredUser() || DEFAULT_GUEST_USER;
+  });
+  const [authChecked, setAuthChecked] = useState<boolean>(true);
 
   // App Theme & View Mode State
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(() => {
@@ -109,7 +124,12 @@ export default function App() {
   // Firebase Auth state listener
   useEffect(() => {
     const unsubAuth = subscribeToAuth((fbUser) => {
-      setCurrentUser(fbUser);
+      if (fbUser) {
+        setCurrentUser(fbUser);
+        saveStoredUser(fbUser);
+      } else {
+        saveStoredUser(null);
+      }
       setAuthChecked(true);
     });
     return () => unsubAuth();
@@ -117,18 +137,24 @@ export default function App() {
 
   // Firestore real-time listener for books & notifications
   useEffect(() => {
-    if (!currentUser) return;
     const unsubBooks = dbSubscribeBooks((updatedBooks) => {
-      setBooks(updatedBooks);
+      if (updatedBooks && updatedBooks.length > 0) {
+        setBooks(updatedBooks);
+      }
     });
-    const unsubNotifs = dbSubscribeNotifications(currentUser.id, Boolean(isAdmin), (updatedNotifs) => {
-      setNotifications(updatedNotifs);
-    });
+
+    let unsubNotifs = () => {};
+    if (currentUser && currentUser.id !== 'guest_reader') {
+      unsubNotifs = dbSubscribeNotifications(currentUser.id, Boolean(isAdmin), (updatedNotifs) => {
+        setNotifications(updatedNotifs);
+      });
+    }
+
     return () => {
       unsubBooks();
       unsubNotifs();
     };
-  }, [currentUser, isAdmin]);
+  }, [currentUser?.id, isAdmin]);
 
   // Filter & Sort Books
   const filteredBooks = useMemo(() => {
@@ -282,36 +308,9 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    setCurrentUser(null);
+    setCurrentUser(DEFAULT_GUEST_USER);
+    saveStoredUser(null);
   };
-
-  // REQUIREMENT 1: MANDATORY AUTH WALL — NO ACCESS IF NOT AUTHENTICATED
-  if (!authChecked) {
-    return <AlaXAnimatedXLoader message="A carregar Biblioteca Ala X..." fullScreen />;
-  }
-
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-[#07080d]">
-        <AuthModal
-          canClose={false}
-          onLoginSuccess={(user, mode) => {
-            setCurrentUser(user);
-            setSplashMode(mode || 'login');
-            setShowIntroSplash(true);
-          }}
-        />
-
-        {showIntroSplash && (
-          <AlaXIntroSplashModal
-            user={currentUser}
-            mode={splashMode}
-            onClose={() => setShowIntroSplash(false)}
-          />
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className={`min-h-screen font-sans antialiased flex flex-col justify-between transition-colors duration-300 ${
@@ -662,6 +661,20 @@ export default function App() {
           onLogout={handleLogoutAction}
           onUserUpdated={(updated) => {
             setCurrentUser(updated);
+          }}
+        />
+      )}
+
+      {isAuthModalOpen && (
+        <AuthModal
+          canClose={true}
+          onClose={() => setIsAuthModalOpen(false)}
+          onLoginSuccess={(user, mode) => {
+            setCurrentUser(user);
+            saveStoredUser(user);
+            setIsAuthModalOpen(false);
+            setSplashMode(mode || 'login');
+            setShowIntroSplash(true);
           }}
         />
       )}

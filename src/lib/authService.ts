@@ -172,10 +172,34 @@ export async function logoutUser(): Promise<void> {
  * Subscribe to Firebase Auth state changes
  */
 export function subscribeToAuth(onUserChanged: (user: User | null) => void): () => void {
-  return onAuthStateChanged(auth, async (fbUser) => {
+  return onAuthStateChanged(auth, (fbUser) => {
     if (fbUser) {
-      const user = await syncUserDocToFirestore(fbUser);
-      onUserChanged(user);
+      const email = fbUser.email || '';
+      const isAdmin = isUserAdminEmail(email);
+      const fastUser: User = {
+        id: fbUser.uid,
+        uid: fbUser.uid,
+        email: email,
+        name: fbUser.displayName || email.split('@')[0] || 'Utilizador Ala X',
+        role: isAdmin ? 'admin' : 'user',
+        avatar: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+        photoURL: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+        bio: '',
+        favoriteBookIds: [],
+        createdAt: Date.now()
+      };
+
+      // Emit fast user immediately
+      onUserChanged(fastUser);
+
+      // Background sync with Firestore without blocking UI
+      syncUserDocToFirestore(fbUser)
+        .then((synced) => {
+          onUserChanged(synced);
+        })
+        .catch((err) => {
+          console.warn('Background Firestore user sync notice:', err);
+        });
     } else {
       onUserChanged(null);
     }
