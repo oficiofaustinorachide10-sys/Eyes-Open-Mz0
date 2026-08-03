@@ -46,20 +46,81 @@ export function getPdfFromLocalStore(key: string): string | null {
   }
 }
 
+/**
+ * Save large Base64 PDF strings into Firestore subcollections as 400KB chunks.
+ * This ensures full persistence in the Cloud database across all devices and browsers.
+ */
+export async function savePdfToFirestore(bookId: string, pdfData: string, subFolder = 'pdfChunks'): Promise<void> {
+  if (!pdfData || !pdfData.startsWith('data:')) return;
+  const CHUNK_SIZE = 400000;
+  const total = Math.ceil(pdfData.length / CHUNK_SIZE);
+  const promises = [];
+  for (let i = 0; i < total; i++) {
+    const chunkStr = pdfData.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const chunkRef = doc(db, 'books', bookId, subFolder, String(i));
+    promises.push(setDoc(chunkRef, { index: i, totalChunks: total, data: chunkStr }));
+  }
+  await Promise.all(promises);
+}
+
+/**
+ * Fetch Base64 PDF chunks from Firestore subcollection and reassemble the original PDF data.
+ */
+export async function fetchPdfFromFirestore(bookId: string, subFolder = 'pdfChunks'): Promise<string | null> {
+  try {
+    const chunksRef = collection(db, 'books', bookId, subFolder);
+    const snap = await getDocs(query(chunksRef, orderBy('index', 'asc')));
+    if (snap.empty) return null;
+    let fullPdf = '';
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && data.data) {
+        fullPdf += data.data;
+      }
+    });
+    return fullPdf || null;
+  } catch (e) {
+    console.warn('fetchPdfFromFirestore error:', e);
+    return null;
+  }
+}
+
 export function resolvePdfUrl(bookOrPdfUrl: string | Book): string {
   if (typeof bookOrPdfUrl !== 'string') {
     const book = bookOrPdfUrl;
-    if (book.pdfUrl && book.pdfUrl.startsWith('local_pdf:')) {
-      const storeKey = book.pdfUrl.replace('local_pdf:', '');
+    if (book.pdfUrl && (book.pdfUrl.startsWith('firestore_pdf:') || book.pdfUrl.startsWith('local_pdf:'))) {
+      const storeKey = book.pdfUrl.replace('firestore_pdf:', '').replace('local_pdf:', '');
       return getPdfFromLocalStore(storeKey) || getPdfFromLocalStore(book.id) || book.pdfUrl;
     }
     return book.pdfUrl;
   }
-  if (bookOrPdfUrl.startsWith('local_pdf:')) {
-    const storeKey = bookOrPdfUrl.replace('local_pdf:', '');
+  if (bookOrPdfUrl.startsWith('firestore_pdf:') || bookOrPdfUrl.startsWith('local_pdf:')) {
+    const storeKey = bookOrPdfUrl.replace('firestore_pdf:', '').replace('local_pdf:', '');
     return getPdfFromLocalStore(storeKey) || bookOrPdfUrl;
   }
   return bookOrPdfUrl;
+}
+
+export async function resolvePdfUrlAsync(bookOrPdfUrl: string | Book): Promise<string> {
+  const bookId = typeof bookOrPdfUrl === 'string' ? '' : bookOrPdfUrl.id;
+  const rawUrl = typeof bookOrPdfUrl === 'string' ? bookOrPdfUrl : bookOrPdfUrl.pdfUrl;
+
+  if (!rawUrl) return '';
+
+  if (rawUrl.startsWith('firestore_pdf:') || rawUrl.startsWith('local_pdf:')) {
+    const key = rawUrl.replace('firestore_pdf:', '').replace('local_pdf:', '') || bookId;
+    const cached = getPdfFromLocalStore(key);
+    if (cached) return cached;
+
+    const subFolder = key.startsWith('chap_') ? `${key}_pdfChunks` : 'pdfChunks';
+    const remotePdf = await fetchPdfFromFirestore(bookId || key, subFolder);
+    if (remotePdf) {
+      savePdfToLocalStore(key, remotePdf);
+      return remotePdf;
+    }
+  }
+
+  return rawUrl;
 }
 
 // -------------------------------------------------------------
@@ -81,7 +142,6 @@ export function dbSubscribeBooks(onUpdate: (books: Book[]) => void): () => void 
         const books: Book[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Book;
-          // Resolve pdfUrl if stored locally
           const resolvedPdf = resolvePdfUrl(data);
           books.push({ ...data, id: docSnap.id, pdfUrl: resolvedPdf });
         });
@@ -161,15 +221,13 @@ export async function dbCreateBook(book: Book): Promise<Book> {
   }
 
   const bookId = cleanBook.id || `book_${Date.now()}`;
-
-  // Check if PDF URL is extremely large base64 (over 780KB) to prevent Firestore 1MB document limit overflow
   let rawPdfUrl = cleanBook.pdfUrl || '';
   let firestorePdfUrl = rawPdfUrl;
-  if (rawPdfUrl.length > 780000) {
+
+  const isBase64Pdf = rawPdfUrl.startsWith('data:application/pdf') || rawPdfUrl.length > 300000;
+  if (isBase64Pdf) {
     savePdfToLocalStore(bookId, rawPdfUrl);
-    firestorePdfUrl = `local_pdf:${bookId}`;
-  } else if (rawPdfUrl.startsWith('data:application/pdf')) {
-    savePdfToLocalStore(bookId, rawPdfUrl);
+    firestorePdfUrl = `firestore_pdf:${bookId}`;
   }
 
   const returnedPayload: Book = {
@@ -188,19 +246,16 @@ export async function dbCreateBook(book: Book): Promise<Book> {
     pdfUrl: firestorePdfUrl
   });
 
-  // Execute setDoc with timeout safety (max 5 seconds) so publishing NEVER hangs
-  try {
-    const docRef = doc(db, 'books', bookId);
-    const setDocPromise = setDoc(docRef, firestorePayload);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firestore timeout')), 5000)
-    );
-    await Promise.race([setDocPromise, timeoutPromise]);
-  } catch (e) {
-    console.warn('Firestore setDoc notice (book published & cached locally):', e);
+  // Write main book document directly to Firestore database
+  const docRef = doc(db, 'books', bookId);
+  await setDoc(docRef, firestorePayload);
+
+  // If base64 PDF, upload chunks into Firestore subcollection so all devices can read it
+  if (isBase64Pdf) {
+    await savePdfToFirestore(bookId, rawPdfUrl, 'pdfChunks');
   }
 
-  // Prepend to SAMPLE_BOOKS in memory for instantaneous local UI updates
+  // Prepend to memory list for instant feedback
   const existingIdx = SAMPLE_BOOKS.findIndex(b => b.id === bookId);
   if (existingIdx >= 0) {
     SAMPLE_BOOKS[existingIdx] = returnedPayload;
@@ -212,23 +267,26 @@ export async function dbCreateBook(book: Book): Promise<Book> {
 }
 
 export async function dbUpdateBook(id: string, updates: Partial<Book>): Promise<void> {
-  try {
-    const ref = doc(db, 'books', id);
-    const cleanUpdates = sanitizeDoc(updates);
-    if (cleanUpdates.pdfUrl && cleanUpdates.pdfUrl.length > 400000) {
-      savePdfToLocalStore(id, cleanUpdates.pdfUrl);
-      cleanUpdates.pdfUrl = `local_pdf:${id}`;
+  const ref = doc(db, 'books', id);
+  const cleanUpdates = sanitizeDoc(updates);
+
+  if (cleanUpdates.coverUrl && cleanUpdates.coverUrl.startsWith('data:image')) {
+    try {
+      cleanUpdates.coverUrl = await compressBase64Image(cleanUpdates.coverUrl, 800, 0.65);
+    } catch (e) {
+      console.warn('Cover compression fallback:', e);
     }
-    const updatePromise = updateDoc(ref, cleanUpdates);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firestore timeout')), 5000)
-    );
-    await Promise.race([updatePromise, timeoutPromise]);
-  } catch (e) {
-    console.error('dbUpdateBook error (saved locally):', e);
   }
 
-  // Also update in SAMPLE_BOOKS array
+  if (cleanUpdates.pdfUrl && (cleanUpdates.pdfUrl.startsWith('data:application/pdf') || cleanUpdates.pdfUrl.length > 300000)) {
+    const rawPdf = cleanUpdates.pdfUrl;
+    savePdfToLocalStore(id, rawPdf);
+    cleanUpdates.pdfUrl = `firestore_pdf:${id}`;
+    await savePdfToFirestore(id, rawPdf, 'pdfChunks');
+  }
+
+  await updateDoc(ref, cleanUpdates);
+
   const sampleIdx = SAMPLE_BOOKS.findIndex(b => b.id === id);
   if (sampleIdx >= 0) {
     SAMPLE_BOOKS[sampleIdx] = { ...SAMPLE_BOOKS[sampleIdx], ...updates };

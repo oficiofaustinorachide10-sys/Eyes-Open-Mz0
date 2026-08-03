@@ -32,11 +32,12 @@ service cloud.firestore {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
-    // BOOKS COLLECTION (Publicly readable for shared links & catalog)
+    // BOOKS COLLECTION & SUBCOLLECTIONS (Publicly readable & writable for publishing across all devices)
     match /books/{bookId} {
-      allow read: if true;
-      allow create, update: if isSignedIn() || true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
+    }
+    match /books/{bookId}/{allPaths=**} {
+      allow read, write: if true;
     }
 
     // REVIEWS COLLECTION
