@@ -13,11 +13,11 @@ import { BOOK_CATEGORIES, SAMPLE_BOOKS } from './utils';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { ExploreCategoriesGrid } from './components/ExploreCategoriesGrid';
+import { DestaquesSection } from './components/DestaquesSection';
 import { WhyUseAlaXSection } from './components/WhyUseAlaXSection';
 import { TestimonialsSection } from './components/TestimonialsSection';
 import { NewsletterSection } from './components/NewsletterSection';
 import { FooterSection } from './components/FooterSection';
-import { AlaXHeader } from './components/AlaXHeader';
 import { AlaXIntroSplashModal } from './components/AlaXIntroSplashModal';
 import { AlaXAnimatedXLoader } from './components/AlaXAnimatedXLoader';
 import { AppTheme } from './components/ThemeSwitcher';
@@ -322,28 +322,7 @@ export default function App() {
         : 'bg-[#0d0e15] text-amber-50 selection:bg-amber-500 selection:text-black'
     }`}>
       
-      {/* ALA X HEADER WITH CENTERED TYPOGRAPHY & BLURRED MOTION VIDEO BACKDROP */}
-      <AlaXHeader
-        currentUser={currentUser}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onOpenIntroVideo={() => {
-          setSplashMode('manual');
-          setShowIntroSplash(true);
-        }}
-        onOpenAdmin={() => setIsAdminPanelOpen(true)}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
-        onOpenProfile={() => setIsProfileModalOpen(true)}
-        onOpenFavorites={() => setShowOnlyFavorites(!showOnlyFavorites)}
-        onOpenDownloads={() => setIsDownloadsModalOpen(true)}
-        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
-        unreadNotificationCount={unreadNotificationCount}
-        favoriteCount={favoriteBookIds.length}
-        downloadCount={downloadedItems.length}
-        onLogout={handleLogoutAction}
-      />
-
-      {/* NAVBAR NAVIGATION CATEGORIES */}
+      {/* NAVBAR NAVIGATION (SINGLE HEADER AS IN REFERENCE DESIGN) */}
       <Navbar
         currentUser={currentUser}
         searchQuery={searchQuery}
@@ -370,197 +349,20 @@ export default function App() {
       {/* MAIN CONTENT AREA */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-8">
         
-        {/* HERO BANNER SHOWCASE */}
-        {!showOnlyFavorites && !searchQuery && selectedCategory === 'todas' && (
-          <HeroBanner
-            featuredBook={featuredBook}
-            currentUser={currentUser}
-            onReadBook={(book) => setSelectedBookForPdfReader(book)}
-            onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
-            onOpenAdmin={() => setIsAdminPanelOpen(true)}
-            totalBooksCount={books.length}
-          />
-        )}
-
-        {/* CATEGORIES STRIP & VIEW MODE CONTROLS */}
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className={`w-4 h-4 ${currentTheme === 'lite' ? 'text-emerald-400' : 'text-amber-400'}`} />
-              <h3 className={`font-extrabold text-sm tracking-wide uppercase ${
-                currentTheme === 'light' ? 'text-slate-800' : 'text-white'
-              }`}>
-                {showOnlyFavorites ? 'Minha Biblioteca de Favoritos' : 'Categorias & Obras em PDF'}
-              </h3>
-            </div>
-
-            {/* SORTING & VIEW MODE CONTROLS */}
-            <div className="flex items-center gap-3">
-              {/* VIEW MODE TOGGLE (Grid vs List) */}
-              <div className={`p-1 rounded-xl border flex items-center gap-1 ${
-                currentTheme === 'light'
-                  ? 'bg-slate-200 border-slate-300'
-                  : currentTheme === 'lite'
-                  ? 'bg-slate-900 border-emerald-500/30'
-                  : 'bg-[#181a26] border-amber-500/20'
-              }`}>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? (currentTheme === 'lite' ? 'bg-emerald-500 text-black shadow-md' : 'bg-amber-500 text-black shadow-md')
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                  title="Modo de Exibição em Grelha"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === 'list'
-                      ? (currentTheme === 'lite' ? 'bg-emerald-500 text-black shadow-md' : 'bg-amber-500 text-black shadow-md')
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                  title="Modo Lite / Lista Detalhada (Aparência Reordenada)"
-                >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* SORT BY */}
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
-                <span className="text-xs text-gray-400 font-medium hidden sm:inline">Ordenar:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className={`border rounded-xl px-3 py-1.5 text-xs outline-none cursor-pointer ${
-                    currentTheme === 'light'
-                      ? 'bg-white border-slate-300 text-slate-800 focus:border-amber-500'
-                      : currentTheme === 'lite'
-                      ? 'bg-slate-900 border-emerald-500/30 text-emerald-200 focus:border-emerald-400'
-                      : 'bg-[#181a26] border-amber-500/20 text-amber-200 focus:border-amber-400'
-                  }`}
-                >
-                  <option value="recent">Mais Recentes</option>
-                  <option value="downloads">Mais Descarregados</option>
-                  <option value="rating">Melhor Avaliados</option>
-                  <option value="title">Ordem Alfabética</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* CATEGORY PILLS */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {BOOK_CATEGORIES.map((cat) => {
-              const isActive = selectedCategory === cat.slug && !showOnlyFavorites;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    setSelectedCategory(cat.slug);
-                    setShowOnlyFavorites(false);
-                  }}
-                  className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
-                    isActive
-                      ? (currentTheme === 'lite' 
-                          ? 'bg-emerald-500 text-black border-emerald-400 shadow-md shadow-emerald-500/20' 
-                          : 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/20')
-                      : (currentTheme === 'light'
-                          ? 'bg-white text-slate-700 border-slate-300 hover:border-amber-400'
-                          : currentTheme === 'lite'
-                          ? 'bg-slate-900 text-emerald-200 border-emerald-500/20 hover:border-emerald-400'
-                          : 'bg-[#181a26] text-gray-300 border-amber-500/15 hover:border-amber-400/50 hover:text-white')
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ACTIVE FILTER STATUS */}
-        {(showOnlyFavorites || selectedCategory !== 'todas' || searchQuery) && (
-          <div className={`flex items-center justify-between p-3 rounded-xl border text-xs ${
-            currentTheme === 'light'
-              ? 'bg-amber-50 border-amber-200 text-amber-800'
-              : currentTheme === 'lite'
-              ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
-              : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-          }`}>
-            <span>
-              A mostrar resultados para:{' '}
-              <strong className={currentTheme === 'light' ? 'text-slate-900' : 'text-white'}>
-                {showOnlyFavorites ? 'Favoritos' : selectedCategory !== 'todas' ? `Categoria "${selectedCategory}"` : `Pesquisa por "${searchQuery}"`}
-              </strong>{' '}
-              ({filteredBooks.length} obras encontradas)
-            </span>
-            <button
-              onClick={() => {
-                setSelectedCategory('todas');
-                setSearchQuery('');
-                setShowOnlyFavorites(false);
-              }}
-              className="font-bold underline cursor-pointer hover:opacity-80"
-            >
-              Limpar Filtros
-            </button>
-          </div>
-        )}
-
-        {/* BOOKS CATALOG GRID / LIST */}
-        {filteredBooks.length === 0 ? (
-          <div className={`text-center py-16 space-y-4 rounded-3xl border p-8 ${
-            currentTheme === 'light'
-              ? 'bg-white border-slate-200 text-slate-800'
-              : currentTheme === 'lite'
-              ? 'bg-slate-900 border-emerald-500/30 text-emerald-100'
-              : 'bg-[#141622] border-amber-500/20 text-white'
-          }`}>
-            <BookMarked className="w-12 h-12 text-amber-400/40 mx-auto" />
-            <h4 className="text-lg font-bold">Nenhuma obra encontrada</h4>
-            <p className="text-xs text-gray-400 max-w-md mx-auto">
-              Não foram encontradas obras literárias com os critérios selecionados. Tente pesquisar por outro termo ou explorar o catálogo.
-            </p>
-            <button
-              onClick={() => {
-                setSelectedCategory('todas');
-                setSearchQuery('');
-                setShowOnlyFavorites(false);
-              }}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-extrabold text-xs shadow-md"
-            >
-              Ver Todas as Obras
-            </button>
-          </div>
-        ) : (
-          <div className={
-            viewMode === 'list' 
-              ? "grid grid-cols-1 gap-4" 
-              : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
-          }>
-            {filteredBooks.map((book) => (
-              <BookCard
-                key={book.id}
-                book={book}
-                isFavorite={favoriteBookIds.includes(book.id)}
-                theme={currentTheme}
-                viewMode={viewMode}
-                onRead={(b) => setSelectedBookForPdfReader(b)}
-                onDownload={handleDownloadBook}
-                onToggleFavorite={handleToggleFavorite}
-                onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* ADDITIONAL DESIGN SECTIONS FROM DESIGN IMAGE */}
-        {!showOnlyFavorites && !searchQuery && (
+        {/* HOMEPAGE DEFAULT LAYOUT MATCHING UPLOADED REFERENCE DESIGN */}
+        {!showOnlyFavorites && !searchQuery && selectedCategory === 'todas' ? (
           <>
+            {/* 1. HERO BANNER DESTAQUE DA SEMANA + STATS BAR */}
+            <HeroBanner
+              featuredBook={featuredBook}
+              currentUser={currentUser}
+              onReadBook={(book) => setSelectedBookForPdfReader(book)}
+              onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
+              onOpenAdmin={() => setIsAdminPanelOpen(true)}
+              totalBooksCount={books.length}
+            />
+
+            {/* 2. EXPLORE POR CATEGORIAS */}
             <ExploreCategoriesGrid
               selectedCategory={selectedCategory}
               onSelectCategory={(cat) => {
@@ -570,10 +372,203 @@ export default function App() {
               theme={currentTheme}
             />
 
+            {/* 3. DESTAQUES (HORIZONTAL CAROUSEL OF WORKS) */}
+            <DestaquesSection
+              books={books}
+              theme={currentTheme}
+              onReadBook={(book) => setSelectedBookForPdfReader(book)}
+              onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
+              onSelectCategory={(cat) => {
+                setSelectedCategory(cat);
+                setShowOnlyFavorites(false);
+              }}
+            />
+
+            {/* 4. POR QUE USAR A ALA X? */}
             <WhyUseAlaXSection theme={currentTheme} />
+
+            {/* 5. O QUE NOSSOS LEITORES DIZEM */}
             <TestimonialsSection theme={currentTheme} />
+
+            {/* 6. NEWSLETTER */}
             <NewsletterSection theme={currentTheme} />
           </>
+        ) : (
+          /* CATALOG FILTER & SEARCH VIEW */
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Filter className={`w-4 h-4 ${currentTheme === 'lite' ? 'text-emerald-400' : 'text-amber-400'}`} />
+                  <h3 className={`font-extrabold text-sm tracking-wide uppercase ${
+                    currentTheme === 'light' ? 'text-slate-800' : 'text-white'
+                  }`}>
+                    {showOnlyFavorites ? 'Minha Biblioteca de Favoritos' : 'Resultados do Catálogo em PDF'}
+                  </h3>
+                </div>
+
+                {/* SORTING & VIEW MODE CONTROLS */}
+                <div className="flex items-center gap-3">
+                  <div className={`p-1 rounded-xl border flex items-center gap-1 ${
+                    currentTheme === 'light'
+                      ? 'bg-slate-200 border-slate-300'
+                      : currentTheme === 'lite'
+                      ? 'bg-slate-900 border-emerald-500/30'
+                      : 'bg-[#181a26] border-amber-500/20'
+                  }`}>
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        viewMode === 'grid'
+                          ? (currentTheme === 'lite' ? 'bg-emerald-500 text-black shadow-md' : 'bg-amber-500 text-black shadow-md')
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                      title="Modo Grelha"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        viewMode === 'list'
+                          ? (currentTheme === 'lite' ? 'bg-emerald-500 text-black shadow-md' : 'bg-amber-500 text-black shadow-md')
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                      title="Modo Lista"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* SORT BY */}
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as any)}
+                      className={`border rounded-xl px-3 py-1.5 text-xs outline-none cursor-pointer ${
+                        currentTheme === 'light'
+                          ? 'bg-white border-slate-300 text-slate-800 focus:border-amber-500'
+                          : currentTheme === 'lite'
+                          ? 'bg-slate-900 border-emerald-500/30 text-emerald-200 focus:border-emerald-400'
+                          : 'bg-[#181a26] border-amber-500/20 text-amber-200 focus:border-amber-400'
+                      }`}
+                    >
+                      <option value="recent">Mais Recentes</option>
+                      <option value="downloads">Mais Descarregados</option>
+                      <option value="rating">Melhor Avaliados</option>
+                      <option value="title">Ordem Alfabética</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* CATEGORY PILLS */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                {BOOK_CATEGORIES.map((cat) => {
+                  const isActive = selectedCategory === cat.slug && !showOnlyFavorites;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => {
+                        setSelectedCategory(cat.slug);
+                        setShowOnlyFavorites(false);
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+                        isActive
+                          ? (currentTheme === 'lite' 
+                              ? 'bg-emerald-500 text-black border-emerald-400 shadow-md shadow-emerald-500/20' 
+                              : 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/20')
+                          : (currentTheme === 'light'
+                              ? 'bg-white text-slate-700 border-slate-300 hover:border-amber-400'
+                              : currentTheme === 'lite'
+                              ? 'bg-slate-900 text-emerald-200 border-emerald-500/20 hover:border-emerald-400'
+                              : 'bg-[#181a26] text-gray-300 border-amber-500/15 hover:border-amber-400/50 hover:text-white')
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ACTIVE FILTER STATUS */}
+            {(showOnlyFavorites || selectedCategory !== 'todas' || searchQuery) && (
+              <div className={`flex items-center justify-between p-3 rounded-xl border text-xs ${
+                currentTheme === 'light'
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : currentTheme === 'lite'
+                  ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+              }`}>
+                <span>
+                  A mostrar resultados para:{' '}
+                  <strong className={currentTheme === 'light' ? 'text-slate-900' : 'text-white'}>
+                    {showOnlyFavorites ? 'Favoritos' : selectedCategory !== 'todas' ? `Categoria "${selectedCategory}"` : `Pesquisa por "${searchQuery}"`}
+                  </strong>{' '}
+                  ({filteredBooks.length} obras encontradas)
+                </span>
+                <button
+                  onClick={() => {
+                    setSelectedCategory('todas');
+                    setSearchQuery('');
+                    setShowOnlyFavorites(false);
+                  }}
+                  className="font-bold underline cursor-pointer hover:opacity-80"
+                >
+                  Limpar Filtros
+                </button>
+              </div>
+            )}
+
+            {/* BOOKS CATALOG GRID / LIST */}
+            {filteredBooks.length === 0 ? (
+              <div className={`text-center py-16 space-y-4 rounded-3xl border p-8 ${
+                currentTheme === 'light'
+                  ? 'bg-white border-slate-200 text-slate-800'
+                  : currentTheme === 'lite'
+                  ? 'bg-slate-900 border-emerald-500/30 text-emerald-100'
+                  : 'bg-[#141622] border-amber-500/20 text-white'
+              }`}>
+                <BookMarked className="w-12 h-12 text-amber-400/40 mx-auto" />
+                <h4 className="text-lg font-bold">Nenhuma obra encontrada</h4>
+                <p className="text-xs text-gray-400 max-w-md mx-auto">
+                  Não foram encontradas obras com os critérios selecionados.
+                </p>
+                <button
+                  onClick={() => {
+                    setSelectedCategory('todas');
+                    setSearchQuery('');
+                    setShowOnlyFavorites(false);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-extrabold text-xs shadow-md"
+                >
+                  Ver Todas as Obras
+                </button>
+              </div>
+            ) : (
+              <div className={
+                viewMode === 'list' 
+                  ? "grid grid-cols-1 gap-4" 
+                  : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+              }>
+                {filteredBooks.map((book) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    isFavorite={favoriteBookIds.includes(book.id)}
+                    theme={currentTheme}
+                    viewMode={viewMode}
+                    onRead={(b) => setSelectedBookForPdfReader(b)}
+                    onDownload={handleDownloadBook}
+                    onToggleFavorite={handleToggleFavorite}
+                    onOpenDetails={(b, tab) => setSelectedBookForDetails({ book: b, initialTab: tab })}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
       </main>
