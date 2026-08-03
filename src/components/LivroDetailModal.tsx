@@ -25,6 +25,7 @@ interface LivroDetailModalProps {
   onStartDownload: (book: Book) => void;
   onBookUpdated?: (book: Book) => void;
   onShare?: (book: Book) => void;
+  onRequireAuth?: (message?: string) => void;
 }
 
 export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
@@ -38,7 +39,8 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   onToggleFavorite,
   onStartDownload,
   onBookUpdated,
-  onShare
+  onShare,
+  onRequireAuth
 }) => {
   const [activeTab, setActiveTab] = useState<'chapters' | 'reviews' | 'comments'>(
     targetCommentId 
@@ -82,6 +84,9 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   const [chapPageCountInline, setChapPageCountInline] = useState(15);
   const [isSubmittingChapInline, setIsSubmittingChapInline] = useState(false);
 
+  const isGuest = !currentUser || currentUser.id === 'guest_reader' || Boolean(currentUser.isGuest);
+  const isPublisher = !isGuest && (currentUser?.email === 'oficiofaustino78@gmail.com' || currentUser?.email === 'admin@alax.mz' || currentUser?.role === 'admin');
+
   const handleChapPdfUploadInline = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -101,6 +106,10 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
 
   const handleSaveChapterInline = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPublisher) {
+      alert('Apenas administradores podem publicar capítulos.');
+      return;
+    }
     if (!chapPdfUrlInline) {
       alert('Por favor insira ou carregue o ficheiro PDF do capítulo.');
       return;
@@ -186,7 +195,10 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   // Submit/Update Review Handler with Notification
   const handleSaveReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (isGuest || !currentUser) {
+      onRequireAuth?.('Para utilizar esta funcionalidade, inicie sessão ou crie uma conta.');
+      return;
+    }
 
     setIsSubmittingReview(true);
     setReviewError('');
@@ -263,7 +275,11 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
   // Submit Comment or Reply with Notifications
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || !commentText.trim()) return;
+    if (isGuest || !currentUser) {
+      onRequireAuth?.('Para utilizar esta funcionalidade, inicie sessão ou crie uma conta.');
+      return;
+    }
+    if (!commentText.trim()) return;
 
     try {
       const newComm: BookComment = {
@@ -503,7 +519,13 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
             {/* ACTION BUTTONS */}
             <div className="flex flex-wrap items-center gap-3 pt-4">
               <button
-                onClick={() => onOpenPdfReader(book)}
+                onClick={() => {
+                  if (isGuest) {
+                    onRequireAuth?.('Para utilizar esta funcionalidade, inicie sessão ou crie uma conta.');
+                  } else {
+                    onOpenPdfReader(book);
+                  }
+                }}
                 className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-black font-black text-xs shadow-lg shadow-amber-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 cursor-pointer"
               >
                 <BookOpen className="w-4 h-4" />
@@ -511,7 +533,13 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
               </button>
 
               <button
-                onClick={() => onStartDownload(book)}
+                onClick={() => {
+                  if (isGuest) {
+                    onRequireAuth?.('Para utilizar esta funcionalidade, inicie sessão ou crie uma conta.');
+                  } else {
+                    onStartDownload(book);
+                  }
+                }}
                 className="px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black border border-emerald-500/30 font-extrabold text-xs transition-all flex items-center gap-2 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
@@ -527,7 +555,13 @@ export const LivroDetailModal: React.FC<LivroDetailModalProps> = ({
               </button>
 
               <button
-                onClick={() => onToggleFavorite(book.id)}
+                onClick={() => {
+                  if (isGuest) {
+                    onRequireAuth?.('Para utilizar esta funcionalidade, inicie sessão ou crie uma conta.');
+                  } else {
+                    onToggleFavorite(book.id);
+                  }
+                }}
                 className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                   isFavorite
                     ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'

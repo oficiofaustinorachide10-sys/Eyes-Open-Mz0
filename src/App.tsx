@@ -30,6 +30,7 @@ import { DownloadedBooksModal, DownloadedItem } from './components/DownloadedBoo
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { ShareBookModal } from './components/ShareBookModal';
 import { GuestAuthPromptModal } from './components/GuestAuthPromptModal';
+import { updateBookMetaTags } from './lib/metaHelper';
 
 const DEFAULT_GUEST_USER: User = {
   id: 'guest_reader',
@@ -104,6 +105,7 @@ export default function App() {
   const [selectedBookForPdfReader, setSelectedBookForPdfReader] = useState<Book | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isDownloadsModalOpen, setIsDownloadsModalOpen] = useState<boolean>(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
@@ -111,6 +113,15 @@ export default function App() {
   const [showOnlyFavorites, setShowOnlyFavorites] = useState<boolean>(false);
   const [sharingBook, setSharingBook] = useState<Book | null>(null);
   const [guestAuthPromptMessage, setGuestAuthPromptMessage] = useState<string | null>(null);
+
+  // Sync meta tags when viewing a book detail
+  useEffect(() => {
+    if (selectedBookForDetails?.book) {
+      updateBookMetaTags(selectedBookForDetails.book);
+    } else {
+      updateBookMetaTags(null);
+    }
+  }, [selectedBookForDetails]);
 
   // Check URL parameters for book sharing direct links (?book=BOOK_ID)
   useEffect(() => {
@@ -615,6 +626,7 @@ export default function App() {
             setBooks(prev => prev.map(b => b.id === updated.id ? updated : b));
           }}
           onShare={(b) => setSharingBook(b)}
+          onRequireAuth={(msg) => setGuestAuthPromptMessage(msg || 'Para utilizar esta funcionalidade, inicie sessão ou crie uma conta.')}
         />
       )}
 
@@ -684,6 +696,7 @@ export default function App() {
       {isAuthModalOpen && (
         <AuthModal
           canClose={true}
+          initialMode={authInitialMode}
           onClose={() => setIsAuthModalOpen(false)}
           onLoginSuccess={(user, mode) => {
             setCurrentUser(user);
@@ -714,7 +727,10 @@ export default function App() {
         <GuestAuthPromptModal
           actionMessage={guestAuthPromptMessage}
           onClose={() => setGuestAuthPromptMessage(null)}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onOpenAuth={(mode) => {
+            setAuthInitialMode(mode || 'login');
+            setIsAuthModalOpen(true);
+          }}
         />
       )}
 

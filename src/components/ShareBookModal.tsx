@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Share2, Send, MessageCircle, Facebook, Globe, Lock, ShieldAlert } from 'lucide-react';
 import { Book } from '../types';
+import { updateBookMetaTags } from '../lib/metaHelper';
 
 interface ShareBookModalProps {
   book: Book;
@@ -9,6 +10,13 @@ interface ShareBookModalProps {
 
 export const ShareBookModal: React.FC<ShareBookModalProps> = ({ book, onClose }) => {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    updateBookMetaTags(book);
+    return () => {
+      updateBookMetaTags(null);
+    };
+  }, [book]);
 
   // Construct absolute URL with query parameter ?book=ID
   const shareUrl = `${window.location.origin}${window.location.pathname}?book=${book.id}`;

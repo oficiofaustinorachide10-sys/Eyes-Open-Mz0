@@ -8,10 +8,11 @@ interface AuthModalProps {
   onClose?: () => void;
   onLoginSuccess: (user: User, mode?: 'login' | 'register') => void;
   canClose?: boolean;
+  initialMode?: 'login' | 'register';
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess, canClose = false }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
+export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess, canClose = false, initialMode = 'login' }) => {
+  const [mode, setMode] = useState<'login' | 'register' | 'reset'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

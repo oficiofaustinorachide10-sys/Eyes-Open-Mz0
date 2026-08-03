@@ -32,12 +32,15 @@ service cloud.firestore {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
-    // BOOKS COLLECTION & SUBCOLLECTIONS (Publicly readable & writable for publishing across all devices)
+    // BOOKS COLLECTION & SUBCOLLECTIONS
     match /books/{bookId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['downloadCount', 'likesCount', 'rating']));
     }
     match /books/{bookId}/{allPaths=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // REVIEWS COLLECTION
